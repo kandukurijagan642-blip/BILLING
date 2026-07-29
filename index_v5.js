@@ -152,6 +152,29 @@ elements.sumCgstRow = elements.sumCgst ? elements.sumCgst.closest('.summary-row'
 elements.sumSgstRow = elements.sumSgst ? elements.sumSgst.closest('.summary-row') : null;
 elements.sumIgstRow = elements.sumIgst ? elements.sumIgst.closest('.summary-row') : null;
 
+function syncDatabaseToServer(type, data) {
+  let endpoint = "";
+  if (type === "invoices") endpoint = "/api/invoices";
+  else if (type === "products") endpoint = "/api/products";
+  else if (type === "parties") endpoint = "/api/parties";
+  else if (type === "settings") endpoint = "/api/settings";
+
+  if (!endpoint) return;
+
+  fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  })
+  .then(res => res.json())
+  .then(resData => {
+    console.log(`✅ Synced ${type} successfully with server.`);
+  })
+  .catch(err => {
+    console.warn(`⚠️ Offline: Synced ${type} locally. Server push pending.`, err);
+  });
+}
+
 // Lock screen credentials state
 let activeUsername = "1234";
 let activePassword = "1234";
@@ -235,7 +258,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear, service worker unregistration, and local storage reset to force start sequence from 0001
-  if (localStorage.getItem("sw_cleared_v23_force_clear_invoices") !== "true") {
+  if (localStorage.getItem("sw_cleared_v24_force_clear_invoices") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -251,7 +274,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
     localStorage.setItem("invoices", JSON.stringify([]));
-    localStorage.setItem("sw_cleared_v23_force_clear_invoices", "true");
+    localStorage.setItem("sw_cleared_v24_force_clear_invoices", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -263,6 +286,53 @@ document.addEventListener("DOMContentLoaded", () => {
   setupRouting();
   bindBillingFormInputs();
   setupKeyboardShortcuts();
+
+  // Background Sync Pull
+  fetch("/api/sync")
+    .then(res => res.json())
+    .then(data => {
+      if (data) {
+        let changed = false;
+        if (data.products && data.products.length > 0) {
+          localStorage.setItem("products", JSON.stringify(data.products));
+          changed = true;
+        }
+        if (data.parties && data.parties.length > 0) {
+          localStorage.setItem("parties", JSON.stringify(data.parties));
+          changed = true;
+        }
+        if (data.invoices && data.invoices.length > 0) {
+          localStorage.setItem("invoices", JSON.stringify(data.invoices));
+          changed = true;
+        }
+        if (data.globalSettings) {
+          localStorage.setItem("settings", JSON.stringify(data.globalSettings));
+          changed = true;
+        }
+        if (changed) {
+          console.log("Database sync completed successfully! Reloading views...");
+          loadAllDatabases();
+          updateDashboardOverview();
+          calculateSummaryAndTable();
+          autoSuggestInvoiceNo();
+          
+          // Re-render views if they are open/active
+          const prodView = document.getElementById("products-view");
+          if (prodView && !prodView.classList.contains("hidden")) {
+            loadProductsDatabaseTable();
+          }
+          const partiesView = document.getElementById("parties-view");
+          if (partiesView && !partiesView.classList.contains("hidden")) {
+            loadPartiesDatabaseLists();
+          }
+          const historyView = document.getElementById("history-view");
+          if (historyView && !historyView.classList.contains("hidden")) {
+            loadInvoicesHistoryTable();
+          }
+        }
+      }
+    })
+    .catch(err => console.warn("Background sync connection failed (offline mode):", err));
 
   // Reset lock timer on activity
   resetAutolockTimer();
@@ -469,6 +539,7 @@ function reconcileProductInventoryStock(oldInvoice, newInvoice) {
   if (modified) {
     try {
       localStorage.setItem("products", JSON.stringify(productsDb));
+      syncDatabaseToServer("products", productsDb);
     } catch (err) {
       console.warn("Unable to save products db:", err);
     }
@@ -1193,6 +1264,7 @@ window.generateAndPrintInvoice = function() {
 
   try {
     localStorage.setItem("invoices", JSON.stringify(invoicesDb));
+    syncDatabaseToServer("invoices", invoiceRecord);
   } catch (err) {
     console.warn("Unable to persist invoices:", err);
   }
@@ -1274,6 +1346,7 @@ window.saveAndGenerateInvoiceOnly = function(btnEl) {
 
   try {
     localStorage.setItem("invoices", JSON.stringify(invoicesDb));
+    syncDatabaseToServer("invoices", invoiceRecord);
   } catch (err) {
     console.warn("Unable to persist invoices:", err);
   }
@@ -1353,6 +1426,7 @@ window.generateAndPrintThermal = function(btnEl) {
 
   try {
     localStorage.setItem("invoices", JSON.stringify(invoicesDb));
+    syncDatabaseToServer("invoices", invoiceRecord);
   } catch (err) {
     console.warn("Unable to persist invoices:", err);
   }
@@ -1969,6 +2043,11 @@ window.deleteSavedInvoice = function(id) {
     }
     invoicesDb = invoicesDb.filter(inv => inv.id !== id);
     localStorage.setItem("invoices", JSON.stringify(invoicesDb));
+    fetch("/api/invoices/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id })
+    }).catch(err => console.warn("Failed to delete invoice from server:", err));
     
     // Automatically recalculate next invoice number sequence
     autoSuggestInvoiceNo();
@@ -2033,6 +2112,7 @@ window.saveProductModal = function(e) {
   }
 
   localStorage.setItem("products", JSON.stringify(productsDb));
+  syncDatabaseToServer("products", productsDb);
   closeProductModal();
   loadProductsDatabaseTable();
   populateBillingSelectors();
@@ -2075,6 +2155,7 @@ window.deleteProductRowDb = function(id) {
   if (confirm("Delete product from inventory list permanently?")) {
     productsDb = productsDb.filter(p => p.id !== id);
     localStorage.setItem("products", JSON.stringify(productsDb));
+    syncDatabaseToServer("products", productsDb);
     loadProductsDatabaseTable();
   }
 };
@@ -2147,6 +2228,7 @@ window.savePartyModal = function(e) {
   }
 
   localStorage.setItem("parties", JSON.stringify(partiesDb));
+  syncDatabaseToServer("parties", partiesDb);
   closePartyModal();
   loadPartiesDatabaseLists();
 };
@@ -2204,6 +2286,7 @@ window.deletePartyRowDb = function(id) {
   if (confirm("Delete this customer party profile permanently?")) {
     partiesDb = partiesDb.filter(p => p.id !== id);
     localStorage.setItem("parties", JSON.stringify(partiesDb));
+    syncDatabaseToServer("parties", partiesDb);
     loadPartiesDatabaseLists();
   }
 };
@@ -2422,6 +2505,7 @@ window.saveTelegramSettings = function(e) {
     chatId: elements.setTgChatId.value.trim()
   };
   localStorage.setItem("settings", JSON.stringify(globalSettings));
+  syncDatabaseToServer("settings", globalSettings);
   elements.tgStatusIndicator.classList.remove("hidden");
   elements.tgStatusIndicator.className = "info-note col-12";
   elements.tgStatusText.textContent = "Telegram Bot integration details saved.";
@@ -2472,6 +2556,7 @@ window.saveSecuritySettings = function(e) {
 
   globalSettings.security = { autolock, username, password };
   localStorage.setItem("settings", JSON.stringify(globalSettings));
+  syncDatabaseToServer("settings", globalSettings);
   alert("Login credentials and lock settings saved successfully!");
   loadAllDatabases();
   resetAutolockTimer();
@@ -2503,6 +2588,7 @@ window.saveGlobalSettingsDefaults = function(e) {
   globalSettings.terms = termsText ? termsText.split("\n").map(l => l.trim()).filter(l => l !== "") : [];
 
   localStorage.setItem("settings", JSON.stringify(globalSettings));
+  syncDatabaseToServer("settings", globalSettings);
   alert("Store configuration defaults saved successfully!");
   loadAllDatabases();
 };
