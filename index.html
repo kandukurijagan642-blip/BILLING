@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aaryan Aqua Needs - GST Billing Dashboard</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- QRious QR Code library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+  <!-- html2pdf.js Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <!-- PWA Manifest & Mobile Meta -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#06b6d4">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="index.css?v=23">
+  <script src="invoice_utils_v5.js?v=23"></script>
+</head>
+<body>
+
+  <!-- HIGH-END LOGIN / LOCK SCREEN OVERLAY -->
+  <div id="lock-screen-overlay" class="lock-overlay hidden no-print">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="login-logo-wrapper" style="display: flex; align-items: center; justify-content: center; margin-bottom: 10px;">
+          <img src="rallis_logo.png" alt="Rallis India Limited Logo" style="height: 65px; width: auto; object-fit: contain; border-radius: 6px; background: #ffffff; padding: 4px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+        </div>
+        <h2>AARYAN AQUA NEEDS</h2>
+        <p>GST Billing & Management System</p>
+      </div>
+      
+      <div id="login-error-message" class="login-error hidden">
+        <i class="fa-solid fa-triangle-exclamation"></i> Invalid username or password!
+      </div>
+      
+      <form id="login-form" onsubmit="submitUnlockLogin(event)">
+        <div class="login-input-group">
+          <label for="login-username">Username</label>
+          <div class="input-icon-wrapper">
+            <i class="fa-solid fa-user input-icon"></i>
+            <input type="text" id="login-username" required placeholder="Enter username">
+          </div>
+        </div>
+        
+        <div class="login-input-group">
+          <label for="login-password">Password</label>
+          <div class="input-icon-wrapper">
+            <i class="fa-solid fa-lock input-icon"></i>
+            <input type="password" id="login-password" required placeholder="Enter password">
+            <button type="button" class="btn-toggle-pwd" onclick="toggleLoginPasswordVisibility()">
+              <i id="toggle-pwd-icon" class="fa-solid fa-eye"></i>
+            </button>
+          </div>
+        </div>
+        
+        <button type="submit" class="btn-login-submit">
+          <span id="login-btn-text"><i class="fa-solid fa-key"></i> Unlock System</span>
+          <span id="login-btn-spinner" class="hidden"><i class="fa-solid fa-circle-notch fa-spin"></i> Unlocking...</span>
+        </button>
+      </form>
+      
+      <div class="login-footer">
+        <span>Default Credentials: <strong>1234</strong> / <strong>1234</strong></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="dashboard-wrapper">
+    <div class="mobile-sidebar-overlay" onclick="closeMobileSidebar()"></div>
+    
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar no-print">
+      <div class="sidebar-brand" style="display: flex; align-items: center; gap: 10px;">
+        <img src="rallis_logo.png" alt="Rallis India Limited Logo" style="height: 38px; width: auto; object-fit: contain; border-radius: 4px; background: #ffffff; padding: 2px;">
+        <div class="brand-info">
+          <h3>AARYAN AQUA</h3>
+          <span>Billing System</span>
+        </div>
+      </div>
+
+      <!-- Navigation links -->
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-tab="dashboard">
+          <i class="fa-solid fa-chart-line"></i> Dashboard
+        </button>
+        <button class="nav-item" data-tab="billing">
+          <i class="fa-solid fa-file-invoice-dollar"></i> GST Billing
+        </button>
+        <button class="nav-item" data-tab="history">
+          <i class="fa-solid fa-clock-rotate-left"></i> Invoice History
+        </button>
+        <button class="nav-item" data-tab="products">
+          <i class="fa-solid fa-cubes"></i> Products
+        </button>
+        <button class="nav-item" data-tab="parties">
+          <i class="fa-solid fa-users"></i> Parties
+        </button>
+        <button class="nav-item" data-tab="reports">
+          <i class="fa-solid fa-chart-pie"></i> Reports
+        </button>
+        <button class="nav-item" data-tab="settings">
+          <i class="fa-solid fa-gear"></i> Settings
+        </button>
+      </nav>
+
+      <div class="sidebar-profile">
+        <div class="profile-avatar">
+          <i class="fa-solid fa-user-tie"></i>
+        </div>
+        <div class="profile-info">
+          <h4>Admin</h4>
+          <span>Aaryan Aqua Needs</span>
+        </div>
+        <button class="btn-logout-placeholder" onclick="triggerManualLock()" title="Lock Screen">
+          <i class="fa-solid fa-lock text-muted cursor-pointer hover-teal"></i>
+        </button>
+      </div>
+    </aside>
+
+    <!-- MAIN PANEL -->
+    <main class="main-content no-print">
+      
+      <header class="content-header">
+        <div class="header-left">
+          <button class="mobile-nav-toggle no-print" onclick="toggleMobileSidebar()" aria-label="Toggle menu">
+            <i class="fa-solid fa-bars"></i>
+          </button>
+          <h2 id="current-view-title">Dashboard</h2>
+        </div>
+        <div class="header-right-meta">
+          <span id="current-datetime">Tuesday, 21 July 2026</span>
+        </div>
+      </header>
+
+      <!-- VIEW: DASHBOARD -->
+      <section id="view-dashboard" class="content-view">
+        <!-- Hero Welcome & Quick Action Card -->
+        <div class="dashboard-hero-card">
+          <div class="hero-text-content">
+            <span class="hero-badge"><i class="fa-solid fa-sparkles"></i> LIVE MANAGEMENT HUB</span>
+            <h2>Welcome back, Admin 👋</h2>
+            <p>Aaryan Aqua Needs • Quality Products for Better Aquaculture</p>
+          </div>
+          <div class="hero-actions">
+            <button class="btn btn-cyan btn-hero" onclick="switchTab('billing')">
+              <i class="fa-solid fa-plus"></i> New GST Bill
+            </button>
+            <button class="btn btn-secondary btn-hero" onclick="switchTab('products')">
+              <i class="fa-solid fa-cubes"></i> Add Product
+            </button>
+            <button class="btn btn-secondary btn-hero" onclick="switchTab('reports')">
+              <i class="fa-solid fa-chart-pie"></i> View Reports
+            </button>
+          </div>
+        </div>
+
+        <!-- Metric Stat Cards -->
+        <div class="stats-grid margin-top-20">
+          <div class="stat-card">
+            <div class="stat-icon bg-teal-light">
+              <i class="fa-solid fa-file-invoice-dollar text-teal"></i>
+            </div>
+            <div class="stat-details">
+              <span class="stat-label">TOTAL INVOICES</span>
+              <h3 id="stat-total-invoices">0</h3>
+              <span class="stat-trend text-teal"><i class="fa-solid fa-arrow-trend-up"></i> Live Invoices</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon bg-green-light">
+              <i class="fa-solid fa-indian-rupee-sign text-green"></i>
+            </div>
+            <div class="stat-details">
+              <span class="stat-label">TOTAL BILLING VOLUME</span>
+              <h3 id="stat-total-amount">₹ 0.00</h3>
+              <span class="stat-trend text-green"><i class="fa-solid fa-circle-check"></i> Gross Sales</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon bg-cyan-light">
+              <i class="fa-solid fa-cubes text-cyan"></i>
+            </div>
+            <div class="stat-details">
+              <span class="stat-label">ACTIVE PRODUCTS</span>
+              <h3 id="stat-total-products">0</h3>
+              <span class="stat-trend text-cyan"><i class="fa-solid fa-boxes-stacked"></i> Catalog Items</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon bg-purple-light">
+              <i class="fa-solid fa-users text-purple"></i>
+            </div>
+            <div class="stat-details">
+              <span class="stat-label">SAVED PARTIES</span>
+              <h3 id="stat-total-parties">0</h3>
+              <span class="stat-trend text-purple"><i class="fa-solid fa-user-check"></i> Registered Clients</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Invoices Table Card -->
+        <div class="card-box margin-top-20">
+          <div class="card-box-header">
+            <h3><i class="fa-solid fa-clock-rotate-left"></i> Recent Invoices & Billing Logs</h3>
+            <button class="btn btn-secondary" onclick="switchTab('billing')">
+              <i class="fa-solid fa-plus"></i> New Invoice
+            </button>
+          </div>
+          <div class="table-responsive">
+            <table class="dashboard-table">
+              <thead>
+                <tr>
+                  <th>INVOICE #</th>
+                  <th>DATE</th>
+                  <th>CUSTOMER</th>
+                  <th>ITEMS</th>
+                  <th style="text-align: right;">TOTAL</th>
+                  <th style="text-align: center;">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody id="dashboard-recent-invoices-body">
+                <tr>
+                  <td colspan="6" class="text-center text-muted">No invoices generated yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: GST BILLING -->
+      <section id="view-billing" class="content-view hidden">
+        <div class="billing-page-container">
+          
+          <!-- LEFT FORM CONTAINER (75%) -->
+          <div class="billing-form-wrapper">
+            
+            <!-- Section 1: Invoice details -->
+            <div class="billing-card-form">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="bill-invoice-type">DOCUMENT TYPE</label>
+                  <select id="bill-invoice-type" onchange="updatePrintTitleHeader()">
+                    <option value="Tax Invoice">Tax Invoice</option>
+                    <option value="Bill of Supply" selected>Bill of Supply</option>
+                    <option value="Delivery Challan">Delivery Challan</option>
+                    <option value="Proforma Invoice">Proforma Invoice</option>
+                    <option value="Credit Note">Credit Note</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="bill-header-logo">DIVINE HEADER LOGO</label>
+                  <select id="bill-header-logo">
+                    <option value="ganesha" selected>Lord Ganesha</option>
+                    <option value="venkateswara">Lord Venkateswara</option>
+                    <option value="none">No Divine Logo</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="bill-invoice-no" style="display: flex; justify-content: space-between;">
+                    INVOICE NO.
+                    <span style="color: var(--accent-cyan); font-size: 10px; font-weight: 700;"><i class="fa-solid fa-sparkles"></i> Auto 0001+</span>
+                  </label>
+                  <input type="text" id="bill-invoice-no" readonly style="background-color: rgba(255, 255, 255, 0.05); color: #94a3b8; border: 1px solid var(--editor-border); cursor: not-allowed;" title="Automatically generated sequential number">
+                </div>
+                <div class="form-group">
+                  <label for="bill-invoice-date">INVOICE DATE</label>
+                  <input type="date" id="bill-invoice-date">
+                </div>
+              </div>
+            </div>
+
+            <!-- Section 2: Transport Info -->
+            <div class="billing-card-form margin-top-12">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="bill-transport-mode">TRANSPORT MODE</label>
+                  <input type="text" id="bill-transport-mode" placeholder="e.g. Road, Rail">
+                </div>
+                <div class="form-group">
+                  <label for="bill-lr-no">L.R./DOCKET NO.</label>
+                  <input type="text" id="bill-lr-no" placeholder="LR No.">
+                </div>
+                <div class="form-group">
+                  <label for="bill-transport-date">DATE (LR DATE)</label>
+                  <input type="date" id="bill-transport-date">
+                </div>
+                <div class="form-group">
+                  <label for="bill-supply-date">DATE OF SUPPLY</label>
+                  <input type="date" id="bill-supply-date">
+                </div>
+                <div class="form-group">
+                  <label for="bill-bundles">NO. OF BUNDLES</label>
+                  <input type="number" id="bill-bundles" value="0">
+                </div>
+                <div class="form-group">
+                  <label for="bill-supply-place">PLACE OF SUPPLY</label>
+                  <input type="text" id="bill-supply-place" value="Andhra Pradesh">
+                </div>
+                <div class="form-group">
+                  <label for="bill-supply-state-code">STATE CODE</label>
+                  <input type="text" id="bill-supply-state-code" value="37">
+                </div>
+              </div>
+            </div>
+
+            <!-- Section 3: Buyer & Consignee -->
+            <div class="billing-card-form grid-2-columns margin-top-12">
+              <!-- Buyer card box -->
+              <div class="party-sub-card">
+                <div class="party-sub-card-header">
+                  <span>RECEIVER | BILLED TO:</span>
+                  <div class="header-party-actions">
+                    <select id="quick-select-receiver" class="mini-select" title="Load Receiver">
+                      <option value="">-- Load Receiver --</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="party-sub-card-body">
+                  <div class="form-group col-12">
+                    <label>NAME</label>
+                    <input type="text" id="bill-buyer-name" placeholder="Receiver Name">
+                  </div>
+                  <div class="form-group col-12">
+                    <label>ADDRESS</label>
+                    <textarea id="bill-buyer-address" rows="2" placeholder="Address"></textarea>
+                  </div>
+                  <div class="form-group col-12" style="display: none;">
+                    <label>GSTIN</label>
+                    <input type="text" id="bill-buyer-gstin" placeholder="GSTIN">
+                  </div>
+                  <div class="form-grid-inner">
+                    <div class="form-group">
+                      <label>PHONE NO.</label>
+                      <input type="text" id="bill-buyer-phone" placeholder="e.g. 9848012345">
+                    </div>
+                    <div class="form-group">
+                      <label>STATE</label>
+                      <input type="text" id="bill-buyer-state" value="Andhra Pradesh">
+                    </div>
+                    <div class="form-group">
+                      <label>STATE CODE</label>
+                      <input type="text" id="bill-buyer-state-code" value="37">
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Consignee card box -->
+              <div class="party-sub-card">
+                <div class="party-sub-card-header">
+                  <span>CONSIGNEE | SHIPPED TO:</span>
+                  <div class="header-party-actions">
+                    <button class="icon-btn-tool" onclick="copyBuyerToConsignee()" title="Copy from Receiver">
+                      <i class="fa-solid fa-copy"></i>
+                    </button>
+                    <select id="quick-select-consignee" class="mini-select" title="Load Consignee">
+                      <option value="">-- Load Consignee --</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="party-sub-card-body">
+                  <div class="form-group col-12">
+                    <label>NAME</label>
+                    <input type="text" id="bill-consignee-name" placeholder="Consignee Name">
+                  </div>
+                  <div class="form-group col-12">
+                    <label>ADDRESS</label>
+                    <textarea id="bill-consignee-address" rows="2" placeholder="Address"></textarea>
+                  </div>
+                  <div class="form-group col-12" style="display: none;">
+                    <label>GSTIN</label>
+                    <input type="text" id="bill-consignee-gstin" placeholder="GSTIN">
+                  </div>
+                  <div class="form-grid-inner">
+                    <div class="form-group">
+                      <label>STATE</label>
+                      <input type="text" id="bill-consignee-state" value="Andhra Pradesh">
+                    </div>
+                    <div class="form-group">
+                      <label>STATE CODE</label>
+                      <input type="text" id="bill-consignee-state-code" value="37">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Section 4: Product Insertion Row -->
+            <div class="billing-card-form margin-top-12">
+              <div class="product-input-row">
+                <div class="form-group flex-item-desc">
+                  <label>PRODUCT</label>
+                  <select id="bill-item-select">
+                    <option value="">-- Search product --</option>
+                  </select>
+                </div>
+                <div class="form-group flex-item-stock" style="opacity: 0.85;">
+                  <label>STOCK</label>
+                  <input type="text" id="bill-item-stock-qty" readonly value="—" style="background-color: #e2e8f0; text-align: center; font-weight: bold; color: var(--primary-teal); border: 1px solid #cbd5e1;">
+                </div>
+                <div class="form-group flex-item-hsn">
+                  <label>HSN</label>
+                  <input type="text" id="bill-item-hsn" placeholder="HSN" readonly style="background-color: #f1f5f9; cursor: not-allowed;">
+                </div>
+                <div class="form-group flex-item-qty">
+                  <label>QTY</label>
+                  <input type="number" id="bill-item-qty" value="0">
+                </div>
+                <div class="form-group flex-item-unit">
+                  <label>UNIT</label>
+                  <input type="text" id="bill-item-unit" placeholder="Unit" readonly style="background-color: #f1f5f9; cursor: not-allowed;">
+                </div>
+                <div class="form-group flex-item-gstrate" style="display: none;">
+                  <label>GST %</label>
+                  <select id="bill-item-gstrate">
+                    <option value="0" selected>0%</option>
+                    <option value="5">5%</option>
+                    <option value="12">12%</option>
+                    <option value="18">18%</option>
+                    <option value="28">28%</option>
+                  </select>
+                </div>
+                <div class="form-group flex-item-discount">
+                  <label>DISC %</label>
+                  <input type="number" step="0.01" id="bill-item-discount" value="0">
+                </div>
+                <div class="form-group flex-item-rate">
+                  <label>RATE</label>
+                  <input type="number" step="0.01" id="bill-item-rate" placeholder="0.00" readonly style="background-color: #f1f5f9; cursor: not-allowed;">
+                </div>
+                <button type="button" class="btn btn-primary btn-add-row" onclick="addBillingItemRow()">
+                  <i class="fa-solid fa-plus"></i> Add
+                </button>
+              </div>
+            </div>
+
+            <!-- Section 5: Added Items Table -->
+            <div class="billing-card-form margin-top-12 padding-0 overflow-hidden">
+              <div class="table-responsive">
+                <table class="billing-entry-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 6%">SL NO</th>
+                      <th style="width: 28%; text-align: left;">DESCRIPTION</th>
+                      <th style="width: 10%">HSN</th>
+                      <th style="width: 8%">QTY</th>
+                      <th style="width: 8%">UNIT</th>
+                      <th style="width: 8%; display: none;">GST %</th>
+                      <th style="width: 10%; text-align: right;">RATE</th>
+                      <th style="width: 8%; text-align: right;">DISC %</th>
+                      <th style="width: 10%; text-align: right;">AMOUNT</th>
+                      <th style="width: 4%"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="billing-items-tbody">
+                    <!-- Dynamic rows go here -->
+                  </tbody>
+                </table>
+              </div>
+              <div id="no-items-placeholder" class="no-items-box">
+                <i class="fa-solid fa-shopping-bag"></i>
+                <p>No items added.</p>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- RIGHT SUMMARY BOX CONTAINER (25%) -->
+          <div class="billing-summary-wrapper">
+            <div class="summary-card">
+              <div class="summary-header">
+                <h3><i class="fa-solid fa-calculator"></i> Summary</h3>
+              </div>
+              <div class="summary-body">
+                <!-- Live Metadata Badge -->
+                <div class="summary-meta-badge" style="background: rgba(6, 182, 212, 0.1); border: 1px solid rgba(6, 182, 212, 0.25); padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 4px;">
+                  <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); font-weight: 700;">
+                    <span>DOCUMENT TYPE</span>
+                    <span id="sum-meta-doc-type" style="color: var(--accent-cyan);">BILL OF SUPPLY</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; font-size: 14px; color: var(--text-dark); font-weight: 800; font-family: 'Outfit', sans-serif;">
+                    <span>INVOICE NO.</span>
+                    <span id="sum-meta-invoice-no" style="color: var(--accent-cyan);">#0001</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); font-weight: 600;">
+                    <span>DATE</span>
+                    <span id="sum-meta-date">29-07-2026</span>
+                  </div>
+                </div>
+
+                <div class="summary-payment-inputs margin-bottom-15">
+                  <div class="form-group margin-bottom-8">
+                    <label style="font-size: 11px; font-weight: 700; color: var(--text-muted);">PAYMENT STATUS</label>
+                    <select id="bill-payment-status" class="summary-select" onchange="handlePaymentStatusChange()">
+                      <option value="Paid" selected>Paid</option>
+                      <option value="Partial">Partial Payment</option>
+                      <option value="Unpaid">Unpaid / Credit</option>
+                    </select>
+                  </div>
+                  <div class="form-group margin-bottom-8">
+                    <label style="font-size: 11px; font-weight: 700; color: var(--text-muted);">PAYMENT MODE</label>
+                    <select id="bill-payment-mode" class="summary-select">
+                      <option value="Cash">Cash</option>
+                      <option value="UPI / QR" selected>UPI / QR Code</option>
+                      <option value="Bank Transfer">Bank Transfer (NEFT/RTGS)</option>
+                      <option value="Cheque">Cheque</option>
+                      <option value="Credit">On Credit</option>
+                    </select>
+                  </div>
+                  <div class="form-group margin-bottom-8" id="paid-amount-wrapper">
+                    <label style="font-size: 11px; font-weight: 700; color: var(--text-muted);">AMOUNT PAID ON INVOICE DATE (₹)</label>
+                    <input type="number" step="0.01" id="bill-paid-amount" placeholder="0.00" oninput="calculateSummaryAndTable()">
+                  </div>
+                  <div class="form-group margin-bottom-8" id="balance-paid-wrapper">
+                    <label style="font-size: 11px; font-weight: 700; color: var(--text-muted);">BALANCE PAID ON PAYMENT DATE (₹)</label>
+                    <input type="number" step="0.01" id="bill-balance-paid" placeholder="0.00" oninput="calculateSummaryAndTable()">
+                  </div>
+                  <div class="form-group margin-bottom-8" id="payment-date-wrapper">
+                    <label style="font-size: 11px; font-weight: 700; color: var(--text-muted);">PAYMENT DATE</label>
+                    <input type="date" id="bill-payment-date" class="summary-input" style="width: 100%; border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 10px; font-family: 'Inter', sans-serif; font-size: 12px; background: #ffffff;">
+                  </div>
+                </div>
+
+                <div class="summary-row">
+                  <span>Taxable Value</span>
+                  <span id="sum-taxable">₹ 0.00</span>
+                </div>
+                
+                <div class="summary-tax-breakdowns">
+                  <div class="summary-row font-size-12">
+                    <span>CGST Total</span>
+                    <span id="sum-cgst">₹ 0.00</span>
+                  </div>
+                  <div class="summary-row font-size-12">
+                    <span>SGST Total</span>
+                    <span id="sum-sgst">₹ 0.00</span>
+                  </div>
+                  <div class="summary-row font-size-12">
+                    <span>IGST Total</span>
+                    <span id="sum-igst">₹ 0.00</span>
+                  </div>
+                </div>
+
+                <div class="summary-row">
+                  <span>Round Off</span>
+                  <span id="sum-round-off">₹ 0.00</span>
+                </div>
+
+                <div class="summary-grand-total">
+                  <span>Total Amount after Tax</span>
+                  <h2 id="sum-grand-total">₹ 0.00</h2>
+                </div>
+                
+                <div class="summary-row font-size-12 margin-top-5 text-warning" id="due-row-container" style="display: none;">
+                  <span>Balance Due:</span>
+                  <strong id="sum-balance-due" style="color: #f43f5e; font-size: 14px;">₹ 0.00</strong>
+                </div>
+
+                <div class="summary-words">
+                  <span id="sum-grand-words">Rupees Only</span>
+                </div>
+
+                <div class="summary-actions-grid margin-top-15">
+                  <!-- Button 1: Save & Generate Invoice (Saves to history & resets form, no print dialog) -->
+                  <button class="btn btn-primary btn-generate-a4" onclick="saveAndGenerateInvoiceOnly(this)" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);">
+                    <i class="fa-solid fa-floppy-disk"></i> Generate & Save Invoice
+                  </button>
+
+                  <!-- Print Options Row: Print A4 vs Print POS Thermal (Both save to history and open print layout) -->
+                  <div class="summary-btn-row">
+                    <button class="btn btn-primary" onclick="generateAndPrintInvoice(this)" style="background: linear-gradient(135deg, #06b6d4 0%, #2563eb 100%); border: none;">
+                      <i class="fa-solid fa-print"></i> Print A4 Invoice
+                    </button>
+                    <button class="btn btn-cyan" onclick="generateAndPrintThermal(this)" title="POS Thermal">
+                      <i class="fa-solid fa-receipt"></i> Print POS Thermal
+                    </button>
+                  </div>
+
+                  <!-- PDF Actions Row: Download PDF vs Share WhatsApp -->
+                  <div class="summary-btn-row">
+                    <button class="btn btn-rose" onclick="downloadInvoicePdf(null, this)" title="Download PDF">
+                      <i class="fa-solid fa-file-pdf"></i> Download PDF
+                    </button>
+                    <button class="btn btn-whatsapp" onclick="shareCurrentInvoiceWhatsApp(this)" title="Share WhatsApp">
+                      <i class="fa-brands fa-whatsapp"></i> Share WhatsApp
+                    </button>
+                  </div>
+
+                  <!-- Danger/Secondary Row: Clear Form -->
+                  <button class="btn btn-secondary" onclick="resetBillingForm()" style="width: 100%; padding: 10px 14px; font-weight: 700; border-radius: 6px;">
+                    <i class="fa-solid fa-eraser"></i> Clear All Form Fields
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- VIEW: INVOICE HISTORY -->
+      <section id="view-history" class="content-view hidden">
+        <div class="card-box">
+          <div class="card-box-header">
+            <h3>Invoice History (<span id="history-count">0</span>)</h3>
+            <div class="search-box">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="search-history-input" placeholder="Search Invoice # or Customer...">
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="dashboard-table">
+              <thead>
+                <tr>
+                  <th>INVOICE #</th>
+                  <th>DATE</th>
+                  <th>CUSTOMER</th>
+                  <th>ITEMS</th>
+                  <th style="text-align: right;">TOTAL</th>
+                  <th style="text-align: center;">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody id="history-invoices-body">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: PRODUCTS -->
+      <section id="view-products" class="content-view hidden">
+        <div class="card-box">
+          <div class="card-box-header">
+            <h3>Products database (<span id="product-count">0</span>)</h3>
+            <div class="header-right-meta flex-row gap-10">
+              <div class="search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="search-products-input" placeholder="Search product...">
+              </div>
+              <button class="btn btn-primary" onclick="openProductModal()">
+                <i class="fa-solid fa-plus"></i> Add Product
+              </button>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="dashboard-table">
+              <thead>
+                <tr>
+                  <th>NAME</th>
+                  <th>HSN</th>
+                  <th style="text-align: right;">PRICE (RATE)</th>
+                  <th style="text-align: center;">STOCK</th>
+                  <th style="text-align: center;">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody id="products-list-body">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: PARTIES -->
+      <section id="view-parties" class="content-view hidden">
+        <div class="card-box">
+          <div class="card-box-header">
+            <h3>Receivers & Consignees</h3>
+            <div class="flex-row gap-10">
+              <button class="btn btn-secondary" onclick="openPartyModal('receiver')">
+                <i class="fa-solid fa-plus"></i> Add Receiver
+              </button>
+              <button class="btn btn-secondary" onclick="openPartyModal('consignee')">
+                <i class="fa-solid fa-plus"></i> Add Consignee
+              </button>
+            </div>
+          </div>
+          
+          <div class="parties-lists-container">
+            <!-- Receivers list card -->
+            <div class="parties-list-half">
+              <div class="list-title-box">Receivers</div>
+              <div class="parties-cards-scroll-box" id="receivers-scroll-box">
+                <!-- Filled dynamically -->
+              </div>
+            </div>
+            <!-- Consignees list card -->
+            <div class="parties-list-half">
+              <div class="list-title-box">Consignees</div>
+              <div class="parties-cards-scroll-box" id="consignees-scroll-box">
+                <!-- Filled dynamically -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: REPORTS -->
+      <section id="view-reports" class="content-view hidden">
+        <div class="card-box">
+          <div class="card-box-header">
+            <h3>Sales Report</h3>
+            <button class="btn btn-secondary" onclick="exportSalesReportCSV()">
+              <i class="fa-solid fa-file-csv"></i> Export CSV
+            </button>
+          </div>
+          <div class="form-grid-horizontal">
+            <div class="form-group inline-picker">
+              <label>Start Date</label>
+              <input type="date" id="report-start-date">
+            </div>
+            <div class="form-group inline-picker">
+              <label>End Date</label>
+              <input type="date" id="report-end-date">
+            </div>
+            <button class="btn btn-primary" onclick="runSalesReport()">
+              <i class="fa-solid fa-magnifying-glass"></i> Run Report
+            </button>
+          </div>
+        </div>
+
+        <div class="card-box margin-top-20">
+          <div class="card-box-header">
+            <h3>Results</h3>
+          </div>
+          <div id="report-results-placeholder" class="report-empty-placeholder">
+            <i class="fa-solid fa-chart-line"></i>
+            <p>Select dates and click Run Report.</p>
+          </div>
+          <div id="report-results-content" class="hidden">
+            <div class="table-responsive">
+              <table class="dashboard-table">
+                <thead>
+                  <tr>
+                    <th>INVOICE #</th>
+                    <th>DATE</th>
+                    <th>CUSTOMER</th>
+                    <th style="text-align: right; display: none;">TAXABLE VALUE</th>
+                    <th style="text-align: right; display: none;">TAX RATE</th>
+                    <th style="text-align: right; display: none;">TAX AMOUNT</th>
+                    <th style="text-align: right;">TOTAL AMOUNT</th>
+                  </tr>
+                </thead>
+                <tbody id="report-table-body"></tbody>
+                <tfoot>
+                  <tr style="font-weight: 700; background: #f8fafc;">
+                    <td colspan="3">TOTALS</td>
+                    <td id="report-total-taxable" style="text-align: right; display: none;">₹ 0.00</td>
+                    <td style="display: none;">-</td>
+                    <td id="report-total-tax" style="text-align: right; display: none;">₹ 0.00</td>
+                    <td id="report-total-grand" style="text-align: right; color: var(--primary-teal);">₹ 0.00</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: SETTINGS -->
+      <section id="view-settings" class="content-view hidden">
+        <div class="dashboard-split-layout">
+          <!-- Left: Telegram Integration -->
+          <div class="card-box flex-50">
+            <div class="card-box-header">
+              <h3><i class="fa-solid fa-paper-plane"></i> Telegram Bot Integration</h3>
+            </div>
+            <form id="telegram-settings-form" class="form-grid" onsubmit="saveTelegramSettings(event)">
+              <div class="form-group col-12">
+                <label for="set-tg-token">Bot Token</label>
+                <input type="text" id="set-tg-token" placeholder="Enter Telegram Bot API Token">
+                <span class="info-lbl">Get from @BotFather on Telegram</span>
+              </div>
+              <div class="form-group col-12">
+                <label for="set-tg-chat-id">Default Chat ID</label>
+                <input type="text" id="set-tg-chat-id" placeholder="Enter Chat ID / Group ID">
+              </div>
+              <div id="tg-status-indicator" class="info-note col-12 hidden">
+                <i class="fa-solid fa-circle-info"></i>
+                <span id="tg-status-text">Credentials saved.</span>
+              </div>
+              <div class="form-group col-12 flex-row gap-10 margin-top-10">
+                <button type="button" class="btn btn-secondary" onclick="testTelegramConnection()">Test Connection</button>
+                <button type="submit" class="btn btn-primary flex-1">Save Telegram Settings</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Right: Login & Lock Security -->
+          <div class="card-box flex-50">
+            <div class="card-box-header">
+              <h3><i class="fa-solid fa-shield-halved"></i> Login & Lock Security</h3>
+            </div>
+            <form id="security-settings-form" class="form-grid" onsubmit="saveSecuritySettings(event)">
+              <div class="form-group col-12">
+                <label for="set-autolock-timer">Inactivity Auto-Lock Timer</label>
+                <select id="set-autolock-timer">
+                  <option value="60">1 Minute</option>
+                  <option value="120" selected>2 Minutes</option>
+                  <option value="300">5 Minutes</option>
+                  <option value="900">15 Minutes</option>
+                  <option value="1800">30 Minutes</option>
+                  <option value="0">Never</option>
+                </select>
+                <span class="info-lbl">Locks screen dynamically on no keyboard/mouse input</span>
+              </div>
+              <div class="form-group">
+                <label for="set-login-username">Login Username</label>
+                <input type="text" id="set-login-username" required placeholder="e.g. 1234">
+              </div>
+              <div class="form-group">
+                <label for="set-login-password">Login Password</label>
+                <input type="password" id="set-login-password" required placeholder="e.g. 1234">
+              </div>
+              <div class="form-group col-12 margin-top-20">
+                <button type="submit" class="btn btn-primary">Save Security Settings</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Danger Zone: Reset Databases -->
+          <div class="card-box flex-50 margin-top-20" style="border-color: rgba(244, 63, 94, 0.4); background: rgba(244, 63, 94, 0.03);">
+            <div class="card-box-header" style="border-bottom: 1px solid rgba(244, 63, 94, 0.2);">
+              <h3 style="color: var(--accent-rose);"><i class="fa-solid fa-triangle-exclamation"></i> Danger Zone / Reset Controls</h3>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px; color: var(--text-dark);">
+              <p style="color: var(--text-muted); line-height: 1.4; margin: 0;">To start fresh and generate new invoices starting strictly from <strong>#0001</strong>, click below to clear the sample invoice database and reset the numbering sequence.</p>
+              <button type="button" class="btn btn-rose" onclick="resetBillingDatabaseTo0001()" style="padding: 10px 14px; font-weight: 700; width: 100%; border-radius: 6px; cursor: pointer;">
+                <i class="fa-solid fa-trash-can"></i> Clear History & Start Sequence from 0001
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Global Header & Bank Details defaults -->
+        <div class="card-box margin-top-20">
+          <div class="card-box-header">
+            <h3><i class="fa-solid fa-shop"></i> Store Defaults Configuration</h3>
+          </div>
+          <form id="settings-global-form" class="form-grid" onsubmit="saveGlobalSettingsDefaults(event)">
+            <div class="form-group">
+              <label for="set-c-name">Company Name</label>
+              <input type="text" id="set-c-name" required value="AARYAN AQUA NEEDS">
+            </div>
+            <div class="form-group">
+              <label for="set-c-tagline">Company Tagline</label>
+              <input type="text" id="set-c-tagline" value="QUALITY PRODUCTS FOR BETTER AQUACULTURE">
+            </div>
+            <div class="form-group col-12">
+              <label for="set-c-address">Company Address</label>
+              <textarea id="set-c-address" rows="2" required></textarea>
+            </div>
+            <div class="form-group">
+              <label for="set-c-phones">Phone Numbers</label>
+              <input type="text" id="set-c-phones" value="7386262139 | 7403727272">
+            </div>
+            <div class="form-group">
+              <label for="set-c-email">Email Address</label>
+              <input type="email" id="set-c-email" value="aaryanaqua@gmail.com">
+            </div>
+            <div class="form-group" style="display: none;">
+              <label for="set-c-gstin">GSTIN/UIN</label>
+              <input type="text" id="set-c-gstin" value="37ACNFA4687Q1ZC">
+            </div>
+            <div class="form-grid-inner col-12">
+              <div class="form-group">
+                <label>State Name</label>
+                <input type="text" id="set-c-state" value="Andhra Pradesh">
+              </div>
+              <div class="form-group">
+                <label>State Code</label>
+                <input type="text" id="set-c-state-code" value="37">
+              </div>
+            </div>
+
+            <div class="section-divider">BANK DETAILS DEFAULTS</div>
+            
+            <div class="form-group">
+              <label for="set-b-name">Bank Name</label>
+              <input type="text" id="set-b-name" value="State Bank of India">
+            </div>
+            <div class="form-group">
+              <label for="set-b-acc-name">Account Name</label>
+              <input type="text" id="set-b-acc-name" value="Aaryan Aqua Needs">
+            </div>
+            <div class="form-group">
+              <label for="set-b-acc-no">Account Number</label>
+              <input type="text" id="set-b-acc-no" value="12345678901">
+            </div>
+            <div class="form-group">
+              <label for="set-b-ifsc">IFSC Code</label>
+              <input type="text" id="set-b-ifsc" value="SBIN0001234">
+            </div>
+            <div class="form-group">
+              <label for="set-b-branch">Branch</label>
+              <input type="text" id="set-b-branch" value="Repalle">
+            </div>
+            <div class="form-group">
+              <label for="set-b-upi">UPI ID for Payment scan</label>
+              <input type="text" id="set-b-upi" value="aaryanaqua@ybl">
+            </div>
+
+            <div class="form-group col-12">
+              <label>Default Terms & Conditions (One per line)</label>
+              <textarea id="set-b-terms" rows="4"></textarea>
+            </div>
+
+            <div class="form-group col-12 margin-top-20">
+              <button type="submit" class="btn btn-primary">Save Store Configuration Defaults</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+    </main>
+
+  </div>
+
+  <!-- PRODUCT EDIT POPUP MODAL -->
+  <div id="product-modal" class="modal-overlay hidden no-print">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="product-modal-title">Add New Product</h3>
+        <button class="modal-close" onclick="closeProductModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="modal-product-form" onsubmit="saveProductModal(event)" class="form-grid">
+        <input type="hidden" id="modal-prod-id">
+        <div class="form-group col-12">
+          <label for="modal-prod-desc">Description of Goods</label>
+          <input type="text" id="modal-prod-desc" required placeholder="e.g. RALLIMIN ADV +">
+        </div>
+        <div class="form-group col-12">
+          <label for="modal-prod-hsn">HSN / SAC</label>
+          <input type="text" id="modal-prod-hsn" placeholder="e.g. 23099090">
+        </div>
+        <div class="form-group">
+          <label for="modal-prod-pack">Pack Size</label>
+          <input type="text" id="modal-prod-pack" placeholder="e.g. 15 KG">
+        </div>
+        <div class="form-group">
+          <label for="modal-prod-unit">Unit</label>
+          <input type="text" id="modal-prod-unit" placeholder="e.g. Bucket" value="Bucket">
+        </div>
+        <div class="form-group">
+          <label for="modal-prod-rate">Rate (₹)</label>
+          <input type="number" step="0.01" id="modal-prod-rate" required placeholder="3599.00">
+        </div>
+        <div class="form-group">
+          <label for="modal-prod-discount">Default Discount (%)</label>
+          <input type="number" step="0.01" id="modal-prod-discount" value="0">
+        </div>
+        <div class="form-group col-12">
+          <label for="modal-prod-stock">Current Stock Quantity</label>
+          <input type="number" id="modal-prod-stock" value="0" min="0" required placeholder="e.g. 50">
+        </div>
+        <div class="form-group col-12 flex-row gap-10 margin-top-20 justify-end">
+          <button type="button" class="btn btn-secondary" onclick="closeProductModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Product</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- PARTY EDIT POPUP MODAL -->
+  <div id="party-modal" class="modal-overlay hidden no-print">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="party-modal-title">Add Party Profile</h3>
+        <button class="modal-close" onclick="closePartyModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="modal-party-form" onsubmit="savePartyModal(event)" class="form-grid">
+        <input type="hidden" id="modal-party-id">
+        <div class="form-group col-12">
+          <label for="modal-party-type">Party Classification</label>
+          <select id="modal-party-type">
+            <option value="receiver">Receiver (Bill To)</option>
+            <option value="consignee">Consignee (Ship To)</option>
+          </select>
+        </div>
+        <div class="form-group col-12">
+          <label for="modal-party-name">Customer Name</label>
+          <input type="text" id="modal-party-name" required placeholder="e.g. DEVI FISHERIES LIMITED">
+        </div>
+        <div class="form-group col-12">
+          <label for="modal-party-company">Company Name</label>
+          <input type="text" id="modal-party-company" placeholder="Optional">
+        </div>
+        <div class="form-group col-12">
+          <label for="modal-party-address">Billing Address</label>
+          <textarea id="modal-party-address" rows="3" required placeholder="Full physical address"></textarea>
+        </div>
+        <div class="form-group col-12" style="display: none;">
+          <label for="modal-party-gstin">GSTIN/UIN</label>
+          <input type="text" id="modal-party-gstin" placeholder="GSTIN code">
+        </div>
+        <div class="form-group">
+          <label for="modal-party-state">State Name</label>
+          <input type="text" id="modal-party-state" value="Andhra Pradesh">
+        </div>
+        <div class="form-group">
+          <label for="modal-party-state-code">State Code</label>
+          <input type="text" id="modal-party-state-code" value="37">
+        </div>
+        <div class="form-group col-12">
+          <label for="modal-party-phone">Phone Number</label>
+          <input type="text" id="modal-party-phone" placeholder="Phone number">
+        </div>
+        <div class="form-group col-12 flex-row gap-10 margin-top-20 justify-end">
+          <button type="button" class="btn btn-secondary" onclick="closePartyModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Profile</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- WHATSAPP DESKTOP PDF GUIDE MODAL -->
+  <div id="whatsapp-pdf-guide-modal" class="modal-overlay hidden no-print">
+    <div class="modal-box" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 style="display: flex; align-items: center; gap: 8px; color: #25d366;"><i class="fa-brands fa-whatsapp"></i> Attach PDF Document</h3>
+        <button class="modal-close" onclick="closeWhatsappGuideModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" style="padding: 15px; color: var(--editor-text); font-size: 13px; line-height: 1.5;">
+        <div style="background: rgba(37, 211, 102, 0.15); border: 1px solid rgba(37, 211, 102, 0.35); padding: 10px 14px; border-radius: 8px; margin-bottom: 15px; color: #25d366; font-weight: 600;">
+          <i class="fa-solid fa-circle-check"></i> PDF File downloaded to your computer!
+        </div>
+        <p style="margin-bottom: 12px; color: var(--text-secondary);">Web browsers (Chrome / Edge) do not allow websites to inject local computer files into WhatsApp Web directly due to browser security policies.</p>
+        <div style="margin: 12px 0; background: rgba(255,255,255,0.04); border: 1px solid var(--editor-border); padding: 12px 16px; border-radius: 8px;">
+          <strong style="display: block; color: var(--accent-cyan); margin-bottom: 8px; font-size: 13px;">Quick 2-Step PDF Attachment:</strong>
+          <ol style="margin: 0; padding-left: 20px; line-height: 1.7; color: var(--editor-text);">
+            <li>Click the <strong><i class="fa-solid fa-plus"></i> (Plus)</strong> or <strong><i class="fa-solid fa-paperclip"></i> (Paperclip)</strong> button at the bottom of WhatsApp Web chat.</li>
+            <li>Select <strong>Document</strong> and pick <code id="guide-pdf-filename" style="color: var(--accent-teal); font-weight: 700; background: rgba(6, 182, 212, 0.15); padding: 2px 6px; border-radius: 4px;">Invoice_001.pdf</code> from your Downloads folder!</li>
+          </ol>
+        </div>
+        <div style="margin: 14px 0 6px 0;">
+          <label style="font-size: 11px; font-weight: 700; color: var(--accent-cyan); display: block; margin-bottom: 5px;">TARGET CUSTOMER WHATSAPP MOBILE NUMBER</label>
+          <input type="text" id="guide-whatsapp-phone" placeholder="Enter 10-digit mobile number (e.g. 9848012345)" style="width: 100%; background: var(--editor-input-bg); border: 1px solid var(--editor-border); color: #fff; padding: 9px 12px; border-radius: 6px; font-size: 13px; outline: none; box-sizing: border-box;">
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px;">
+          <button class="btn btn-secondary" onclick="closeWhatsappGuideModal()">Cancel</button>
+          <button class="btn btn-whatsapp" onclick="openWhatsappWebChat()"><i class="fa-brands fa-whatsapp"></i> Open WhatsApp Chat</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- DYNAMIC A4 PRINT VIEW OVERLAY (ONLY DISPLAYED IN PRINT) -->
+  <div id="print-invoice-wrapper" class="print-only">
+    <div class="invoice-page">
+      
+      <!-- Top Motto & Document Title Banner -->
+      <div class="print-header-top-bar" style="border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 6px;">
+        <div class="divine-motto-row" id="p-print-divine-motto" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 4px; box-sizing: border-box; background: #ffffff;">
+          <img src="lord_ganesha.jpg" alt="Lord Ganesha" class="divine-header-img" id="p-print-divine-img" style="max-height: 48px; width: auto; object-fit: contain;">
+          <span id="p-print-motto-text" style="font-size: 13px; font-weight: 800; color: #000; font-family: 'Outfit', sans-serif; letter-spacing: 0.5px; text-align: center; flex: 1;">॥ श्री गणेशाय नमः ॥ &nbsp;&nbsp;&nbsp;&nbsp; ॥ श्री हनुमते नमः ॥</span>
+          <img src="lord_hanuman.jpg" alt="Lord Hanuman" class="divine-header-img" id="p-print-divine-img-right" style="max-height: 48px; width: auto; object-fit: contain;">
+        </div>
+        <div class="print-document-banner" id="p-print-document-title">BILL OF SUPPLY</div>
+      </div>
+
+      <!-- Company Profile Banner -->
+      <div class="print-company-banner" style="display: flex; align-items: center; justify-content: space-between; gap: 15px; box-sizing: border-box; width: 100%;">
+        <div style="flex: 1; text-align: center;">
+          <h2 id="p-print-company-name" style="margin: 0 0 2px 0;">AARYAN AQUA NEEDS</h2>
+          <p id="p-print-company-tagline" class="company-tagline-text" style="margin: 0 0 3px 0;">QUALITY PRODUCTS FOR BETTER AQUACULTURE</p>
+          <div id="p-print-company-address" class="company-address-text" style="margin-bottom: 4px;"></div>
+          <div class="company-meta-row" style="margin: 0; padding-top: 4px;">
+            <span style="display: none;"><strong>GSTIN/UIN:</strong> <span id="p-print-company-gstin"></span></span>
+            <span><strong>State:</strong> <span id="p-print-company-state"></span> (Code: <span id="p-print-company-state-code"></span>)</span>
+            <span><strong>Contact:</strong> <span id="p-print-company-phones"></span></span>
+          </div>
+        </div>
+        <div style="flex-shrink: 0; display: flex; align-items: center; justify-content: center; height: 50px;">
+          <img src="rallis_logo.png" alt="Rallis India Limited Logo" style="height: 50px; width: auto; object-fit: contain; border-radius: 4px;">
+        </div>
+      </div>
+
+      <!-- Metadata & Customer Grid -->
+      <div class="print-grid-two-columns">
+        
+        <!-- Left Side: Buyer & Consignee -->
+        <div class="print-grid-left">
+          <!-- Buyer Box -->
+          <div class="print-party-box">
+            <div class="party-box-header">BILLED TO (RECEIVER)</div>
+            <h3 id="p-print-buyer-name"></h3>
+            <div id="p-print-buyer-address" class="party-address-text"></div>
+            <div class="party-meta-line" style="display: none;"><span>GSTIN/UIN:</span> <strong id="p-print-buyer-gstin"></strong></div>
+            <div class="party-meta-line"><span>State:</span> <span id="p-print-buyer-state"></span> (Code: <span id="p-print-buyer-state-code"></span>)</div>
+          </div>
+
+          <!-- Consignee Box -->
+          <div class="print-party-box border-top-split">
+            <div class="party-box-header">SHIPPED TO (CONSIGNEE)</div>
+            <h3 id="p-print-consignee-name"></h3>
+            <div id="p-print-consignee-address" class="party-address-text"></div>
+            <div class="party-meta-line" style="display: none;"><span>GSTIN/UIN:</span> <strong id="p-print-consignee-gstin"></strong></div>
+            <div class="party-meta-line"><span>State:</span> <span id="p-print-consignee-state"></span> (Code: <span id="p-print-consignee-state-code"></span>)</div>
+          </div>
+        </div>
+
+        <!-- Right Side: Invoice Particulars -->
+        <div class="print-grid-right">
+          <table class="print-meta-table">
+            <tr>
+              <td><span class="m-lbl">Invoice No.</span><strong id="p-print-invoice-no" class="m-val"></strong></td>
+              <td><span class="m-lbl">Dated</span><strong id="p-print-invoice-date" class="m-val"></strong></td>
+            </tr>
+            <tr>
+              <td><span class="m-lbl">Delivery Note</span><span id="p-print-delivery-note" class="m-val"></span></td>
+              <td><span class="m-lbl">Mode of Payment</span><span id="p-print-payment-mode" class="m-val"></span></td>
+            </tr>
+            <tr>
+              <td><span class="m-lbl">Reference No. & Date</span><span id="p-print-ref-no-date" class="m-val"></span></td>
+              <td><span class="m-lbl">Other References</span><span id="p-print-other-references" class="m-val"></span></td>
+            </tr>
+            <tr>
+              <td><span class="m-lbl">Buyer's Order No.</span><span id="p-print-buyer-order-no" class="m-val"></span></td>
+              <td><span class="m-lbl">Order Dated</span><span id="p-print-buyer-order-date" class="m-val"></span></td>
+            </tr>
+            <tr>
+              <td><span class="m-lbl">Dispatch Doc No.</span><span id="p-print-dispatch-doc-no" class="m-val"></span></td>
+              <td><span class="m-lbl">Delivery Note Date</span><span id="p-print-delivery-note-date" class="m-val"></span></td>
+            </tr>
+            <tr>
+              <td><span class="m-lbl">Dispatched through</span><span id="p-print-dispatched-through" class="m-val"></span></td>
+              <td><span class="m-lbl">Destination</span><span id="p-print-destination" class="m-val"></span></td>
+            </tr>
+            <tr>
+              <td colspan="2"><span class="m-lbl">Terms of Delivery</span><span id="p-print-delivery-terms" class="m-val"></span></td>
+            </tr>
+          </table>
+        </div>
+
+      </div>
+
+      <!-- Items Table -->
+      <div class="print-table-container">
+        <table class="print-items-table">
+          <thead>
+            <tr>
+              <th style="width: 5%; text-align: center; border-right: 1.5px solid #000; border-bottom: 1.5px solid #000;">Sl.<br>No.</th>
+              <th style="width: 32%; text-align: left; border-right: 1.5px solid #000; border-bottom: 1.5px solid #000;">Description of Goods</th>
+              <th style="width: 12%; text-align: center; border-right: 1.5px solid #000; border-bottom: 1.5px solid #000;">HSN/SAC</th>
+              <th style="width: 14%; text-align: center; border-right: 1.5px solid #000; border-bottom: 1.5px solid #000;">Quantity</th>
+              <th style="width: 10%; text-align: right; border-right: 1.5px solid #000; border-bottom: 1.5px solid #000;">Rate</th>
+              <th style="width: 8%; text-align: center; border-right: 1.5px solid #000; border-bottom: 1.5px solid #000;">per</th>
+              <th style="width: 9%; text-align: center; border-right: 1.5px solid #000; border-bottom: 1.5px solid #000;">Disc. %</th>
+              <th style="width: 10%; text-align: right; border-bottom: 1.5px solid #000;">Amount</th>
+            </tr>
+          </thead>
+          <tbody id="p-print-items-tbody">
+            <!-- Dynamic rows -->
+          </tbody>
+          <tfoot>
+            <tr class="table-total-row">
+              <td colspan="3" style="text-align: right; font-weight: 800; border-right: 1.5px solid #000; border-top: 1.5px solid #000;">Total</td>
+              <td id="p-print-total-quantity" style="font-weight: 800; text-align: center; border-right: 1.5px solid #000; border-top: 1.5px solid #000;"></td>
+              <td colspan="3" style="border-right: 1.5px solid #000; border-top: 1.5px solid #000;"></td>
+              <td id="p-print-total-amount" style="text-align: right; font-weight: 800; border-top: 1.5px solid #000;"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <!-- Chargeable words and E. & O.E -->
+      <div class="print-chargeable-row">
+        <div class="words-col">
+          <span>Amount Chargeable (in words):</span>
+          <div id="p-print-amount-words" class="bold-val"></div>
+        </div>
+        <div class="eoe-col">E. & O.E</div>
+      </div>
+
+      <!-- Payment Status & Receipt Details -->
+      <div class="print-payment-receipt-block" style="border: 1.5px solid #000; margin-top: 6px; padding: 6px 10px; background: #ffffff; display: flex; justify-content: space-between; font-size: 10px; font-family: 'Inter', sans-serif; box-sizing: border-box; width: 100%;">
+        <div>
+          <div><strong>Payment Status:</strong> <span id="p-print-payment-status" style="text-transform: uppercase; font-weight: 800; color: #000;">PAID</span></div>
+          <div style="margin-top: 3px;"><strong>Payment Method:</strong> <span id="p-print-payment-mode-val">UPI / QR Code</span></div>
+        </div>
+        <div style="text-align: center;">
+          <div><strong>Invoice Date:</strong> <span id="p-print-billing-date-val">29-07-2026</span></div>
+          <div style="margin-top: 3px;"><strong>Payment Date:</strong> <span id="p-print-payment-date-val">29-07-2026</span></div>
+        </div>
+        <div style="text-align: right; display: flex; gap: 15px; align-items: center;">
+          <div><strong>Subtotal:</strong> <span id="p-print-summary-total" style="font-weight: 700;">₹ 0.00</span></div>
+          <div><strong>Paid (Inv Date):</strong> <span id="p-print-summary-paid" style="font-weight: 700;">₹ 0.00</span></div>
+          <div><strong>Paid (Pay Date):</strong> <span id="p-print-summary-balance-paid" style="font-weight: 700;">₹ 0.00</span></div>
+          <div style="color: #e11d48;"><strong>Balance Due:</strong> <span id="p-print-summary-due" style="font-weight: 800;">₹ 0.00</span></div>
+        </div>
+      </div>
+
+      <!-- HSN / SAC Summary Table -->
+      <div class="print-hsn-container" style="display: none;">
+        <table class="print-hsn-table">
+          <thead>
+            <tr>
+              <th style="width: 25%; text-align: left;">HSN/SAC</th>
+              <th style="width: 20%; text-align: right;">Taxable Value (₹)</th>
+              <th style="width: 15%; text-align: right;">CGST (₹)</th>
+              <th style="width: 15%; text-align: right;">SGST (₹)</th>
+              <th style="width: 15%; text-align: right;">IGST (₹)</th>
+              <th style="width: 10%; text-align: right;">Total Tax (₹)</th>
+            </tr>
+          </thead>
+          <tbody id="p-print-hsn-tbody">
+            <!-- Dynamic HSN rows -->
+          </tbody>
+          <tfoot>
+            <tr class="hsn-total-row">
+              <td style="font-weight: 800; text-align: right;">Total:</td>
+              <td id="p-print-hsn-total-taxable" style="font-weight: 800; text-align: right;"></td>
+              <td id="p-print-hsn-total-cgst" style="font-weight: 800; text-align: right;"></td>
+              <td id="p-print-hsn-total-sgst" style="font-weight: 800; text-align: right;"></td>
+              <td id="p-print-hsn-total-igst" style="font-weight: 800; text-align: right;"></td>
+              <td id="p-print-hsn-total-tax" style="font-weight: 800; text-align: right;"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <!-- Tax Amount (in words) -->
+      <div class="print-tax-words-row" style="display: none;">
+        <span>Tax Amount (in words):</span> <strong id="p-print-tax-words">NIL</strong>
+      </div>
+
+      <!-- Bank Details & Payment + Signature Footer Grid -->
+      <div class="print-footer-grid">
+        <!-- Left: Bank Details -->
+        <div class="bank-details-col">
+          <div class="footer-box-title">BANK & PAYMENT DETAILS</div>
+          <div class="bank-text-details">
+            <p><strong>Bank Name:</strong> <span id="p-print-bank-name">AXIS BANK, REPALLE</span></p>
+            <p><strong>Account Name:</strong> <span id="p-print-bank-acc-name">Aaryan Aqua Needs</span></p>
+            <p><strong>Account No:</strong> <span id="p-print-bank-acc-no">923020001234567</span></p>
+            <p><strong>IFSC Code:</strong> <span id="p-print-bank-ifsc">UTIB0000123</span></p>
+            <p><strong>Branch:</strong> <span id="p-print-bank-branch">Repalle</span></p>
+            <p><strong>UPI ID:</strong> <span id="p-print-upi-id">7386262139@upi</span></p>
+          </div>
+        </div>
+
+        <!-- Right: Declaration & Authorised Signatory -->
+        <div class="sig-details-col">
+          <div class="declaration-section">
+            <div class="footer-box-title">DECLARATION</div>
+            <p>We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.</p>
+          </div>
+          <div class="signature-section">
+            <p class="company-sig-head">for <strong id="p-print-sign-company">AARYAN AQUA NEEDS</strong></p>
+            <div class="sig-space"></div>
+            <p class="sig-line">Authorised Signatory</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom center generated message -->
+      <div class="print-bottom-message">
+        This is a Computer Generated Invoice
+      </div>
+
+    </div>
+  </div>
+
+  <!-- DYNAMIC 80MM THERMAL RECEIPT PRINT OVERLAY -->
+  <div id="print-thermal-wrapper" class="print-only">
+    <div class="thermal-receipt">
+      <div class="thermal-header text-center">
+        <img id="th-divine-img" src="lord_ganesha.jpg" class="thermal-divine-img" alt="Logo">
+        <h2 id="th-company-name">Aaryan Aqua Needs</h2>
+        <p id="th-company-tagline">Quality Aqua Products</p>
+        <p id="th-company-address" class="small-text"></p>
+        <p class="small-text">GSTIN: <span id="th-company-gstin"></span> | Ph: <span id="th-company-phone"></span></p>
+        <hr class="thermal-divider">
+        <h3 id="th-document-title">TAX INVOICE</h3>
+        <p>Inv #: <strong id="th-invoice-no"></strong> | Date: <span id="th-invoice-date"></span></p>
+        <p>Customer: <strong id="th-customer-name"></strong></p>
+        <hr class="thermal-divider">
+      </div>
+      <table class="thermal-items-table">
+        <thead>
+          <tr>
+            <th style="text-align:left;">Item</th>
+            <th style="text-align:center;">Qty</th>
+            <th style="text-align:right;">Price</th>
+            <th style="text-align:right;">Amt</th>
+          </tr>
+        </thead>
+        <tbody id="th-items-tbody"></tbody>
+      </table>
+      <hr class="thermal-divider">
+      <div class="thermal-totals font-size-12">
+        <div class="flex-between"><span>Taxable Subtotal:</span><span id="th-taxable">₹ 0.00</span></div>
+        <div class="flex-between" style="display: none;"><span>CGST:</span><span id="th-cgst">₹ 0.00</span></div>
+        <div class="flex-between" style="display: none;"><span>SGST:</span><span id="th-sgst">₹ 0.00</span></div>
+        <div class="flex-between" style="display: none;"><span>IGST:</span><span id="th-igst">₹ 0.00</span></div>
+        <div class="flex-between font-weight-bold font-size-14 margin-top-5"><span>Grand Total:</span><span id="th-grand">₹ 0.00</span></div>
+        <div class="flex-between font-size-11 margin-top-2"><span>Paid (<span id="th-pay-mode">Cash</span>):</span><span id="th-paid">₹ 0.00</span></div>
+        <div class="flex-between font-size-11 font-weight-bold text-rose" id="th-due-container"><span>Balance Due:</span><span id="th-due">₹ 0.00</span></div>
+      </div>
+      <hr class="thermal-divider">
+      <div class="thermal-footer text-center small-text">
+        <p>Thank you for your business!</p>
+        <p>Aaryan Aqua Needs - Repalle</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="index_v5.js?v=23"></script>
+</body>
+</html>
