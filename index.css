@@ -1521,25 +1521,20 @@ body {
   width: 100%;
   border-collapse: collapse;
   border: 1.5px solid #004d5a;
-  border-radius: 4px;
-  overflow: hidden;
   font-size: 7.5pt;
 }
 
 .invoice-meta-grid td {
-  padding: 1.5px 4px;
-  border-bottom: 1px solid #cbd5e1;
-}
-
-.invoice-meta-grid tr:last-child td {
-  border-bottom: none;
+  padding: 2.5px 4px;
+  border: 1px solid #cbd5e1;
+  vertical-align: middle;
+  box-sizing: border-box;
 }
 
 .meta-label {
   background-color: #004d5a;
   color: #ffffff;
   font-weight: 700;
-  width: 44%;
   white-space: nowrap;
 }
 
@@ -1547,7 +1542,6 @@ body {
   background-color: #004d5a;
   color: #ffffff;
   font-weight: 700;
-  width: 2%;
   text-align: center;
   padding-left: 0 !important;
   padding-right: 0 !important;
@@ -1557,7 +1551,15 @@ body {
   background-color: #ffffff;
   color: #0f172a;
   font-weight: 600;
-  width: 54%;
+}
+
+.invoice-meta-grid td.meta-label,
+.invoice-meta-grid td.meta-colon {
+  border: 1px solid #004d5a;
+}
+
+.invoice-meta-grid td.border-left {
+  border-left: 1px solid #004d5a;
 }
 
 /* 2. Parties Cards Grid */
