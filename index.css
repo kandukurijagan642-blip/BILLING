@@ -1558,8 +1558,45 @@ body {
   border: 1px solid #004d5a;
 }
 
-.invoice-meta-grid td.border-left {
-  border-left: 1px solid #004d5a;
+.nested-meta-cell {
+  padding: 0 !important;
+  border: 1px solid #004d5a !important;
+}
+
+.meta-split-wrapper {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: stretch;
+}
+
+.meta-split-wrapper .meta-label {
+  width: 50%;
+  padding: 2.5px 4px;
+  background-color: #004d5a;
+  color: #ffffff;
+  font-weight: 700;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.meta-split-wrapper .meta-colon {
+  width: 10%;
+  padding: 2.5px 0;
+  background-color: #004d5a;
+  color: #ffffff;
+  font-weight: 700;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.meta-split-wrapper .meta-val {
+  width: 40%;
+  padding: 2.5px 4px;
+  background-color: #ffffff;
+  color: #0f172a;
+  font-weight: 600;
+  box-sizing: border-box;
 }
 
 /* 2. Parties Cards Grid */
