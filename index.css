@@ -1363,7 +1363,7 @@ body {
   max-width: 200mm;
   background: #ffffff;
   box-sizing: border-box;
-  padding: 4mm 5mm;
+  padding: 3mm 4mm;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -1377,26 +1377,26 @@ body {
 .invoice-header-grid {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   border-bottom: 2px solid #004d5a;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
 }
 
 .header-left-brand {
-  width: 52%;
+  width: 53%;
 }
 
 .brand-logo-title-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 6px;
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
 .brand-logo-circle {
-  width: 52px;
-  height: 52px;
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
 }
 .fish-svg-logo {
@@ -1406,7 +1406,7 @@ body {
 
 .brand-company-title {
   font-family: 'Outfit', sans-serif;
-  font-size: 22px;
+  font-size: 19px;
   font-weight: 900;
   color: #004d5a;
   margin: 0 0 2px 0;
@@ -1417,35 +1417,35 @@ body {
 .brand-tagline-badge {
   background: #004d5a;
   color: #ffffff;
-  font-size: 8px;
+  font-size: 7.5pt;
   font-weight: 700;
-  padding: 2.5px 8px;
+  padding: 2px 7px;
   border-radius: 4px;
   display: inline-block;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
   text-transform: uppercase;
 }
 
 .brand-contact-list {
   display: flex;
   flex-direction: column;
-  gap: 2.5px;
-  font-size: 8.5px;
+  gap: 1.5px;
+  font-size: 7.5pt;
   color: #1e293b;
-  margin-top: 4px;
+  margin-top: 3px;
 }
 
 .contact-item {
   display: flex;
   align-items: flex-start;
-  gap: 5px;
-  line-height: 1.3;
+  gap: 4px;
+  line-height: 1.25;
 }
 
 .contact-icon {
   color: #004d5a;
-  font-size: 9px;
-  width: 12px;
+  font-size: 8pt;
+  width: 11px;
   text-align: center;
   margin-top: 1px;
 }
@@ -1453,7 +1453,7 @@ body {
 .gst-icon-bg {
   background: #004d5a;
   color: #fff;
-  font-size: 7px;
+  font-size: 6.5pt;
   font-weight: 900;
   padding: 1px 3px;
   border-radius: 3px;
@@ -1465,7 +1465,7 @@ body {
 }
 
 .header-right-meta {
-  width: 48%;
+  width: 47%;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -1473,13 +1473,13 @@ body {
 
 .doc-title-block {
   text-align: right;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   width: 100%;
 }
 
 .doc-title-text {
   font-family: 'Outfit', sans-serif;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 900;
   color: #004d5a;
   margin: 0;
@@ -1491,25 +1491,25 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
-  margin: 2px 0;
+  gap: 3px;
+  margin: 1px 0;
 }
 
 .doc-title-dots span {
   height: 1.5px;
   background: #004d5a;
-  width: 60px;
+  width: 50px;
 }
 
 .doc-title-dots .dot {
-  width: 4px;
-  height: 4px;
+  width: 3.5px;
+  height: 3.5px;
   border-radius: 50%;
   background: #004d5a;
 }
 
 .doc-copy-type {
-  font-size: 8.5px;
+  font-size: 7.5pt;
   color: #475569;
   margin: 0;
   font-style: italic;
@@ -1521,13 +1521,13 @@ body {
   width: 100%;
   border-collapse: collapse;
   border: 1.5px solid #004d5a;
-  border-radius: 6px;
+  border-radius: 4px;
   overflow: hidden;
-  font-size: 8px;
+  font-size: 7.5pt;
 }
 
 .invoice-meta-grid td {
-  padding: 2px 5px;
+  padding: 1.5px 4px;
   border-bottom: 1px solid #cbd5e1;
 }
 
@@ -1539,7 +1539,7 @@ body {
   background-color: #004d5a;
   color: #ffffff;
   font-weight: 700;
-  width: 42%;
+  width: 44%;
   white-space: nowrap;
 }
 
@@ -1547,7 +1547,7 @@ body {
   background-color: #004d5a;
   color: #ffffff;
   font-weight: 700;
-  width: 3%;
+  width: 2%;
   text-align: center;
   padding-left: 0 !important;
   padding-right: 0 !important;
@@ -1557,57 +1557,57 @@ body {
   background-color: #ffffff;
   color: #0f172a;
   font-weight: 600;
-  width: 55%;
+  width: 54%;
 }
 
 /* 2. Parties Cards Grid */
 .parties-cards-grid {
   display: flex;
-  gap: 10px;
-  margin-bottom: 8px;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .party-card-box {
   width: 50%;
   border: 1.5px solid #004d5a;
-  border-radius: 6px;
+  border-radius: 4px;
   overflow: hidden;
 }
 
 .party-card-badge {
   background: #004d5a;
   color: #ffffff;
-  font-size: 8.5px;
+  font-size: 8pt;
   font-weight: 800;
-  padding: 3px 8px;
-  letter-spacing: 0.5px;
+  padding: 2.5px 6px;
+  letter-spacing: 0.4px;
   text-transform: uppercase;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }
 
 .party-card-body {
-  padding: 5px 8px;
+  padding: 4px 6px;
 }
 
 .party-company-name {
-  font-size: 11px;
+  font-size: 10pt;
   font-weight: 800;
   color: #0f172a;
-  margin: 0 0 3px 0;
+  margin: 0 0 2px 0;
   text-transform: uppercase;
 }
 
 .party-address-block {
-  font-size: 8px;
-  line-height: 1.3;
+  font-size: 7.5pt;
+  line-height: 1.25;
   color: #334155;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .party-detail-line {
-  font-size: 8px;
+  font-size: 7.5pt;
   color: #0f172a;
   margin-top: 1px;
 }
@@ -1615,26 +1615,27 @@ body {
 /* 3. Items Table */
 .items-table-wrapper {
   border: 1.5px solid #004d5a;
-  border-radius: 6px;
+  border-radius: 4px;
   overflow: hidden;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .professional-items-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 8.5px;
+  font-size: 8pt;
 }
 
 .professional-items-table th {
   background-color: #004d5a;
   color: #ffffff;
   font-weight: 800;
-  padding: 5px 4px;
+  padding: 4px 3px;
   border-right: 1px solid rgba(255, 255, 255, 0.2);
   font-family: 'Outfit', sans-serif;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
+  font-size: 7.5pt;
 }
 
 .professional-items-table th:last-child {
@@ -1642,7 +1643,7 @@ body {
 }
 
 .professional-items-table td {
-  padding: 4px 5px;
+  padding: 3px 4px;
   border-right: 1px solid #e2e8f0;
   border-bottom: 1px solid #f1f5f9;
   color: #0f172a;
@@ -1655,47 +1656,48 @@ body {
 
 .professional-items-table tbody tr.filler-row td {
   border-bottom: none;
+  height: 14px;
 }
 
 .pro-total-row td {
   background-color: #004d5a !important;
   color: #ffffff !important;
   font-weight: 800 !important;
-  padding: 5px 6px !important;
-  font-size: 9px !important;
+  padding: 4px 5px !important;
+  font-size: 8.5pt !important;
   border-right: 1px solid rgba(255, 255, 255, 0.2) !important;
 }
 
 /* 4. Lower Breakdown Grid */
 .lower-breakdown-grid {
   display: flex;
-  gap: 10px;
-  margin-bottom: 8px;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .lower-left-col {
   width: 58%;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .words-block {
   border: 1.5px solid #004d5a;
   border-radius: 4px;
-  padding: 4px 8px;
+  padding: 3px 6px;
   background: #f8fafc;
 }
 
 .lbl-sm {
-  font-size: 7.5px;
+  font-size: 7pt;
   font-weight: 700;
   color: #475569;
   text-transform: uppercase;
 }
 
 .val-words {
-  font-size: 9.5px;
+  font-size: 8.5pt;
   font-weight: 800;
   color: #004d5a;
   margin-top: 1px;
@@ -1710,19 +1712,19 @@ body {
 .professional-hsn-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 7.5px;
+  font-size: 7pt;
 }
 
 .professional-hsn-table th {
   background: #004d5a;
   color: #ffffff;
   font-weight: 800;
-  padding: 3px 4px;
+  padding: 2.5px 3px;
   border-right: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .professional-hsn-table td {
-  padding: 3px 4px;
+  padding: 2px 3px;
   border-right: 1px solid #e2e8f0;
   border-bottom: 1px solid #f1f5f9;
 }
@@ -1734,32 +1736,32 @@ body {
 }
 
 .tax-words-line {
-  font-size: 8px;
+  font-size: 7.5pt;
   color: #0f172a;
   border: 1px solid #cbd5e1;
-  padding: 3px 6px;
+  padding: 2px 5px;
   border-radius: 4px;
   background: #fff;
 }
 
 .declaration-box {
   border: 1px solid #cbd5e1;
-  padding: 4px 6px;
+  padding: 3px 5px;
   border-radius: 4px;
   background: #fff;
 }
 
 .decl-title {
-  font-size: 7.5px;
+  font-size: 7pt;
   font-weight: 800;
   color: #004d5a;
   text-transform: uppercase;
-  margin-bottom: 2px;
+  margin-bottom: 1px;
 }
 
 .declaration-box p {
-  font-size: 7px;
-  line-height: 1.25;
+  font-size: 6.5pt;
+  line-height: 1.2;
   color: #475569;
   margin: 0;
 }
@@ -1767,7 +1769,7 @@ body {
 .lower-right-col {
   width: 42%;
   border: 1.5px solid #004d5a;
-  border-radius: 6px;
+  border-radius: 4px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -1777,11 +1779,11 @@ body {
 .financial-summary-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 8.5px;
+  font-size: 8pt;
 }
 
 .financial-summary-table td {
-  padding: 3px 8px;
+  padding: 2px 6px;
   border-bottom: 1px solid #f1f5f9;
 }
 
@@ -1799,20 +1801,20 @@ body {
 .grand-total-teal-bar {
   background: #004d5a;
   color: #ffffff;
-  padding: 6px 10px;
+  padding: 5px 8px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 11px;
+  font-size: 10pt;
   font-weight: 900;
   letter-spacing: 0.5px;
 }
 
 .eoe-align-right {
   text-align: right;
-  font-size: 7.5px;
+  font-size: 7pt;
   color: #64748b;
-  padding: 2px 6px;
+  padding: 1px 4px;
   font-style: italic;
 }
 
@@ -1820,13 +1822,13 @@ body {
 .footer-four-cards-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
 .footer-card {
   border: 1.5px solid #004d5a;
-  border-radius: 6px;
+  border-radius: 4px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -1835,23 +1837,23 @@ body {
 .footer-card-header {
   background: #004d5a;
   color: #ffffff;
-  font-size: 7.5px;
+  font-size: 7pt;
   font-weight: 800;
-  padding: 3px 5px;
+  padding: 2.5px 4px;
   text-transform: uppercase;
   letter-spacing: 0.3px;
   white-space: nowrap;
 }
 
 .footer-card-body {
-  padding: 4px 5px;
-  font-size: 7.5px;
+  padding: 3px 4px;
+  font-size: 7pt;
   flex: 1;
 }
 
 .bank-card-body p {
   margin: 1px 0;
-  line-height: 1.25;
+  line-height: 1.2;
   color: #0f172a;
 }
 
@@ -1864,7 +1866,7 @@ body {
 }
 
 .signature-graphic-box {
-  height: 28px;
+  height: 24px;
   width: 100%;
   display: flex;
   align-items: center;
@@ -1880,15 +1882,15 @@ body {
   font-weight: 800;
   color: #0f172a;
   border-top: 1px solid #004d5a;
-  padding-top: 2px;
+  padding-top: 1px;
   width: 90%;
-  font-size: 7.5px;
+  font-size: 7pt;
 }
 
 .terms-card-body p {
   margin: 1px 0;
-  font-size: 7px;
-  line-height: 1.25;
+  font-size: 6.5pt;
+  line-height: 1.2;
   color: #334155;
 }
 
@@ -1904,19 +1906,19 @@ body {
 }
 
 .qr-code-img-box canvas {
-  width: 48px;
-  height: 48px;
+  width: 42px;
+  height: 42px;
   border: 1px solid #cbd5e1;
-  border-radius: 4px;
-  padding: 2px;
+  border-radius: 3px;
+  padding: 1px;
   background: #fff;
 }
 
 .thank-you-text {
-  font-size: 8px;
+  font-size: 7.5pt;
   font-weight: 800;
   color: #004d5a;
-  margin-top: 2px;
+  margin-top: 1px;
   font-style: italic;
 }
 
@@ -1924,26 +1926,31 @@ body {
 .bottom-full-pill-bar {
   background: #004d5a;
   color: #ffffff;
-  border-radius: 20px;
-  padding: 4px 15px;
+  border-radius: 16px;
+  padding: 3px 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 8px;
+  font-size: 7.5pt;
   font-weight: 700;
   letter-spacing: 0.3px;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
 }
 
 .computer-generated-footer-text {
   text-align: center;
-  font-size: 7px;
+  font-size: 6.5pt;
   font-weight: 800;
   color: #64748b;
   letter-spacing: 0.5px;
 }
 
 /* --- PRINT MEDIA ENGINE --- */
+@page {
+  size: A4 portrait;
+  margin: 0mm;
+}
+
 @media print {
   /* Strictly hide all interactive web application elements */
   .no-print,
@@ -1958,22 +1965,25 @@ body {
 
   /* Reset document viewport & scrolling */
   html, body {
-    width: 100% !important;
-    height: auto !important;
+    width: 210mm !important;
+    height: 297mm !important;
     margin: 0 !important;
     padding: 0 !important;
     background: #ffffff !important;
-    overflow: visible !important;
+    overflow: hidden !important;
     display: block !important;
   }
 
   /* Standard A4 Invoice Print Mode */
   body:not(.printing-thermal) #print-invoice-wrapper {
-    display: block !important;
-    position: static !important;
-    width: 100% !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: flex-start !important;
+    width: 210mm !important;
+    height: 297mm !important;
     margin: 0 !important;
-    padding: 0 !important;
+    padding: 4mm 5mm !important;
+    box-sizing: border-box !important;
     background: #ffffff !important;
   }
 
@@ -1982,15 +1992,20 @@ body {
   }
 
   body:not(.printing-thermal) .invoice-page {
-    width: 192mm !important;
-    min-height: 270mm !important;
+    width: 200mm !important;
+    height: 287mm !important;
+    max-height: 287mm !important;
     margin: 0 auto !important;
-    padding: 4mm 6mm !important;
-    border: 1.5px solid #000 !important;
+    padding: 3mm 4mm !important;
+    border: 2px solid #004d5a !important;
     box-sizing: border-box !important;
     background: #ffffff !important;
-    page-break-after: avoid;
-    page-break-inside: avoid;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    page-break-before: avoid !important;
+    page-break-after: avoid !important;
+    page-break-inside: avoid !important;
   }
 
   /* 80mm POS Thermal Receipt Print Mode */

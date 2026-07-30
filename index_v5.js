@@ -258,7 +258,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear, service worker unregistration, and local storage reset to force start sequence from 0001
-  if (localStorage.getItem("sw_cleared_v25_force_clear_invoices") !== "true") {
+  if (localStorage.getItem("sw_cleared_v26_force_clear_invoices") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -274,7 +274,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
     localStorage.setItem("invoices", JSON.stringify([]));
-    localStorage.setItem("sw_cleared_v25_force_clear_invoices", "true");
+    localStorage.setItem("sw_cleared_v26_force_clear_invoices", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
