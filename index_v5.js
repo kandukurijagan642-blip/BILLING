@@ -12,6 +12,7 @@ let currentInvoice = {
   invoiceDate: "",
   deliveryNote: "",
   referenceNoDate: "",
+  otherReferences: "",
   buyerOrderNo: "",
   buyerOrderDate: "",
   dispatchDocNo: "",
@@ -44,6 +45,7 @@ const elements = {
   billInvoiceDate: document.getElementById('bill-invoice-date'),
   billDeliveryNote: document.getElementById('bill-delivery-note'),
   billReferenceNoDate: document.getElementById('bill-reference-no-date'),
+  billOtherReferences: document.getElementById('bill-other-references'),
   billBuyerOrderNo: document.getElementById('bill-buyer-order-no'),
   billBuyerOrderDate: document.getElementById('bill-buyer-order-date'),
   billDispatchDocNo: document.getElementById('bill-dispatch-doc-no'),
@@ -264,7 +266,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear, service worker unregistration, and local storage reset to force start sequence from 0001
-  if (localStorage.getItem("sw_cleared_v31_force_clear_invoices") !== "true") {
+  if (localStorage.getItem("sw_cleared_v32_force_clear_invoices") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -280,7 +282,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
     localStorage.setItem("invoices", JSON.stringify([]));
-    localStorage.setItem("sw_cleared_v31_force_clear_invoices", "true");
+    localStorage.setItem("sw_cleared_v32_force_clear_invoices", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -735,6 +737,7 @@ function bindBillingFormInputs() {
     { el: elements.billInvoiceDate, key: 'invoiceDate' },
     { el: elements.billDeliveryNote, key: 'deliveryNote' },
     { el: elements.billReferenceNoDate, key: 'referenceNoDate' },
+    { el: elements.billOtherReferences, key: 'otherReferences' },
     { el: elements.billBuyerOrderNo, key: 'buyerOrderNo' },
     { el: elements.billBuyerOrderDate, key: 'buyerOrderDate' },
     { el: elements.billDispatchDocNo, key: 'dispatchDocNo' },
@@ -1148,6 +1151,7 @@ function resetBillingForm() {
     paymentDate: new Date().toISOString().split('T')[0],
     deliveryNote: "",
     referenceNoDate: "",
+    otherReferences: "",
     buyerOrderNo: "",
     buyerOrderDate: "",
     dispatchDocNo: "",
@@ -1175,6 +1179,7 @@ function resetBillingForm() {
   }
   elements.billDeliveryNote.value = "";
   elements.billReferenceNoDate.value = "";
+  elements.billOtherReferences.value = "";
   elements.billBuyerOrderNo.value = "";
   elements.billBuyerOrderDate.value = "";
   elements.billDispatchDocNo.value = "";
@@ -1507,6 +1512,7 @@ function populateA4PrintOverlay(invoice) {
   document.getElementById("p-print-delivery-note").textContent = invoice.deliveryNote || "—";
   document.getElementById("p-print-payment-mode").textContent = `${invoice.paymentMode || 'Cash'} (${invoice.paymentStatus || 'Paid'})`;
   document.getElementById("p-print-ref-no-date").textContent = invoice.referenceNoDate || "—";
+  document.getElementById("p-print-other-references").textContent = invoice.otherReferences || "—";
   document.getElementById("p-print-buyer-order-no").textContent = invoice.buyerOrderNo || "—";
   document.getElementById("p-print-buyer-order-date").textContent = invoice.buyerOrderDate ? formatInputDateString(invoice.buyerOrderDate) : "—";
   document.getElementById("p-print-dispatch-doc-no").textContent = invoice.dispatchDocNo || "—";
@@ -1559,12 +1565,11 @@ function populateA4PrintOverlay(invoice) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td style="text-align: center;">${index + 1}</td>
-      <td style="text-align: left; font-weight: 700; color: #0f172a;">${item.description}</td>
+      <td style="text-align: left; font-weight: 700; color: #000000;">${item.description}</td>
       <td style="text-align: center;">${item.hsn || "23099090"}</td>
-      <td style="text-align: center;">${item.packSize || item.unit || "15 KG"}</td>
-      <td style="text-align: center; font-weight: 700;">${item.quantity}</td>
+      <td style="text-align: center; font-weight: 700;">${item.quantity} ${item.unit || 'Bucket'}</td>
+      <td style="text-align: center;">${formatCurrency(item.rate)}</td>
       <td style="text-align: center;">${item.unit || 'Bucket'}</td>
-      <td style="text-align: right;">${formatCurrency(item.rate)}</td>
       <td style="text-align: center;">${item.discount ? item.discount.toFixed(2) + ' %' : '0.00 %'}</td>
       <td style="text-align: right; font-weight: 700;">${formatCurrency(item.amount)}</td>
     `;
@@ -1578,7 +1583,6 @@ function populateA4PrintOverlay(invoice) {
       const tr = document.createElement("tr");
       tr.className = "filler-row";
       tr.innerHTML = `
-        <td>&nbsp;</td>
         <td>&nbsp;</td>
         <td>&nbsp;</td>
         <td>&nbsp;</td>
@@ -1643,6 +1647,12 @@ function populateA4PrintOverlay(invoice) {
   hsnTbody.innerHTML = "";
   let totHsnTaxable = 0, totHsnCgst = 0, totHsnSgst = 0, totHsnIgst = 0;
   
+  const isBillOfSupply = (invoice.invoiceType === "Bill of Supply" || invoice.invoiceType === "Delivery Challan");
+  const taxCols = document.querySelectorAll(".tally-hsn-tax-col");
+  taxCols.forEach(col => {
+    col.style.display = isBillOfSupply ? "none" : "";
+  });
+
   Object.keys(hsnMap).forEach(code => {
     const data = hsnMap[code];
     const totalTax = data.cgst + data.sgst + data.igst;
@@ -1655,10 +1665,12 @@ function populateA4PrintOverlay(invoice) {
     tr.innerHTML = `
       <td style="text-align: left; font-weight: 700;">${code}</td>
       <td style="text-align: right;">${formatCurrency(data.taxable)}</td>
-      <td style="text-align: center;">${data.cgst > 0 ? formatCurrency(data.cgst) : 'NIL'}</td>
-      <td style="text-align: center;">${data.sgst > 0 ? formatCurrency(data.sgst) : 'NIL'}</td>
-      <td style="text-align: center;">${data.igst > 0 ? formatCurrency(data.igst) : 'NIL'}</td>
-      <td style="text-align: right; font-weight: 700;">${totalTax > 0 ? formatCurrency(totalTax) : 'NIL'}</td>
+      ${isBillOfSupply ? '' : `
+      <td style="text-align: center;" class="tally-hsn-tax-col">${data.cgst > 0 ? formatCurrency(data.cgst) : 'NIL'}</td>
+      <td style="text-align: center;" class="tally-hsn-tax-col">${data.sgst > 0 ? formatCurrency(data.sgst) : 'NIL'}</td>
+      <td style="text-align: center;" class="tally-hsn-tax-col">${data.igst > 0 ? formatCurrency(data.igst) : 'NIL'}</td>
+      <td style="text-align: right; font-weight: 700;" class="tally-hsn-tax-col">${totalTax > 0 ? formatCurrency(totalTax) : 'NIL'}</td>
+      `}
     `;
     hsnTbody.appendChild(tr);
   });
@@ -2065,6 +2077,7 @@ window.editSavedInvoice = function(id) {
     elements.billInvoiceDate.value = currentInvoice.invoiceDate || "";
     elements.billDeliveryNote.value = currentInvoice.deliveryNote || "";
     elements.billReferenceNoDate.value = currentInvoice.referenceNoDate || "";
+    elements.billOtherReferences.value = currentInvoice.otherReferences || "";
     elements.billBuyerOrderNo.value = currentInvoice.buyerOrderNo || "";
     elements.billBuyerOrderDate.value = currentInvoice.buyerOrderDate || "";
     elements.billDispatchDocNo.value = currentInvoice.dispatchDocNo || "";

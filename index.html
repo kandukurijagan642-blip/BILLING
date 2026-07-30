@@ -20,8 +20,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=31">
-  <script src="invoice_utils_v5.js?v=31"></script>
+  <link rel="stylesheet" href="index.css?v=32">
+  <script src="invoice_utils_v5.js?v=32"></script>
 </head>
 <body>
 
@@ -293,6 +293,10 @@
                 <div class="form-group">
                   <label for="bill-reference-no-date">REFERENCE NO. & DATE</label>
                   <input type="text" id="bill-reference-no-date" placeholder="Reference No. & Date">
+                </div>
+                <div class="form-group">
+                  <label for="bill-other-references">OTHER REFERENCES</label>
+                  <input type="text" id="bill-other-references" placeholder="Other References">
                 </div>
                 <div class="form-group">
                   <label for="bill-buyer-order-no">BUYER'S ORDER NO.</label>
@@ -1074,357 +1078,234 @@
 
   <!-- DYNAMIC A4 PRINT VIEW OVERLAY (ONLY DISPLAYED IN PRINT) -->
   <div id="print-invoice-wrapper" class="print-only">
-    <div class="invoice-page">
+    <div class="tally-invoice-container">
+      <div class="tally-document-title" id="p-print-document-title">Bill of Supply</div>
       
-      <!-- Top Motto (Optional Divine Header) -->
-      <div class="divine-motto-row" id="p-print-divine-motto" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 4px; box-sizing: border-box; background: #ffffff;">
-        <img src="lord_ganesha.jpg" alt="Lord Ganesha" class="divine-header-img" id="p-print-divine-img" style="max-height: 40px; width: auto; object-fit: contain;">
-        <span id="p-print-motto-text" style="font-size: 12px; font-weight: 800; color: #004d5a; font-family: 'Outfit', sans-serif; letter-spacing: 0.5px; text-align: center; flex: 1;">॥ श्री गणेशाय नमः ॥ &nbsp;&nbsp;&nbsp;&nbsp; ॥ श्री हनुमते नमः ॥</span>
-        <img src="lord_hanuman.jpg" alt="Lord Hanuman" class="divine-header-img" id="p-print-divine-img-right" style="max-height: 40px; width: auto; object-fit: contain;">
-      </div>
-
-      <!-- MAIN HEADER SECTION -->
-      <div class="invoice-header-grid">
-        <!-- Left: Company Brand & Contact Details -->
-        <div class="header-left-brand">
-          <div class="brand-logo-title-row">
-            <div class="brand-logo-circle">
-              <svg viewBox="0 0 100 100" class="fish-svg-logo">
-                <circle cx="50" cy="50" r="46" fill="none" stroke="#004d5a" stroke-width="4"/>
-                <path d="M25 55 Q 45 20, 75 45 Q 85 50, 75 60 Q 45 80, 25 55 Z" fill="#004d5a"/>
-                <path d="M 75 45 L 90 35 L 85 50 L 90 65 Z" fill="#004d5a"/>
-                <circle cx="35" cy="48" r="3" fill="#ffffff"/>
-                <path d="M 20 65 Q 50 85, 80 65 Q 50 95, 20 65 Z" fill="#007a8c" opacity="0.6"/>
-              </svg>
+      <div class="tally-main-box">
+        <!-- Top Row: Company Profile (Left) and Metadata Grid (Right) -->
+        <div class="tally-top-row">
+          <div class="tally-company-section">
+            <div class="tally-company-name" id="p-print-company-name">Aaryan Aqua Needs</div>
+            <div class="tally-company-address" id="p-print-company-address">
+              10-14-15/3, Paruchurivari Street, 11th<br>
+              Ward Behind Narayana School Repalle<br>
+              Andhra Pradesh - 522265, India
             </div>
-            <div class="brand-title-group">
-              <h1 id="p-print-company-name" class="brand-company-title">AARYAN AQUA NEEDS</h1>
-              <div id="p-print-company-tagline" class="brand-tagline-badge">QUALITY PRODUCTS FOR BETTER AQUACULTURE</div>
-            </div>
-          </div>
-          <div class="brand-contact-list">
-            <div class="contact-item">
-              <span class="contact-icon"><i class="fa-solid fa-location-dot"></i></span>
-              <span id="p-print-company-address" class="contact-text">10-14-15/3, Paruchurivari Street, 11th Ward<br>Behind Narayana School, Repalle, Andhra Pradesh - 522265, India</span>
-            </div>
-            <div class="contact-item inline-item">
-              <span class="contact-icon"><i class="fa-solid fa-phone"></i></span>
-              <span id="p-print-company-phones">7386262139 | 7403727272</span>
-            </div>
-            <div class="contact-item inline-item">
-              <span class="contact-icon"><i class="fa-solid fa-envelope"></i></span>
-              <span id="p-print-company-email">aaryanaqua@gmail.com</span>
-            </div>
-            <div class="contact-item inline-item gstin-badge-item">
-              <span class="contact-icon gst-icon-bg">GST</span>
-              <span><strong>GSTIN/UIN :</strong> <span id="p-print-company-gstin">37ACNFA4687Q1ZC</span></span>
-            </div>
-            <div class="contact-item state-meta-item">
-              <span>State Name : <span id="p-print-company-state">Andhra Pradesh</span> &nbsp;|&nbsp; State Code : <span id="p-print-company-state-code">37</span></span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Right: Title & Invoice Metadata Box -->
-        <div class="header-right-meta">
-          <div class="doc-title-block">
-            <h2 id="p-print-document-title" class="doc-title-text">BILL OF SUPPLY</h2>
-            <div class="doc-title-dots"><span></span><i class="dot"></i><i class="dot"></i><i class="dot"></i><span></span></div>
-            <p class="doc-copy-type">(Original for Recipient)</p>
-          </div>
-          <table class="invoice-meta-grid">
-            <tr>
-              <td class="meta-label" style="width: 30%;">Invoice No.</td>
-              <td class="meta-colon" style="width: 3%;">:</td>
-              <td class="meta-val" style="width: 67%;" colspan="2"><strong id="p-print-invoice-no">1847</strong></td>
-            </tr>
-            <tr>
-              <td class="meta-label">Invoice Date</td>
-              <td class="meta-colon">:</td>
-              <td class="meta-val" colspan="2"><span id="p-print-invoice-date">27-Jun-2026</span></td>
-            </tr>
-            <tr>
-              <td class="meta-label">Delivery Note</td>
-              <td class="meta-colon">:</td>
-              <td class="meta-val" colspan="2"><span id="p-print-delivery-note">—</span></td>
-            </tr>
-            <tr>
-              <td class="meta-label">Mode/Terms of Payment</td>
-              <td class="meta-colon">:</td>
-              <td class="meta-val" colspan="2"><span id="p-print-payment-mode"></span></td>
-            </tr>
-            <tr>
-              <td class="meta-label">Reference No. & Date</td>
-              <td class="meta-colon">:</td>
-              <td class="meta-val" colspan="2"><span id="p-print-ref-no-date">—</span></td>
-            </tr>
-            <tr>
-              <td class="meta-label">Buyer's Order No.</td>
-              <td class="meta-colon">:</td>
-              <td class="meta-val" style="width: 22%;"><span id="p-print-buyer-order-no">—</span></td>
-              <td class="nested-meta-cell" style="width: 45%;">
-                <div class="meta-split-wrapper">
-                  <div class="meta-label">Dated</div>
-                  <div class="meta-colon">:</div>
-                  <div class="meta-val" id="p-print-buyer-order-date">—</div>
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td class="meta-label">Dispatch Doc No.</td>
-              <td class="meta-colon">:</td>
-              <td class="meta-val" style="width: 22%;"><span id="p-print-dispatch-doc-no">—</span></td>
-              <td class="nested-meta-cell" style="width: 45%;">
-                <div class="meta-split-wrapper">
-                  <div class="meta-label">Delivery Note Date</div>
-                  <div class="meta-colon">:</div>
-                  <div class="meta-val" id="p-print-delivery-note-date">—</div>
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td class="meta-label">Dispatched Through</td>
-              <td class="meta-colon">:</td>
-              <td class="meta-val" style="width: 22%;"><span id="p-print-dispatched-through">—</span></td>
-              <td class="nested-meta-cell" style="width: 45%;">
-                <div class="meta-split-wrapper">
-                  <div class="meta-label">Destination</div>
-                  <div class="meta-colon">:</div>
-                  <div class="meta-val" id="p-print-destination">—</div>
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td class="meta-label">Terms of Delivery</td>
-              <td class="meta-colon">:</td>
-              <td class="meta-val" colspan="2"><span id="p-print-delivery-terms">—</span></td>
-            </tr>
-          </table>
-        </div>
-      </div>
-
-      <!-- BUYER & CONSIGNEE SIDE-BY-SIDE CARDS -->
-      <div class="parties-cards-grid">
-        <!-- BUYER CARD -->
-        <div class="party-card-box">
-          <div class="party-card-badge"><i class="fa-solid fa-user"></i> BUYER (BILL TO)</div>
-          <div class="party-card-body">
-            <h3 id="p-print-buyer-name" class="party-company-name">DEVI FISHERIES LIMITED</h3>
-            <div id="p-print-buyer-address" class="party-address-block">
-              LANKEVANIDIBBA<br>REPALLE MANDAL<br>GUNTURU<br>Andhra Pradesh - 522264, India
-            </div>
-            <div class="party-detail-line">
-              <strong>GSTIN/UIN :</strong> <span id="p-print-buyer-gstin">37AAACD7852Q1ZZ</span>
-            </div>
-            <div class="party-detail-line">
-              <span>State Name : <span id="p-print-buyer-state">Andhra Pradesh</span> &nbsp;|&nbsp; State Code : <span id="p-print-buyer-state-code">37</span></span>
-            </div>
-            <div class="party-detail-line">
-              <span>Phone : <span id="p-print-buyer-phone"></span></span>
-            </div>
-          </div>
-        </div>
-
-        <!-- CONSIGNEE CARD -->
-        <div class="party-card-box">
-          <div class="party-card-badge"><i class="fa-solid fa-truck"></i> CONSIGNEE (SHIP TO)</div>
-          <div class="party-card-body">
-            <h3 id="p-print-consignee-name" class="party-company-name">DEVI FISHERIES LIMITED</h3>
-            <div id="p-print-consignee-address" class="party-address-block">
-              LANKEVANIDIBBA<br>REPALLE MANDAL<br>GUNTURU<br>Andhra Pradesh - 522264, India
-            </div>
-            <div class="party-detail-line">
-              <strong>GSTIN/UIN :</strong> <span id="p-print-consignee-gstin">37AAACD7852Q1ZZ</span>
-            </div>
-            <div class="party-detail-line">
-              <span>State Name : <span id="p-print-consignee-state">Andhra Pradesh</span> &nbsp;|&nbsp; State Code : <span id="p-print-consignee-state-code">37</span></span>
-            </div>
-            <div class="party-detail-line">
-              <span>Phone : <span id="p-print-consignee-phone"></span></span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- MAIN ITEMS TABLE -->
-      <div class="items-table-wrapper">
-        <table class="professional-items-table">
-          <thead>
-            <tr>
-              <th style="width: 5%; text-align: center;">Sl.<br>No.</th>
-              <th style="width: 30%; text-align: left;">Description of Goods</th>
-              <th style="width: 10%; text-align: center;">HSN/SAC</th>
-              <th style="width: 10%; text-align: center;">Pack Size</th>
-              <th style="width: 8%; text-align: center;">Quantity</th>
-              <th style="width: 8%; text-align: center;">Unit</th>
-              <th style="width: 10%; text-align: right;">Rate (₹)</th>
-              <th style="width: 7%; text-align: center;">Disc. %</th>
-              <th style="width: 12%; text-align: right;">Amount (₹)</th>
-            </tr>
-          </thead>
-          <tbody id="p-print-items-tbody">
-            <!-- Dynamic rows -->
-          </tbody>
-          <tfoot>
-            <tr class="pro-total-row">
-              <td colspan="4" style="text-align: right; font-weight: 800;">Total</td>
-              <td id="p-print-total-quantity" style="text-align: center; font-weight: 800;">30 Bucket</td>
-              <td colspan="3"></td>
-              <td id="p-print-total-amount" style="text-align: right; font-weight: 800;">₹ 62,100.00</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-
-      <!-- LOWER BREAKDOWN SECTION (2 COLUMNS) -->
-      <div class="lower-breakdown-grid">
-        <!-- LEFT COLUMN: Words, HSN Summary & Declaration -->
-        <div class="lower-left-col">
-          <div class="words-block">
-            <span class="lbl-sm">Amount Chargeable (in words):</span>
-            <div id="p-print-amount-words" class="val-words">INR Sixty Two Thousand One Hundred Rupees Only</div>
+            <div style="margin-top: 3px;"><strong>GSTIN/UIN:</strong> <span id="p-print-company-gstin">37ACNFA4687Q1ZC</span></div>
+            <div>State Name: <span id="p-print-company-state">Andhra Pradesh</span>, Code: <span id="p-print-company-state-code">37</span></div>
+            <div>Contact: <span id="p-print-company-phones">7386262139 & 7403727272</span></div>
+            <div id="p-print-company-email" style="display: none;"></div>
+            <div id="p-print-company-tagline" style="display: none;"></div>
           </div>
           
-          <div class="hsn-summary-block">
-            <table class="professional-hsn-table">
-              <thead>
-                <tr>
-                  <th style="text-align: left;">HSN/SAC</th>
-                  <th style="text-align: right;">Taxable Value (₹)</th>
-                  <th style="text-align: center;">CGST (₹)</th>
-                  <th style="text-align: center;">SGST (₹)</th>
-                  <th style="text-align: center;">IGST (₹)</th>
-                  <th style="text-align: right;">Total Tax (₹)</th>
-                </tr>
-              </thead>
-              <tbody id="p-print-hsn-tbody">
-                <!-- HSN rows -->
-              </tbody>
-              <tfoot>
-                <tr class="hsn-total-tr">
-                  <td style="text-align: left; font-weight: 800;">TOTAL</td>
-                  <td id="p-print-hsn-total-taxable" style="text-align: right; font-weight: 800;">62,100.00</td>
-                  <td id="p-print-hsn-total-cgst" style="text-align: center; font-weight: 800;">NIL</td>
-                  <td id="p-print-hsn-total-sgst" style="text-align: center; font-weight: 800;">NIL</td>
-                  <td id="p-print-hsn-total-igst" style="text-align: center; font-weight: 800;">NIL</td>
-                  <td id="p-print-hsn-total-tax" style="text-align: right; font-weight: 800;">NIL</td>
-                </tr>
-              </tfoot>
+          <div class="tally-meta-section">
+            <table class="tally-meta-table">
+              <tr>
+                <td style="width: 50%;">
+                  <span class="tally-meta-lbl">Invoice No.</span>
+                  <div class="tally-meta-val"><strong id="p-print-invoice-no">1847</strong></div>
+                </td>
+                <td style="width: 50%;">
+                  <span class="tally-meta-lbl">Dated</span>
+                  <div class="tally-meta-val"><strong id="p-print-invoice-date">27-June-26</strong></div>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="tally-meta-lbl">Delivery Note</span>
+                  <div class="tally-meta-val" id="p-print-delivery-note">—</div>
+                </td>
+                <td>
+                  <span class="tally-meta-lbl">Mode/Terms of Payment</span>
+                  <div class="tally-meta-val" id="p-print-payment-mode">—</div>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="tally-meta-lbl">Reference No. & Date.</span>
+                  <div class="tally-meta-val" id="p-print-ref-no-date">—</div>
+                </td>
+                <td>
+                  <span class="tally-meta-lbl">Other References</span>
+                  <div class="tally-meta-val" id="p-print-other-references">—</div>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="tally-meta-lbl">Buyer's Order No.</span>
+                  <div class="tally-meta-val" id="p-print-buyer-order-no">—</div>
+                </td>
+                <td>
+                  <span class="tally-meta-lbl">Dated</span>
+                  <div class="tally-meta-val" id="p-print-buyer-order-date">—</div>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="tally-meta-lbl">Dispatch Doc No.</span>
+                  <div class="tally-meta-val" id="p-print-dispatch-doc-no">—</div>
+                </td>
+                <td>
+                  <span class="tally-meta-lbl">Delivery Note Date</span>
+                  <div class="tally-meta-val" id="p-print-delivery-note-date">—</div>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="tally-meta-lbl">Dispatched through</span>
+                  <div class="tally-meta-val" id="p-print-dispatched-through">—</div>
+                </td>
+                <td>
+                  <span class="tally-meta-lbl">Destination</span>
+                  <div class="tally-meta-val" id="p-print-destination">—</div>
+                </td>
+              </tr>
+              <tr>
+                <td colspan="2" style="height: 38px; vertical-align: top; border-bottom: none;">
+                  <span class="tally-meta-lbl">Terms of Delivery</span>
+                  <div class="tally-meta-val" id="p-print-delivery-terms">—</div>
+                </td>
+              </tr>
             </table>
           </div>
-
-          <div class="tax-words-line">
-            Tax Amount (in words) : <strong id="p-print-tax-words">NIL</strong>
+        </div>
+        
+        <!-- Stacked Consignee & Buyer Section (Left) with spacer vertical column (Right) -->
+        <div class="tally-parties-row">
+          <div class="tally-parties-left">
+            <div class="tally-party-block">
+              <div class="tally-party-header">Consignee (Ship to)</div>
+              <div class="tally-party-name" id="p-print-consignee-name">DEVI FISHERIES LIMITED</div>
+              <div class="tally-party-address" id="p-print-consignee-address">
+                LANKEVANIDIBBA<br>REPALLE MANDAL<br>GUNTURU<br>Andhra Pradesh - 522264, India
+              </div>
+              <div style="margin-top: 3px;"><strong>GSTIN/UIN:</strong> <span id="p-print-consignee-gstin">37AAACD7852Q1ZZ</span></div>
+              <div>State Name: <span id="p-print-consignee-state">Andhra Pradesh</span>, Code: <span id="p-print-consignee-state-code">37</span></div>
+              <div id="p-print-consignee-phone" style="display: none;"></div>
+            </div>
+            
+            <div class="tally-party-block" style="border-top: 1px solid #000;">
+              <div class="tally-party-header">Buyer (Bill to)</div>
+              <div class="tally-party-name" id="p-print-buyer-name">DEVI FISHERIES LIMITED</div>
+              <div class="tally-party-address" id="p-print-buyer-address">
+                LANKEVANIDIBBA<br>REPALLE MANDAL<br>GUNTURU<br>Andhra Pradesh - 522264, India
+              </div>
+              <div style="margin-top: 3px;"><strong>GSTIN/UIN:</strong> <span id="p-print-buyer-gstin">37AAACD7852Q1ZZ</span></div>
+              <div>State Name: <span id="p-print-buyer-state">Andhra Pradesh</span>, Code: <span id="p-print-buyer-state-code">37</span></div>
+              <div id="p-print-buyer-phone" style="display: none;"></div>
+            </div>
           </div>
-
-          <div class="declaration-box">
-            <div class="decl-title">DECLARATION</div>
-            <p>We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.</p>
+          <div class="tally-parties-right">
+            <!-- Blank column to separate middle and complete the box border mapping -->
           </div>
         </div>
-
-        <!-- RIGHT COLUMN: Financial Totals Breakdown -->
-        <div class="lower-right-col">
-          <table class="financial-summary-table">
-            <tr>
-              <td class="fin-label">Gross Amount</td>
-              <td class="fin-val">₹ <span id="p-print-gross-amount">62,100.00</span></td>
-            </tr>
-            <tr>
-              <td class="fin-label">Total Discount</td>
-              <td class="fin-val">- ₹ <span id="p-print-total-discount">26,411.50</span></td>
-            </tr>
-            <tr>
-              <td class="fin-label">Taxable Value</td>
-              <td class="fin-val">₹ <span id="p-print-taxable-value">62,100.00</span></td>
-            </tr>
-            <tr>
-              <td class="fin-label">CGST</td>
-              <td class="fin-val" id="p-print-cgst">NIL</td>
-            </tr>
-            <tr>
-              <td class="fin-label">SGST</td>
-              <td class="fin-val" id="p-print-sgst">NIL</td>
-            </tr>
-            <tr>
-              <td class="fin-label">IGST</td>
-              <td class="fin-val" id="p-print-igst">NIL</td>
-            </tr>
-            <tr>
-              <td class="fin-label">Round Off</td>
-              <td class="fin-val">₹ <span id="p-print-round-off">0.00</span></td>
-            </tr>
+        
+        <!-- Items Table -->
+        <div class="tally-items-wrapper">
+          <table class="tally-items-table">
+            <thead>
+              <tr>
+                <th style="width: 5%; text-align: center;">Sl<br>No.</th>
+                <th style="width: 45%; text-align: left;">Description of Goods</th>
+                <th style="width: 12%; text-align: center;">HSN/SAC</th>
+                <th style="width: 12%; text-align: center;">Quantity</th>
+                <th style="width: 10%; text-align: center;">Rate</th>
+                <th style="width: 5%; text-align: center;">per</th>
+                <th style="width: 5%; text-align: center;">Disc. %</th>
+                <th style="width: 8%; text-align: right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody id="p-print-items-tbody">
+              <!-- JS-populated rows -->
+            </tbody>
+            <tfoot>
+              <tr class="tally-total-row">
+                <td colspan="3" style="text-align: right; font-weight: bold; border-top: 1px solid #000;">Total</td>
+                <td id="p-print-total-quantity" style="text-align: center; font-weight: bold; border-top: 1px solid #000;">30 bucket</td>
+                <td colspan="3" style="border-top: 1px solid #000;"></td>
+                <td id="p-print-total-amount" style="text-align: right; font-weight: bold; border-top: 1px solid #000;">₹ 62,100.00</td>
+              </tr>
+            </tfoot>
           </table>
-          <div class="grand-total-teal-bar">
-            <span>GRAND TOTAL</span>
-            <strong id="p-print-grand-total">₹ 62,100.00</strong>
-          </div>
-          <div class="eoe-align-right">E. & O.E</div>
         </div>
-      </div>
-
-      <!-- FOOTER GRID (4 CARDS) -->
-      <div class="footer-four-cards-grid">
-        <!-- 1. BANK DETAILS -->
-        <div class="footer-card">
-          <div class="footer-card-header"><i class="fa-solid fa-building-columns"></i> BANK DETAILS</div>
-          <div class="footer-card-body bank-card-body">
-            <p><strong>Bank Name</strong> : <span id="p-print-bank-name">State Bank of India</span></p>
-            <p><strong>Account Name</strong> : <span id="p-print-bank-acc-name">Aaryan Aqua Needs</span></p>
-            <p><strong>Account No.</strong> : <span id="p-print-bank-acc-no">12345678901</span></p>
-            <p><strong>IFSC Code</strong> : <span id="p-print-bank-ifsc">SBIN0001234</span></p>
-            <p><strong>Branch</strong> : <span id="p-print-bank-branch">Repalle</span></p>
+        
+        <!-- Lower section: words, HSN, Declaration, Signatory -->
+        <div class="tally-lower-section">
+          <div class="tally-words-row">
+            <div>Amount Chargeable (in words)</div>
+            <div style="font-style: italic; font-weight: bold;">E. & O.E</div>
           </div>
-        </div>
-
-        <!-- 2. AUTHORISED SIGNATORY -->
-        <div class="footer-card">
-          <div class="footer-card-header">For <span id="p-print-sign-company">AARYAN AQUA NEEDS</span></div>
-          <div class="footer-card-body sig-card-body">
-            <div class="signature-graphic-box">
-              <svg viewBox="0 0 150 40" class="signature-svg">
-                <path d="M 10 30 Q 30 5, 50 25 T 90 15 T 130 28" fill="none" stroke="#004d5a" stroke-width="2"/>
-                <path d="M 30 32 C 60 38, 100 35, 140 25" fill="none" stroke="#004d5a" stroke-width="1.5"/>
-              </svg>
+          <div class="tally-grand-words" id="p-print-amount-words">INR Sixty Two Thousand One Hundred Rupees Only</div>
+          
+          <div class="tally-hsn-decl-row">
+            <div class="tally-hsn-side">
+              <table class="tally-hsn-table">
+                <thead>
+                  <tr id="tally-hsn-thead-row">
+                    <th style="text-align: left;">HSN/SAC</th>
+                    <th style="text-align: right;">Taxable Value</th>
+                    <th class="tally-hsn-tax-col">CGST</th>
+                    <th class="tally-hsn-tax-col">SGST</th>
+                    <th class="tally-hsn-tax-col">IGST</th>
+                    <th class="tally-hsn-tax-col" style="text-align: right;">Total Tax</th>
+                  </tr>
+                </thead>
+                <tbody id="p-print-hsn-tbody">
+                  <!-- JS dynamic rows -->
+                </tbody>
+                <tfoot>
+                  <tr style="font-weight: bold; border-top: 1px solid #000;">
+                    <td style="text-align: left;">Total</td>
+                    <td id="p-print-hsn-total-taxable" style="text-align: right;">62,100.00</td>
+                    <td id="p-print-hsn-total-cgst" class="tally-hsn-tax-col" style="text-align: center;">NIL</td>
+                    <td id="p-print-hsn-total-sgst" class="tally-hsn-tax-col" style="text-align: center;">NIL</td>
+                    <td id="p-print-hsn-total-igst" class="tally-hsn-tax-col" style="text-align: center;">NIL</td>
+                    <td id="p-print-hsn-total-tax" class="tally-hsn-tax-col" style="text-align: right;">NIL</td>
+                  </tr>
+                </tfoot>
+              </table>
+              <div class="tally-tax-words-line">
+                Tax Amount (in words) : <strong id="p-print-tax-words">NIL</strong>
+              </div>
+              
+              <div class="tally-declaration-box">
+                <div class="tally-decl-title">Declaration</div>
+                <p>We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.</p>
+              </div>
             </div>
-            <div class="sig-title-line">Authorised Signatory</div>
-          </div>
-        </div>
-
-        <!-- 3. TERMS & CONDITIONS -->
-        <div class="footer-card">
-          <div class="footer-card-header">TERMS & CONDITIONS</div>
-          <div class="footer-card-body terms-card-body">
-            <p>• Goods once sold will not be taken back.</p>
-            <p>• Interest @ 18% will be charged on overdue payments.</p>
-            <p>• Subject to Repalle Jurisdiction.</p>
-            <p>• Please verify the goods at the time of delivery.</p>
-            <p>• This is a computer generated invoice.</p>
-          </div>
-        </div>
-
-        <!-- 4. SCAN TO PAY -->
-        <div class="footer-card scan-pay-card">
-          <div class="footer-card-header">SCAN TO PAY</div>
-          <div class="footer-card-body scan-card-body">
-            <div class="qr-code-img-box">
-              <canvas id="p-print-qr-canvas" width="60" height="60"></canvas>
+            
+            <div class="tally-sig-side">
+              <div class="tally-sig-company-title">for <span id="p-print-sign-company">Aaryan Aqua Needs</span></div>
+              <div class="tally-sig-space"></div>
+              <div class="tally-sig-label">Authorised Signatory</div>
             </div>
-            <div class="thank-you-text">Thank You!</div>
           </div>
         </div>
       </div>
-
-      <!-- BOTTOM FULL-WIDTH PILL BAR -->
-      <div class="bottom-full-pill-bar">
-        <span><i class="fa-solid fa-phone"></i> 7386262139 | 7403727272</span>
-        <span><i class="fa-solid fa-envelope"></i> aaryanaqua@gmail.com</span>
-        <span><i class="fa-solid fa-globe"></i> www.aaryanaqua.com</span>
+      
+      <div class="tally-footer-note">This is a Computer Generated Invoice</div>
+      
+      <!-- Hidden elements to prevent JS crashes on unsaved features -->
+      <div style="display: none;">
+        <div id="p-print-divine-motto"></div>
+        <img id="p-print-divine-img" src="" alt="">
+        <img id="p-print-divine-img-right" src="" alt="">
+        <span id="p-print-motto-text"></span>
+        <span id="p-print-bank-name"></span>
+        <span id="p-print-bank-acc-name"></span>
+        <span id="p-print-bank-acc-no"></span>
+        <span id="p-print-bank-ifsc"></span>
+        <span id="p-print-bank-branch"></span>
+        <span id="p-print-gross-amount"></span>
+        <span id="p-print-total-discount"></span>
+        <span id="p-print-taxable-value"></span>
+        <span id="p-print-cgst"></span>
+        <span id="p-print-sgst"></span>
+        <span id="p-print-igst"></span>
+        <span id="p-print-round-off"></span>
+        <span id="p-print-grand-total"></span>
+        <canvas id="p-print-qr-canvas"></canvas>
       </div>
-      <div class="computer-generated-footer-text">
-        THIS IS A COMPUTER GENERATED INVOICE
-      </div>
-
     </div>
   </div>
 
@@ -1472,6 +1353,6 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=31"></script>
+  <script src="index_v5.js?v=32"></script>
 </body>
 </html>
