@@ -20,8 +20,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=30">
-  <script src="invoice_utils_v5.js?v=30"></script>
+  <link rel="stylesheet" href="index.css?v=31">
+  <script src="invoice_utils_v5.js?v=31"></script>
 </head>
 <body>
 
@@ -280,35 +280,50 @@
               </div>
             </div>
 
-            <!-- Section 2: Transport Info -->
+            <!-- Section 2: Commercial & Dispatch Details -->
             <div class="billing-card-form margin-top-12">
-              <div class="form-grid">
+              <div class="card-header" style="font-size: 11px; font-weight: 800; color: var(--accent-cyan); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;">
+                <i class="fa-solid fa-truck-ramp-box"></i> Commercial & Dispatch Details
+              </div>
+              <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
                 <div class="form-group">
-                  <label for="bill-transport-mode">TRANSPORT MODE</label>
-                  <input type="text" id="bill-transport-mode" placeholder="e.g. Road, Rail">
+                  <label for="bill-delivery-note">DELIVERY NOTE</label>
+                  <input type="text" id="bill-delivery-note" placeholder="Delivery Note Details">
                 </div>
                 <div class="form-group">
-                  <label for="bill-lr-no">L.R./DOCKET NO.</label>
-                  <input type="text" id="bill-lr-no" placeholder="LR No.">
+                  <label for="bill-reference-no-date">REFERENCE NO. & DATE</label>
+                  <input type="text" id="bill-reference-no-date" placeholder="Reference No. & Date">
                 </div>
                 <div class="form-group">
-                  <label for="bill-transport-date">DATE (LR DATE)</label>
-                  <input type="date" id="bill-transport-date">
+                  <label for="bill-buyer-order-no">BUYER'S ORDER NO.</label>
+                  <input type="text" id="bill-buyer-order-no" placeholder="Buyer's Order No.">
                 </div>
                 <div class="form-group">
-                  <label for="bill-supply-date">DATE OF SUPPLY</label>
-                  <input type="date" id="bill-supply-date">
+                  <label for="bill-buyer-order-date">ORDER DATE (DATED)</label>
+                  <input type="date" id="bill-buyer-order-date">
                 </div>
                 <div class="form-group">
-                  <label for="bill-bundles">NO. OF BUNDLES</label>
-                  <input type="number" id="bill-bundles" value="0">
+                  <label for="bill-dispatch-doc-no">DISPATCH DOC NO.</label>
+                  <input type="text" id="bill-dispatch-doc-no" placeholder="Dispatch Document No. (LR No.)">
                 </div>
                 <div class="form-group">
-                  <label for="bill-supply-place">PLACE OF SUPPLY</label>
-                  <input type="text" id="bill-supply-place" value="Andhra Pradesh">
+                  <label for="bill-delivery-note-date">DELIVERY NOTE DATE</label>
+                  <input type="date" id="bill-delivery-note-date">
                 </div>
                 <div class="form-group">
-                  <label for="bill-supply-state-code">STATE CODE</label>
+                  <label for="bill-dispatched-through">DISPATCHED THROUGH</label>
+                  <input type="text" id="bill-dispatched-through" placeholder="e.g. Road, Transport Name">
+                </div>
+                <div class="form-group">
+                  <label for="bill-destination">DESTINATION</label>
+                  <input type="text" id="bill-destination" placeholder="Destination / Place of Supply" value="Andhra Pradesh">
+                </div>
+                <div class="form-group">
+                  <label for="bill-delivery-terms">TERMS OF DELIVERY</label>
+                  <input type="text" id="bill-delivery-terms" placeholder="Terms of Delivery">
+                </div>
+                <div class="form-group">
+                  <label for="bill-supply-state-code">STATE CODE (GST)</label>
                   <input type="text" id="bill-supply-state-code" value="37">
                 </div>
               </div>
@@ -1457,6 +1472,6 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=30"></script>
+  <script src="index_v5.js?v=31"></script>
 </body>
 </html>
