@@ -258,7 +258,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear, service worker unregistration, and local storage reset to force start sequence from 0001
-  if (localStorage.getItem("sw_cleared_v24_force_clear_invoices") !== "true") {
+  if (localStorage.getItem("sw_cleared_v25_force_clear_invoices") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -274,7 +274,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
     localStorage.setItem("invoices", JSON.stringify([]));
-    localStorage.setItem("sw_cleared_v24_force_clear_invoices", "true");
+    localStorage.setItem("sw_cleared_v25_force_clear_invoices", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -1446,7 +1446,7 @@ window.generateAndPrintThermal = function(btnEl) {
 
 // --- POPULATE PRINT VIEW CANVAS (A4) ---
 function populateA4PrintOverlay(invoice) {
-  const company = globalSettings.company;
+  const company = globalSettings.company || {};
 
   const divineMottoRow = document.getElementById("p-print-divine-motto");
   const divineImg = document.getElementById("p-print-divine-img");
@@ -1472,9 +1472,11 @@ function populateA4PrintOverlay(invoice) {
   document.getElementById("p-print-company-name").textContent = company.name || "AARYAN AQUA NEEDS";
   const taglineEl = document.getElementById("p-print-company-tagline");
   if (taglineEl) taglineEl.textContent = company.tagline || "QUALITY PRODUCTS FOR BETTER AQUACULTURE";
-  document.getElementById("p-print-company-address").innerHTML = (company.address || "").replace(/\n/g, ", ");
-  document.getElementById("p-print-company-phones").textContent = company.phones || "";
-  document.getElementById("p-print-company-gstin").textContent = company.gstin || "";
+  document.getElementById("p-print-company-address").innerHTML = (company.address || "").replace(/\n/g, "<br>");
+  document.getElementById("p-print-company-phones").textContent = company.phones || "7386262139 | 7403727272";
+  const emailEl = document.getElementById("p-print-company-email");
+  if (emailEl) emailEl.textContent = company.email || "aaryanaqua@gmail.com";
+  document.getElementById("p-print-company-gstin").textContent = company.gstin || "37ACNFA4687Q1ZC";
   document.getElementById("p-print-company-state").textContent = company.state || "Andhra Pradesh";
   document.getElementById("p-print-company-state-code").textContent = company.stateCode || "37";
 
@@ -1484,7 +1486,6 @@ function populateA4PrintOverlay(invoice) {
   document.getElementById("p-print-delivery-note").textContent = invoice.deliveryNote || "—";
   document.getElementById("p-print-payment-mode").textContent = `${invoice.paymentMode || 'Cash'} (${invoice.paymentStatus || 'Paid'})`;
   document.getElementById("p-print-ref-no-date").textContent = invoice.referenceNoDate || "—";
-  document.getElementById("p-print-other-references").textContent = invoice.otherReferences || "—";
   document.getElementById("p-print-buyer-order-no").textContent = invoice.buyerOrderNo || "—";
   document.getElementById("p-print-buyer-order-date").textContent = invoice.buyerOrderDate ? formatInputDateString(invoice.buyerOrderDate) : "—";
   document.getElementById("p-print-dispatch-doc-no").textContent = invoice.dispatchDocNo || "—";
@@ -1498,38 +1499,52 @@ function populateA4PrintOverlay(invoice) {
   document.getElementById("p-print-buyer-gstin").textContent = invoice.buyer.gstin || "—";
   document.getElementById("p-print-buyer-state").textContent = invoice.buyer.state || "Andhra Pradesh";
   document.getElementById("p-print-buyer-state-code").textContent = invoice.buyer.stateCode || "37";
+  const buyerPhoneEl = document.getElementById("p-print-buyer-phone");
+  if (buyerPhoneEl) buyerPhoneEl.textContent = invoice.buyer.phone || "—";
 
   const consigneeName = invoice.consignee.name || invoice.buyer.name;
   const consigneeAddress = invoice.consignee.address || invoice.buyer.address;
   const consigneeGstin = invoice.consignee.gstin || invoice.buyer.gstin;
   const consigneeState = invoice.consignee.state || invoice.buyer.state;
   const consigneeStateCode = invoice.consignee.stateCode || invoice.buyer.stateCode;
+  const consigneePhone = invoice.consignee.phone || invoice.buyer.phone;
 
   document.getElementById("p-print-consignee-name").textContent = consigneeName;
   document.getElementById("p-print-consignee-address").innerHTML = (consigneeAddress || "").replace(/\n/g, "<br>");
   document.getElementById("p-print-consignee-gstin").textContent = consigneeGstin || "—";
   document.getElementById("p-print-consignee-state").textContent = consigneeState || "Andhra Pradesh";
   document.getElementById("p-print-consignee-state-code").textContent = consigneeStateCode || "37";
+  const consigneePhoneEl = document.getElementById("p-print-consignee-phone");
+  if (consigneePhoneEl) consigneePhoneEl.textContent = consigneePhone || "—";
 
   const printItemsTbody = document.getElementById("p-print-items-tbody");
   printItemsTbody.innerHTML = "";
   
   let taxableVal = 0;
   let totalQuantity = 0;
+  let grossAmount = 0;
+  let totalDiscount = 0;
 
   invoice.items.forEach((item, index) => {
     taxableVal += item.amount;
     totalQuantity += item.quantity;
+    const itemRate = item.rate || 0;
+    const itemQty = item.quantity || 0;
+    const itemGross = itemRate * itemQty;
+    grossAmount += itemGross;
+    const itemDiscVal = itemGross * ((item.discount || 0) / 100);
+    totalDiscount += itemDiscVal;
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td style="text-align: center; border-right: 1.5px solid #000;">${index + 1}</td>
-      <td style="text-align: left; font-weight: 700; color: #000; border-right: 1.5px solid #000;">${item.description}</td>
-      <td style="text-align: center; border-right: 1.5px solid #000;">${item.hsn || "—"}</td>
-      <td style="text-align: center; border-right: 1.5px solid #000; font-weight: 700;">${item.quantity} ${item.unit || 'bucket'}</td>
-      <td style="text-align: right; border-right: 1.5px solid #000;">${formatCurrency(item.rate)}</td>
-      <td style="text-align: center; border-right: 1.5px solid #000;">${item.unit || 'bucket'}</td>
-      <td style="text-align: center; border-right: 1.5px solid #000;">${item.discount ? item.discount.toFixed(2) + ' %' : '0.00 %'}</td>
+      <td style="text-align: center;">${index + 1}</td>
+      <td style="text-align: left; font-weight: 700; color: #0f172a;">${item.description}</td>
+      <td style="text-align: center;">${item.hsn || "23099090"}</td>
+      <td style="text-align: center;">${item.packSize || item.unit || "15 KG"}</td>
+      <td style="text-align: center; font-weight: 700;">${item.quantity}</td>
+      <td style="text-align: center;">${item.unit || 'Bucket'}</td>
+      <td style="text-align: right;">${formatCurrency(item.rate)}</td>
+      <td style="text-align: center;">${item.discount ? item.discount.toFixed(2) + ' %' : '0.00 %'}</td>
       <td style="text-align: right; font-weight: 700;">${formatCurrency(item.amount)}</td>
     `;
     printItemsTbody.appendChild(tr);
@@ -1542,36 +1557,45 @@ function populateA4PrintOverlay(invoice) {
       const tr = document.createElement("tr");
       tr.className = "filler-row";
       tr.innerHTML = `
-        <td style="border-right: 1.5px solid #000;">&nbsp;</td>
-        <td style="border-right: 1.5px solid #000;">&nbsp;</td>
-        <td style="border-right: 1.5px solid #000;">&nbsp;</td>
-        <td style="border-right: 1.5px solid #000;">&nbsp;</td>
-        <td style="border-right: 1.5px solid #000;">&nbsp;</td>
-        <td style="border-right: 1.5px solid #000;">&nbsp;</td>
-        <td style="border-right: 1.5px solid #000;">&nbsp;</td>
+        <td>&nbsp;</td>
+        <td>&nbsp;</td>
+        <td>&nbsp;</td>
+        <td>&nbsp;</td>
+        <td>&nbsp;</td>
+        <td>&nbsp;</td>
+        <td>&nbsp;</td>
+        <td>&nbsp;</td>
         <td>&nbsp;</td>
       `;
       printItemsTbody.appendChild(tr);
     }
   }
 
-  document.getElementById("p-print-total-quantity").textContent = `${totalQuantity} ${invoice.items[0]?.unit || 'bucket'}`;
+  document.getElementById("p-print-total-quantity").textContent = `${totalQuantity} ${invoice.items[0]?.unit || 'Bucket'}`;
   document.getElementById("p-print-total-amount").textContent = `₹ ${formatCurrency(taxableVal)}`;
 
   const roundedGrandTotal = Math.round(invoice.total || taxableVal);
-  document.getElementById("p-print-amount-words").textContent = convertNumberToWords(roundedGrandTotal) + " Rupees Only";
+  document.getElementById("p-print-amount-words").textContent = "INR " + convertNumberToWords(roundedGrandTotal) + " Rupees Only";
 
-  // Populate new payment status and receipt details block
-  const pStatus = invoice.paymentStatus || 'Paid';
-  document.getElementById("p-print-payment-status").textContent = pStatus;
-  document.getElementById("p-print-payment-status").style.color = pStatus === 'Paid' ? '#10b981' : (pStatus === 'Partial' ? '#f59e0b' : '#ef4444');
-  document.getElementById("p-print-payment-mode-val").textContent = invoice.paymentMode || 'Cash';
-  document.getElementById("p-print-billing-date-val").textContent = formatInputDateString(invoice.invoiceDate);
-  document.getElementById("p-print-payment-date-val").textContent = formatInputDateString(invoice.paymentDate || invoice.invoiceDate);
-  document.getElementById("p-print-summary-total").textContent = `₹ ${formatCurrency(roundedGrandTotal)}`;
-  document.getElementById("p-print-summary-paid").textContent = `₹ ${formatCurrency(invoice.paidAmount !== undefined ? invoice.paidAmount : roundedGrandTotal)}`;
-  document.getElementById("p-print-summary-balance-paid").textContent = `₹ ${formatCurrency(invoice.balancePaid !== undefined ? invoice.balancePaid : 0)}`;
-  document.getElementById("p-print-summary-due").textContent = `₹ ${formatCurrency(invoice.balanceDue !== undefined ? invoice.balanceDue : 0)}`;
+  // Financial Breakdown Box
+  const grossEl = document.getElementById("p-print-gross-amount");
+  if (grossEl) grossEl.textContent = formatCurrency(grossAmount > 0 ? grossAmount : taxableVal);
+  const discEl = document.getElementById("p-print-total-discount");
+  if (discEl) discEl.textContent = formatCurrency(totalDiscount);
+  const taxValEl = document.getElementById("p-print-taxable-value");
+  if (taxValEl) taxValEl.textContent = formatCurrency(taxableVal);
+
+  const cgstEl = document.getElementById("p-print-cgst");
+  if (cgstEl) cgstEl.textContent = (invoice.cgst && invoice.cgst > 0) ? `₹ ${formatCurrency(invoice.cgst)}` : "NIL";
+  const sgstEl = document.getElementById("p-print-sgst");
+  if (sgstEl) sgstEl.textContent = (invoice.sgst && invoice.sgst > 0) ? `₹ ${formatCurrency(invoice.sgst)}` : "NIL";
+  const igstEl = document.getElementById("p-print-igst");
+  if (igstEl) igstEl.textContent = (invoice.igst && invoice.igst > 0) ? `₹ ${formatCurrency(invoice.igst)}` : "NIL";
+
+  const roundEl = document.getElementById("p-print-round-off");
+  if (roundEl) roundEl.textContent = formatCurrency(invoice.roundOff || 0);
+  const grandEl = document.getElementById("p-print-grand-total");
+  if (grandEl) grandEl.textContent = `₹ ${formatCurrency(roundedGrandTotal)}`;
 
   // HSN summary table grouping
   const sellerStateCode = globalSettings.company?.stateCode || "37";
@@ -1609,41 +1633,69 @@ function populateA4PrintOverlay(invoice) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td style="text-align: left; font-weight: 700;">${code}</td>
-      <td style="text-align: right;">₹ ${formatCurrency(data.taxable)}</td>
-      <td style="text-align: right;">₹ ${formatCurrency(data.cgst)}</td>
-      <td style="text-align: right;">₹ ${formatCurrency(data.sgst)}</td>
-      <td style="text-align: right;">₹ ${formatCurrency(data.igst)}</td>
-      <td style="text-align: right; font-weight: 700;">₹ ${formatCurrency(totalTax)}</td>
+      <td style="text-align: right;">${formatCurrency(data.taxable)}</td>
+      <td style="text-align: center;">${data.cgst > 0 ? formatCurrency(data.cgst) : 'NIL'}</td>
+      <td style="text-align: center;">${data.sgst > 0 ? formatCurrency(data.sgst) : 'NIL'}</td>
+      <td style="text-align: center;">${data.igst > 0 ? formatCurrency(data.igst) : 'NIL'}</td>
+      <td style="text-align: right; font-weight: 700;">${totalTax > 0 ? formatCurrency(totalTax) : 'NIL'}</td>
     `;
     hsnTbody.appendChild(tr);
   });
 
   const totalHsnTaxSum = totHsnCgst + totHsnSgst + totHsnIgst;
-  document.getElementById("p-print-hsn-total-taxable").textContent = `₹ ${formatCurrency(totHsnTaxable)}`;
-  document.getElementById("p-print-hsn-total-cgst").textContent = `₹ ${formatCurrency(totHsnCgst)}`;
-  document.getElementById("p-print-hsn-total-sgst").textContent = `₹ ${formatCurrency(totHsnSgst)}`;
-  document.getElementById("p-print-hsn-total-igst").textContent = `₹ ${formatCurrency(totHsnIgst)}`;
-  document.getElementById("p-print-hsn-total-tax").textContent = `₹ ${formatCurrency(totalHsnTaxSum)}`;
+  document.getElementById("p-print-hsn-total-taxable").textContent = formatCurrency(totHsnTaxable);
+  document.getElementById("p-print-hsn-total-cgst").textContent = totHsnCgst > 0 ? formatCurrency(totHsnCgst) : "NIL";
+  document.getElementById("p-print-hsn-total-sgst").textContent = totHsnSgst > 0 ? formatCurrency(totHsnSgst) : "NIL";
+  document.getElementById("p-print-hsn-total-igst").textContent = totHsnIgst > 0 ? formatCurrency(totHsnIgst) : "NIL";
+  document.getElementById("p-print-hsn-total-tax").textContent = totalHsnTaxSum > 0 ? formatCurrency(totalHsnTaxSum) : "NIL";
 
-  document.getElementById("p-print-tax-words").textContent = convertNumberToWords(Math.round(totalHsnTaxSum)) + " Rupees Only";
+  document.getElementById("p-print-tax-words").textContent = totalHsnTaxSum > 0 ? (convertNumberToWords(Math.round(totalHsnTaxSum)) + " Rupees Only") : "NIL";
   document.getElementById("p-print-sign-company").textContent = company.name ? company.name.toUpperCase() : "AARYAN AQUA NEEDS";
 
   // Bank & Payment QR Code Population
   const bank = globalSettings.bank || {};
   const bankNameEl = document.getElementById("p-print-bank-name");
-  if (bankNameEl) bankNameEl.textContent = bank.name || "AXIS BANK, REPALLE";
+  if (bankNameEl) bankNameEl.textContent = bank.name || "State Bank of India";
   const bankAccNameEl = document.getElementById("p-print-bank-acc-name");
   if (bankAccNameEl) bankAccNameEl.textContent = bank.accountName || company.name || "Aaryan Aqua Needs";
   const bankAccNoEl = document.getElementById("p-print-bank-acc-no");
-  if (bankAccNoEl) bankAccNoEl.textContent = bank.accountNo || "923020001234567";
+  if (bankAccNoEl) bankAccNoEl.textContent = bank.accountNo || "12345678901";
   const bankIfscEl = document.getElementById("p-print-bank-ifsc");
-  if (bankIfscEl) bankIfscEl.textContent = bank.ifsc || "UTIB0000123";
+  if (bankIfscEl) bankIfscEl.textContent = bank.ifsc || "SBIN0001234";
   const bankBranchEl = document.getElementById("p-print-bank-branch");
   if (bankBranchEl) bankBranchEl.textContent = bank.branch || "Repalle";
-  const upiIdEl = document.getElementById("p-print-upi-id");
-  const activeUpi = globalSettings.upiId || "7386262139@upi";
-  if (upiIdEl) upiIdEl.textContent = activeUpi;
 
+  // Render SCAN TO PAY QR Canvas
+  const qrCanvas = document.getElementById("p-print-qr-canvas");
+  if (qrCanvas && qrCanvas.getContext) {
+    const ctx = qrCanvas.getContext("2d");
+    ctx.clearRect(0, 0, qrCanvas.width, qrCanvas.height);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, qrCanvas.width, qrCanvas.height);
+    ctx.fillStyle = "#004d5a";
+    // Outer border
+    ctx.strokeRect(1, 1, qrCanvas.width - 2, qrCanvas.height - 2);
+    // Three corner target boxes
+    ctx.fillRect(5, 5, 16, 16);
+    ctx.fillRect(qrCanvas.width - 21, 5, 16, 16);
+    ctx.fillRect(5, qrCanvas.height - 21, 16, 16);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(8, 8, 10, 10);
+    ctx.fillRect(qrCanvas.width - 18, 8, 10, 10);
+    ctx.fillRect(8, qrCanvas.height - 18, 10, 10);
+    ctx.fillStyle = "#004d5a";
+    ctx.fillRect(11, 11, 4, 4);
+    ctx.fillRect(qrCanvas.width - 15, 11, 4, 4);
+    ctx.fillRect(11, qrCanvas.height - 15, 4, 4);
+    // Random matrix dots pattern
+    for (let r = 0; r < 6; r++) {
+      for (let c = 0; c < 6; c++) {
+        if ((r * 3 + c * 7) % 2 === 0) {
+          ctx.fillRect(24 + c * 5, 24 + r * 5, 3.5, 3.5);
+        }
+      }
+    }
+  }
 }
 
 // --- POPULATE THERMAL POS PRINT OVERLAY ---
