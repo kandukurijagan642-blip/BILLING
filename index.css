@@ -1521,11 +1521,11 @@ body {
   width: 100%;
   border-collapse: collapse;
   border: 1.5px solid #004d5a;
-  font-size: 7.5pt;
+  font-size: 6.8pt;
 }
 
 .invoice-meta-grid td {
-  padding: 2.5px 4px;
+  padding: 2px 4px;
   border: 1px solid #cbd5e1;
   vertical-align: middle;
   box-sizing: border-box;
@@ -1571,8 +1571,8 @@ body {
 }
 
 .meta-split-wrapper .meta-label {
-  width: 50%;
-  padding: 2.5px 4px;
+  width: 58%;
+  padding: 2px 4px;
   background-color: #004d5a;
   color: #ffffff;
   font-weight: 700;
@@ -1581,8 +1581,8 @@ body {
 }
 
 .meta-split-wrapper .meta-colon {
-  width: 10%;
-  padding: 2.5px 0;
+  width: 7%;
+  padding: 2px 0;
   background-color: #004d5a;
   color: #ffffff;
   font-weight: 700;
@@ -1591,8 +1591,8 @@ body {
 }
 
 .meta-split-wrapper .meta-val {
-  width: 40%;
-  padding: 2.5px 4px;
+  width: 35%;
+  padding: 2px 4px;
   background-color: #ffffff;
   color: #0f172a;
   font-weight: 600;
