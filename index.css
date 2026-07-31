@@ -1517,7 +1517,7 @@ body {
 }
 
 /* Invoice Meta Grid Table */
-/* TALLY BILL OF SUPPLY LAYOUT */
+/* TALLY BILL OF SUPPLY LAYOUT - NEW PREMIUM AQUA DESIGN */
 .tally-invoice-container {
   width: 210mm;
   height: 297mm;
@@ -1525,138 +1525,275 @@ body {
   box-sizing: border-box;
   background: #ffffff;
   font-family: 'Inter', Arial, sans-serif;
-  font-size: 8.5pt;
-  color: #000000;
+  font-size: 8pt;
+  color: #1e293b;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  line-height: 1.35;
+}
+
+/* Header layout */
+.invoice-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 6px;
+}
+
+.header-left {
+  width: 58%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.logo-area {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.title-area {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.company-name-text {
+  font-size: 19pt;
+  font-weight: 800;
+  color: #004b73;
+  font-family: 'Outfit', sans-serif;
+  margin: 0;
+  letter-spacing: 0.5px;
+  line-height: 1.1;
+}
+
+.company-tagline-text {
+  font-size: 7.5px;
+  font-weight: 800;
+  color: #ffffff;
+  background: #004b73;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  width: fit-content;
+  font-family: 'Outfit', sans-serif;
+}
+
+.company-details-area {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 2px;
+}
+
+.detail-item {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font-size: 7.5pt;
+  color: #475569;
   line-height: 1.3;
 }
 
-.tally-document-title {
+.detail-item i {
+  color: #004b73;
+  margin-top: 2px;
+  font-size: 8.5pt;
+  width: 12px;
   text-align: center;
-  font-size: 13pt;
-  font-weight: 700;
-  margin-bottom: 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
-.tally-main-box {
-  border: 1px solid #000000;
+.detail-state-row {
+  font-size: 8pt;
+  color: #004b73;
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+.detail-state-row .separator {
+  margin: 0 6px;
+  color: #cbd5e1;
+}
+
+.header-right {
+  width: 38%;
   display: flex;
   flex-direction: column;
-  flex-grow: 1;
+  align-items: flex-end;
+  gap: 8px;
 }
 
-/* Top row containing Company (Left) and Metadata Grid (Right) */
-.tally-top-row {
+.doc-title-box {
+  text-align: right;
+}
+
+.doc-type-text {
+  font-size: 19pt;
+  font-weight: 800;
+  color: #004b73;
+  font-family: 'Outfit', sans-serif;
+  margin: 0;
+  letter-spacing: 1px;
+}
+
+.three-dots-divider {
   display: flex;
-  border-bottom: 1px solid #000000;
+  gap: 4px;
+  justify-content: flex-end;
+  margin: 4px 2px;
 }
 
-.tally-company-section {
-  width: 50%;
-  border-right: 1px solid #000000;
-  padding: 6px 8px;
-  box-sizing: border-box;
+.three-dots-divider .dot {
+  width: 5px;
+  height: 5px;
+  background: #004b73;
+  border-radius: 50%;
 }
 
-.tally-company-name {
-  font-weight: 700;
-  font-size: 11pt;
-  margin-bottom: 4px;
-  text-transform: uppercase;
+.recipient-copy-text {
+  font-size: 7.5pt;
+  font-weight: 600;
+  color: #64748b;
 }
 
-.tally-company-address {
-  margin-bottom: 5px;
-  line-height: 1.35;
-}
-
-.tally-meta-section {
-  width: 50%;
-  box-sizing: border-box;
-}
-
-.tally-meta-table {
+.metadata-card {
   width: 100%;
-  height: 100%;
+  background: #eef6fa;
+  border: 1px solid #b4c6d0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-sizing: border-box;
+}
+
+.meta-card-table {
+  width: 100%;
   border-collapse: collapse;
 }
 
-.tally-meta-table td {
-  border-bottom: 1px solid #000000;
-  border-right: 1px solid #000000;
-  padding: 4px 6px;
-  vertical-align: top;
-  box-sizing: border-box;
+.meta-card-table td {
+  padding: 3px 0;
+  font-size: 7.8pt;
+  color: #1e293b;
+  vertical-align: middle;
 }
 
-.tally-meta-table td:last-child {
-  border-right: none;
+.meta-card-table td.lbl-col {
+  font-weight: 600;
+  width: 48%;
+  color: #004b73;
 }
 
-.tally-meta-lbl {
-  display: block;
-  font-size: 7.5pt;
-  color: #333333;
+.meta-card-table td.lbl-col i {
+  width: 14px;
+  text-align: center;
+  margin-right: 4px;
+  color: #004b73;
 }
 
-.tally-meta-val {
-  font-size: 8.5pt;
+.meta-card-table td.colon-col {
+  width: 5%;
+  text-align: center;
+  color: #004b73;
+}
+
+.meta-card-table td.val-col {
   font-weight: 700;
-  margin-top: 1px;
+  width: 47%;
+  color: #0f2d4a;
 }
 
-/* Stacked Consignee & Buyer section on left, empty spacer on right */
-.tally-parties-row {
+/* Parties Section */
+.parties-section {
   display: flex;
-  border-bottom: 1px solid #000000;
+  gap: 12px;
+  margin-top: 8px;
 }
 
-.tally-parties-left {
+.party-card {
   width: 50%;
-  border-right: 1px solid #000000;
+  border: 1px solid #b4c6d0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #ffffff;
   display: flex;
   flex-direction: column;
-  box-sizing: border-box;
 }
 
-.tally-party-block {
-  padding: 6px 8px;
-  box-sizing: border-box;
-  line-height: 1.35;
-}
-
-.tally-party-header {
-  font-size: 7.5pt;
-  color: #333333;
-  font-style: italic;
-  margin-bottom: 2px;
-}
-
-.tally-party-name {
+.party-card-header {
+  background: #004b73;
+  color: #ffffff;
+  font-size: 8.5pt;
   font-weight: 700;
-  font-size: 9.5pt;
-  text-transform: uppercase;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: 0.5px;
+  font-family: 'Outfit', sans-serif;
+}
+
+.party-card-body {
+  padding: 8px 12px;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.party-name {
+  font-size: 9pt;
+  font-weight: 700;
+  color: #004b73;
   margin-bottom: 2px;
 }
 
-.tally-party-address {
-  margin-bottom: 3px;
+.party-address {
+  font-size: 7.8pt;
+  color: #334155;
+  line-height: 1.4;
+  flex-grow: 1;
 }
 
-.tally-parties-right {
-  width: 50%;
-  background: #ffffff;
-  box-sizing: border-box;
+.party-state-row {
+  font-size: 7.8pt;
+  color: #004b73;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 4px;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+.party-state-row .separator {
+  margin: 0 4px;
+  color: #cbd5e1;
+}
+
+.party-phone-row {
+  font-size: 7.8pt;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.underline-val {
+  border-bottom: 1px dashed #cbd5e1;
+  padding-bottom: 1px;
+  min-width: 100px;
+  display: inline-block;
 }
 
 /* Items Table */
 .tally-items-wrapper {
+  margin-top: 10px;
+  border: 1px solid #b4c6d0;
+  border-radius: 8px;
+  overflow: hidden;
   flex-grow: 1;
-  border-bottom: 1px solid #000000;
   display: flex;
   flex-direction: column;
 }
@@ -1664,30 +1801,36 @@ body {
 .tally-items-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 8.5pt;
   flex-grow: 1;
 }
 
 .tally-items-table th {
-  border-bottom: 1px solid #000000;
-  border-right: 1px solid #000000;
-  padding: 5px 4px;
-  font-weight: 700;
-  text-align: center;
-  box-sizing: border-box;
-  text-transform: uppercase;
+  background: #004b73;
+  color: #ffffff;
   font-size: 8pt;
+  font-weight: 700;
+  padding: 8px 6px;
+  text-align: center;
+  border-bottom: 1px solid #004b73;
+  border-right: 1px solid rgba(255,255,255,0.15);
 }
 
 .tally-items-table th:last-child {
   border-right: none;
 }
 
+.tally-items-table th i {
+  font-size: 8pt;
+  margin-right: 3px;
+}
+
 .tally-items-table td {
-  border-right: 1px solid #000000;
-  padding: 3px 6px;
-  vertical-align: top;
-  box-sizing: border-box;
+  padding: 6px 8px;
+  font-size: 7.8pt;
+  color: #1e293b;
+  border-bottom: 1px solid #eef2f6;
+  border-right: 1px solid #e2e8f0;
+  vertical-align: middle;
 }
 
 .tally-items-table td:last-child {
@@ -1700,116 +1843,269 @@ body {
 }
 
 .tally-total-row td {
-  border-top: 1px solid #000000 !important;
-  border-bottom: none !important;
-  padding: 6px 8px !important;
-  font-size: 9pt !important;
+  background: #004b73 !important;
+  color: #ffffff !important;
+  font-size: 8.5pt !important;
+  font-weight: 700 !important;
+  border: none !important;
+  padding: 8px 12px !important;
 }
 
-/* Lower summary section */
-.tally-lower-section {
-  padding: 6px 8px;
-  box-sizing: border-box;
+/* Lower Section breakdown and declaration */
+.breakdown-declaration-section {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+  align-items: flex-start;
+}
+
+.declaration-side {
+  width: 60%;
   display: flex;
   flex-direction: column;
+  gap: 6px;
 }
 
-.tally-words-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 8pt;
-  color: #333333;
+.word-amount-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 6px 10px;
 }
 
-.tally-grand-words {
+.word-amount-lbl {
+  font-size: 6.8pt;
+  color: #64748b;
+  text-transform: uppercase;
   font-weight: 700;
-  font-size: 9pt;
-  border-bottom: 1px solid #000000;
-  padding-bottom: 5px;
-  margin-bottom: 6px;
+  letter-spacing: 0.5px;
 }
 
-.tally-hsn-decl-row {
-  display: flex;
+.word-amount-val {
+  font-size: 8.5pt;
+  color: #004b73;
+  font-weight: 700;
+  font-style: italic;
+  margin-top: 1px;
 }
 
-.tally-hsn-side {
-  width: 65%;
-  border-right: 1px solid #000000;
-  padding-right: 8px;
-  box-sizing: border-box;
+.declaration-box {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 8px 10px;
 }
 
-.tally-hsn-table {
+.declaration-title {
+  font-size: 7.2pt;
+  color: #004b73;
+  font-weight: 800;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+  letter-spacing: 0.5px;
+}
+
+.declaration-text {
+  font-size: 7pt;
+  color: #475569;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.totals-side {
+  width: 40%;
+  background: #eef6fa;
+  border: 1px solid #b4c6d0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.totals-table {
   width: 100%;
   border-collapse: collapse;
+}
+
+.totals-table td {
+  padding: 6px 12px;
   font-size: 8pt;
-  margin-bottom: 5px;
+  color: #1e293b;
 }
 
-.tally-hsn-table th {
-  border-bottom: 1px solid #000000;
-  padding: 4px;
-  font-weight: 700;
-  text-align: left;
+.totals-table tr.grand-total-row td {
+  background: #004b73 !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  font-size: 10pt !important;
+  padding: 8px 12px !important;
 }
 
-.tally-hsn-table td {
-  padding: 3px 4px;
+/* Bottom Cards (Bank, Terms, Signature) */
+.bottom-cards-section {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
 }
 
-.tally-tax-words-line {
-  font-size: 8pt;
-  margin-bottom: 8px;
+.bottom-card {
+  border: 1px solid #b4c6d0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #ffffff;
 }
 
-.tally-declaration-box {
-  font-size: 7.5pt;
-  line-height: 1.25;
-  color: #333333;
+.bank-card {
+  width: 37%;
 }
 
-.tally-decl-title {
-  font-weight: 700;
-  text-decoration: underline;
-  margin-bottom: 2px;
-  color: #000000;
+.terms-card {
+  width: 38%;
 }
 
-.tally-sig-side {
-  width: 35%;
+.sig-card {
+  width: 25%;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  align-items: flex-end;
-  padding-left: 8px;
+  padding: 8px 12px;
   box-sizing: border-box;
-  text-align: right;
 }
 
-.tally-sig-company-title {
-  font-size: 8.5pt;
+.bottom-card-header {
+  background: #eef6fa;
+  border-bottom: 1px solid #b4c6d0;
+  color: #004b73;
+  font-size: 8pt;
   font-weight: 700;
+  padding: 5px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: 0.5px;
+  font-family: 'Outfit', sans-serif;
 }
 
-.tally-sig-space {
-  height: 48px;
+.bottom-card-body {
+  padding: 6px 12px;
+  font-size: 7.2pt;
+  color: #334155;
+  line-height: 1.35;
 }
 
-.tally-sig-label {
-  font-size: 8.5pt;
-  font-weight: 700;
-  border-top: 1px solid #000000;
-  width: 75%;
-  text-align: center;
-  padding-top: 3px;
+.bank-table {
+  width: 100%;
+  border-collapse: collapse;
 }
 
-.tally-footer-note {
-  text-align: center;
+.bank-table td {
+  padding: 2.5px 0;
   font-size: 7.5pt;
-  color: #444444;
+  vertical-align: middle;
+}
+
+.bank-table td.lbl {
+  color: #475569;
+  font-weight: 600;
+  width: 42%;
+}
+
+.bank-table td.colon {
+  color: #475569;
+  width: 5%;
+  text-align: center;
+}
+
+.bank-table td.val {
+  color: #004b73;
+  font-weight: 700;
+  width: 53%;
+}
+
+.terms-list {
+  margin: 0;
+  padding-left: 12px;
+}
+
+.terms-list li {
+  margin-bottom: 2px;
+  font-size: 6.8pt;
+  color: #475569;
+}
+
+.sig-title {
+  font-size: 7.5pt;
+  font-weight: 700;
+  color: #004b73;
+  text-align: center;
+  margin-bottom: 2px;
+}
+
+.sig-img-container {
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 0;
+}
+
+.sig-img {
+  max-height: 38px;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.sig-label {
+  font-size: 7.2pt;
+  font-weight: 700;
+  color: #475569;
+  text-align: center;
+  border-top: 1px solid #cbd5e1;
+  padding-top: 3px;
   margin-top: 3px;
+}
+
+/* Footer Bar */
+.invoice-footer-bar {
+  background: #004b73;
+  color: #ffffff;
+  padding: 6px 12px;
+  border-radius: 6px;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  box-sizing: border-box;
+}
+
+.footer-contact-row {
+  display: flex;
+  gap: 16px;
+  font-size: 7.5pt;
+  justify-content: center;
+}
+
+.footer-contact-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.footer-contact-item a {
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.footer-thank-you {
+  font-size: 8pt;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.footer-thank-you::before, .footer-thank-you::after {
+  content: "••";
+  opacity: 0.6;
 }
 /* End of Tally Layout Styles */
 

@@ -254,7 +254,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v34_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v35_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -269,7 +269,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v34_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v35_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -464,8 +464,9 @@ function seedDatabasesIfEmpty() {
         name: "Aaryan Aqua Needs",
         tagline: "Quality Products for Better Aquaculture",
         address: "Door No: 10-13-94/42A REVENUE WARD 7\nAP HOUSING BOARD COLONY, REPALLE Village,\nREPALLE Mandal, Bapatla District, Pincode 522265",
-        phones: "7386262139 & 7403727272",
+        phones: "+91 74166 05652",
         email: "aaryanaquaneeds@gmail.com",
+        website: "www.aaryan-aqua.com",
         gstin: "37ACNFA4687Q1ZC",
         state: "Andhra Pradesh",
         stateCode: "37"
@@ -521,6 +522,10 @@ function loadAllDatabases() {
 
   if (globalSettings.company && (!globalSettings.company.address || globalSettings.company.address.includes("Paruchurivari") || globalSettings.company.address.includes("10-14-15/3"))) {
     globalSettings.company.address = "Door No: 10-13-94/42A REVENUE WARD 7\nAP HOUSING BOARD COLONY, REPALLE Village,\nREPALLE Mandal, Bapatla District, Pincode 522265";
+  }
+  if (globalSettings.company) {
+    globalSettings.company.phones = "+91 74166 05652";
+    globalSettings.company.website = "www.aaryan-aqua.com";
   }
 
   try {
@@ -1014,6 +1019,7 @@ window.addBillingItemRow = function() {
     baleNo: (currentInvoice.items.length + 1).toString(),
     description: desc,
     hsn: hsn,
+    packSize: prod ? (prod.packSize || "—") : "—",
     quantity: qty,
     unit: unit,
     rate: rate,
@@ -1498,9 +1504,11 @@ function populateA4PrintOverlay(invoice) {
   const taglineEl = document.getElementById("p-print-company-tagline");
   if (taglineEl) taglineEl.textContent = company.tagline || "QUALITY PRODUCTS FOR BETTER AQUACULTURE";
   document.getElementById("p-print-company-address").innerHTML = (company.address || "").replace(/\n/g, "<br>");
-  document.getElementById("p-print-company-phones").textContent = company.phones || "7386262139 | 7403727272";
+  document.getElementById("p-print-company-phones").textContent = company.phones || "+91 74166 05652";
   const emailEl = document.getElementById("p-print-company-email");
-  if (emailEl) emailEl.textContent = company.email || "aaryanaqua@gmail.com";
+  if (emailEl) emailEl.textContent = company.email || "aaryanaquaneeds@gmail.com";
+  const websiteEl = document.getElementById("p-print-company-website");
+  if (websiteEl) websiteEl.textContent = company.website || "www.aaryan-aqua.com";
   document.getElementById("p-print-company-gstin").textContent = company.gstin || "37ACNFA4687Q1ZC";
   document.getElementById("p-print-company-state").textContent = company.state || "Andhra Pradesh";
   document.getElementById("p-print-company-state-code").textContent = company.stateCode || "37";
@@ -1511,8 +1519,25 @@ function populateA4PrintOverlay(invoice) {
   document.getElementById("p-print-payment-mode").textContent = `${invoice.paymentMode || 'Cash'} (${invoice.paymentStatus || 'Paid'})`;
   document.getElementById("p-print-buyer-order-no").textContent = invoice.buyerOrderNo || "—";
   document.getElementById("p-print-buyer-order-date").textContent = invoice.buyerOrderDate ? formatInputDateString(invoice.buyerOrderDate) : "—";
-  document.getElementById("p-print-transport-mode").textContent = invoice.transportMode || "—";
-  document.getElementById("p-print-destination").textContent = invoice.destination || "—";
+  
+  const transRow = document.getElementById("meta-row-transport");
+  if (transRow) {
+    if (invoice.transportMode) {
+      transRow.style.display = "table-row";
+      document.getElementById("p-print-transport-mode").textContent = invoice.transportMode;
+    } else {
+      transRow.style.display = "none";
+    }
+  }
+  const destRow = document.getElementById("meta-row-destination");
+  if (destRow) {
+    if (invoice.destination) {
+      destRow.style.display = "table-row";
+      document.getElementById("p-print-destination").textContent = invoice.destination;
+    } else {
+      destRow.style.display = "none";
+    }
+  }
 
   document.getElementById("p-print-buyer-name").textContent = invoice.buyer.name;
   document.getElementById("p-print-buyer-address").innerHTML = (invoice.buyer.address || "").replace(/\n/g, "<br>");
@@ -1520,7 +1545,7 @@ function populateA4PrintOverlay(invoice) {
   document.getElementById("p-print-buyer-state").textContent = invoice.buyer.state || "Andhra Pradesh";
   document.getElementById("p-print-buyer-state-code").textContent = invoice.buyer.stateCode || "37";
   const buyerPhoneEl = document.getElementById("p-print-buyer-phone");
-  if (buyerPhoneEl) buyerPhoneEl.textContent = invoice.buyer.phone || "—";
+  if (buyerPhoneEl) buyerPhoneEl.textContent = invoice.buyer.phone || "__________________";
 
   const consigneeName = invoice.consignee.name || invoice.buyer.name;
   const consigneeAddress = invoice.consignee.address || invoice.buyer.address;
@@ -1535,7 +1560,7 @@ function populateA4PrintOverlay(invoice) {
   document.getElementById("p-print-consignee-state").textContent = consigneeState || "Andhra Pradesh";
   document.getElementById("p-print-consignee-state-code").textContent = consigneeStateCode || "37";
   const consigneePhoneEl = document.getElementById("p-print-consignee-phone");
-  if (consigneePhoneEl) consigneePhoneEl.textContent = consigneePhone || "—";
+  if (consigneePhoneEl) consigneePhoneEl.textContent = consigneePhone || "__________________";
 
   const printItemsTbody = document.getElementById("p-print-items-tbody");
   printItemsTbody.innerHTML = "";
@@ -1555,14 +1580,18 @@ function populateA4PrintOverlay(invoice) {
     const itemDiscVal = itemGross * ((item.discount || 0) / 100);
     totalDiscount += itemDiscVal;
 
+    const prod = productsDb.find(p => p.description === item.description);
+    const packSize = item.packSize || (prod ? prod.packSize : "—") || "—";
+    
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td style="text-align: center;">${index + 1}</td>
       <td style="text-align: left; font-weight: 700; color: #000000;">${item.description}</td>
       <td style="text-align: center;">${item.hsn || "23099090"}</td>
-      <td style="text-align: center; font-weight: 700;">${item.quantity} ${item.unit || 'Bucket'}</td>
-      <td style="text-align: center;">${formatCurrency(item.rate)}</td>
+      <td style="text-align: center;">${packSize}</td>
+      <td style="text-align: center; font-weight: 700;">${item.quantity}</td>
       <td style="text-align: center;">${item.unit || 'Bucket'}</td>
+      <td style="text-align: center;">${formatCurrency(item.rate)}</td>
       <td style="text-align: center;">${item.discount ? item.discount.toFixed(2) + ' %' : '0.00 %'}</td>
       <td style="text-align: right; font-weight: 700;">${formatCurrency(item.amount)}</td>
     `;
@@ -1576,6 +1605,7 @@ function populateA4PrintOverlay(invoice) {
       const tr = document.createElement("tr");
       tr.className = "filler-row";
       tr.innerHTML = `
+        <td>&nbsp;</td>
         <td>&nbsp;</td>
         <td>&nbsp;</td>
         <td>&nbsp;</td>
