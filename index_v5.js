@@ -10,16 +10,10 @@ let currentInvoice = {
   headerLogo: "ganesha",
   invoiceNo: "",
   invoiceDate: "",
-  deliveryNote: "",
-  referenceNoDate: "",
-  otherReferences: "",
   buyerOrderNo: "",
   buyerOrderDate: "",
-  dispatchDocNo: "",
-  deliveryNoteDate: "",
-  dispatchedThrough: "",
+  transportMode: "",
   destination: "",
-  deliveryTerms: "",
   supplyStateCode: "37",
   paymentStatus: "Paid",
   paymentMode: "UPI / QR",
@@ -43,16 +37,10 @@ const elements = {
   billHeaderLogo: document.getElementById('bill-header-logo'),
   billInvoiceNo: document.getElementById('bill-invoice-no'),
   billInvoiceDate: document.getElementById('bill-invoice-date'),
-  billDeliveryNote: document.getElementById('bill-delivery-note'),
-  billReferenceNoDate: document.getElementById('bill-reference-no-date'),
-  billOtherReferences: document.getElementById('bill-other-references'),
   billBuyerOrderNo: document.getElementById('bill-buyer-order-no'),
   billBuyerOrderDate: document.getElementById('bill-buyer-order-date'),
-  billDispatchDocNo: document.getElementById('bill-dispatch-doc-no'),
-  billDeliveryNoteDate: document.getElementById('bill-delivery-note-date'),
-  billDispatchedThrough: document.getElementById('bill-dispatched-through'),
+  billTransportMode: document.getElementById('bill-transport-mode'),
   billDestination: document.getElementById('bill-destination'),
-  billDeliveryTerms: document.getElementById('bill-delivery-terms'),
   billSupplyStateCode: document.getElementById('bill-supply-state-code'),
   
   quickSelectReceiver: document.getElementById('quick-select-receiver'),
@@ -265,6 +253,29 @@ function formatTaxValue(val) {
 
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
+  // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
+  if (localStorage.getItem("sw_cleared_v34_cache_clean") !== "true") {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        for (let registration of registrations) {
+          registration.unregister();
+        }
+      });
+    }
+    if ('caches' in window) {
+      caches.keys().then(names => {
+        for (let name of names) {
+          caches.delete(name);
+        }
+      });
+    }
+    localStorage.setItem("sw_cleared_v34_cache_clean", "true");
+    setTimeout(() => {
+      window.location.reload();
+    }, 150);
+    return;
+  }
+
   // One-time cache clear, service worker unregistration, and local storage reset to force start sequence from 0001
   if (localStorage.getItem("sw_cleared_v32_force_clear_invoices") !== "true") {
     if ('serviceWorker' in navigator) {
@@ -360,7 +371,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Register PWA Service Worker for sub-10ms instant boot
+  // Service Worker disabled to prevent file caching issues
+  /*
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').then(reg => {
       reg.update();
@@ -368,6 +380,7 @@ document.addEventListener("DOMContentLoaded", () => {
       console.log('SW registration failed:', err);
     });
   }
+  */
 });
 
 // --- LOCAL STORAGE DATABASES SEEDING ---
@@ -450,7 +463,7 @@ function seedDatabasesIfEmpty() {
       company: {
         name: "Aaryan Aqua Needs",
         tagline: "Quality Products for Better Aquaculture",
-        address: "10-14-15/3, Paruchurivari Street, 11th\nWard Behind Narayana School Repalle\nAndhra Pradesh - 522265, India",
+        address: "Door No: 10-13-94/42A REVENUE WARD 7\nAP HOUSING BOARD COLONY, REPALLE Village,\nREPALLE Mandal, Bapatla District, Pincode 522265",
         phones: "7386262139 & 7403727272",
         email: "aaryanaquaneeds@gmail.com",
         gstin: "37ACNFA4687Q1ZC",
@@ -504,6 +517,10 @@ function loadAllDatabases() {
   }
   if (!globalSettings.bank) {
     globalSettings.bank = {};
+  }
+
+  if (globalSettings.company && (!globalSettings.company.address || globalSettings.company.address.includes("Paruchurivari") || globalSettings.company.address.includes("10-14-15/3"))) {
+    globalSettings.company.address = "Door No: 10-13-94/42A REVENUE WARD 7\nAP HOUSING BOARD COLONY, REPALLE Village,\nREPALLE Mandal, Bapatla District, Pincode 522265";
   }
 
   try {
@@ -735,16 +752,10 @@ function bindBillingFormInputs() {
     { el: elements.billHeaderLogo, key: 'headerLogo' },
     { el: elements.billInvoiceNo, key: 'invoiceNo' },
     { el: elements.billInvoiceDate, key: 'invoiceDate' },
-    { el: elements.billDeliveryNote, key: 'deliveryNote' },
-    { el: elements.billReferenceNoDate, key: 'referenceNoDate' },
-    { el: elements.billOtherReferences, key: 'otherReferences' },
     { el: elements.billBuyerOrderNo, key: 'buyerOrderNo' },
     { el: elements.billBuyerOrderDate, key: 'buyerOrderDate' },
-    { el: elements.billDispatchDocNo, key: 'dispatchDocNo' },
-    { el: elements.billDeliveryNoteDate, key: 'deliveryNoteDate' },
-    { el: elements.billDispatchedThrough, key: 'dispatchedThrough' },
+    { el: elements.billTransportMode, key: 'transportMode' },
     { el: elements.billDestination, key: 'destination' },
-    { el: elements.billDeliveryTerms, key: 'deliveryTerms' },
     { el: elements.billSupplyStateCode, key: 'supplyStateCode' },
     { el: elements.billPaymentStatus, key: 'paymentStatus' },
     { el: elements.billPaymentMode, key: 'paymentMode' },
@@ -1149,16 +1160,10 @@ function resetBillingForm() {
     invoiceNo: "",
     invoiceDate: new Date().toISOString().split('T')[0],
     paymentDate: new Date().toISOString().split('T')[0],
-    deliveryNote: "",
-    referenceNoDate: "",
-    otherReferences: "",
     buyerOrderNo: "",
     buyerOrderDate: "",
-    dispatchDocNo: "",
-    deliveryNoteDate: "",
-    dispatchedThrough: "",
+    transportMode: "",
     destination: "Andhra Pradesh",
-    deliveryTerms: "",
     supplyStateCode: "37",
     paymentStatus: "Paid",
     paymentMode: "UPI / QR",
@@ -1177,16 +1182,10 @@ function resetBillingForm() {
   if (elements.billPaymentDate) {
     elements.billPaymentDate.value = currentInvoice.paymentDate;
   }
-  elements.billDeliveryNote.value = "";
-  elements.billReferenceNoDate.value = "";
-  elements.billOtherReferences.value = "";
   elements.billBuyerOrderNo.value = "";
   elements.billBuyerOrderDate.value = "";
-  elements.billDispatchDocNo.value = "";
-  elements.billDeliveryNoteDate.value = "";
-  elements.billDispatchedThrough.value = "";
+  elements.billTransportMode.value = "";
   elements.billDestination.value = "Andhra Pradesh";
-  elements.billDeliveryTerms.value = "";
   elements.billSupplyStateCode.value = "37";
 
   elements.billBuyerName.value = "";
@@ -1509,17 +1508,11 @@ function populateA4PrintOverlay(invoice) {
   document.getElementById("p-print-invoice-no").textContent = invoice.invoiceNo;
   document.getElementById("p-print-invoice-date").textContent = formatInputDateString(invoice.invoiceDate);
   
-  document.getElementById("p-print-delivery-note").textContent = invoice.deliveryNote || "—";
   document.getElementById("p-print-payment-mode").textContent = `${invoice.paymentMode || 'Cash'} (${invoice.paymentStatus || 'Paid'})`;
-  document.getElementById("p-print-ref-no-date").textContent = invoice.referenceNoDate || "—";
-  document.getElementById("p-print-other-references").textContent = invoice.otherReferences || "—";
   document.getElementById("p-print-buyer-order-no").textContent = invoice.buyerOrderNo || "—";
   document.getElementById("p-print-buyer-order-date").textContent = invoice.buyerOrderDate ? formatInputDateString(invoice.buyerOrderDate) : "—";
-  document.getElementById("p-print-dispatch-doc-no").textContent = invoice.dispatchDocNo || "—";
-  document.getElementById("p-print-delivery-note-date").textContent = invoice.deliveryNoteDate ? formatInputDateString(invoice.deliveryNoteDate) : "—";
-  document.getElementById("p-print-dispatched-through").textContent = invoice.dispatchedThrough || "—";
+  document.getElementById("p-print-transport-mode").textContent = invoice.transportMode || "—";
   document.getElementById("p-print-destination").textContent = invoice.destination || "—";
-  document.getElementById("p-print-delivery-terms").textContent = invoice.deliveryTerms || "—";
 
   document.getElementById("p-print-buyer-name").textContent = invoice.buyer.name;
   document.getElementById("p-print-buyer-address").innerHTML = (invoice.buyer.address || "").replace(/\n/g, "<br>");
@@ -2075,16 +2068,10 @@ window.editSavedInvoice = function(id) {
     elements.billHeaderLogo.value = currentInvoice.headerLogo || "ganesha";
     elements.billInvoiceNo.value = currentInvoice.invoiceNo || "";
     elements.billInvoiceDate.value = currentInvoice.invoiceDate || "";
-    elements.billDeliveryNote.value = currentInvoice.deliveryNote || "";
-    elements.billReferenceNoDate.value = currentInvoice.referenceNoDate || "";
-    elements.billOtherReferences.value = currentInvoice.otherReferences || "";
     elements.billBuyerOrderNo.value = currentInvoice.buyerOrderNo || "";
     elements.billBuyerOrderDate.value = currentInvoice.buyerOrderDate || "";
-    elements.billDispatchDocNo.value = currentInvoice.dispatchDocNo || "";
-    elements.billDeliveryNoteDate.value = currentInvoice.deliveryNoteDate || "";
-    elements.billDispatchedThrough.value = currentInvoice.dispatchedThrough || "";
+    elements.billTransportMode.value = currentInvoice.transportMode || "";
     elements.billDestination.value = currentInvoice.destination || "Andhra Pradesh";
-    elements.billDeliveryTerms.value = currentInvoice.deliveryTerms || "";
     elements.billSupplyStateCode.value = currentInvoice.supplyStateCode || "37";
 
     elements.billBuyerName.value = currentInvoice.buyer.name || "";

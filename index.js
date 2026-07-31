@@ -1119,17 +1119,13 @@ function populateA4PrintOverlay(invoice) {
   document.getElementById("p-print-invoice-no").textContent = invoice.invoiceNo;
   document.getElementById("p-print-invoice-date").textContent = formatInputDateString(invoice.invoiceDate);
   
-  document.getElementById("p-print-delivery-note").textContent = invoice.deliveryNote || "—";
   document.getElementById("p-print-payment-mode").textContent = `${invoice.paymentMode || 'Cash'} (${invoice.paymentStatus || 'Paid'})`;
-  document.getElementById("p-print-ref-no-date").textContent = invoice.referenceNoDate || "—";
-  document.getElementById("p-print-other-references").textContent = invoice.otherReferences || "—";
   document.getElementById("p-print-buyer-order-no").textContent = invoice.buyerOrderNo || "—";
   document.getElementById("p-print-buyer-order-date").textContent = invoice.buyerOrderDate ? formatInputDateString(invoice.buyerOrderDate) : "—";
-  document.getElementById("p-print-dispatch-doc-no").textContent = invoice.dispatchDocNo || "—";
-  document.getElementById("p-print-delivery-note-date").textContent = invoice.deliveryNoteDate ? formatInputDateString(invoice.deliveryNoteDate) : "—";
-  document.getElementById("p-print-dispatched-through").textContent = invoice.dispatchedThrough || "—";
+  if (document.getElementById("p-print-transport-mode")) {
+    document.getElementById("p-print-transport-mode").textContent = invoice.transportMode || invoice.dispatchedThrough || "—";
+  }
   document.getElementById("p-print-destination").textContent = invoice.destination || "—";
-  document.getElementById("p-print-delivery-terms").textContent = invoice.deliveryTerms || "—";
 
   document.getElementById("p-print-buyer-name").textContent = invoice.buyer.name;
   document.getElementById("p-print-buyer-address").innerHTML = (invoice.buyer.address || "").replace(/\n/g, "<br>");
