@@ -1677,7 +1677,7 @@ body {
   padding: 3px 0;
   font-size: 7.8pt;
   color: #1e293b;
-  vertical-align: middle;
+  vertical-align: top;
 }
 
 .meta-card-table td.lbl-col {
