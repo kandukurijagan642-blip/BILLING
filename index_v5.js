@@ -173,8 +173,8 @@ function syncDatabaseToServer(type, data) {
 }
 
 // Lock screen credentials state
-let activeUsername = "1234";
-let activePassword = "1234";
+let activeUsername = "Aaryanaqua";
+let activePassword = "Aaryan@2024";
 let lockTimerSeconds = 300; // 5 mins
 let isLocked = true;
 let autolockInterval;
@@ -255,7 +255,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v44_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v45_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -270,7 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v44_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v45_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -481,7 +481,7 @@ function seedDatabasesIfEmpty() {
       },
       upiId: "7386262139@upi",
       telegram: { token: "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g", chatId: "6877857251" },
-      security: { autolock: "120", username: "1234", password: "1234" },
+      security: { autolock: "120", username: "Aaryanaqua", password: "Aaryan@2024" },
       terms: [
         "We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct."
       ]
@@ -539,6 +539,16 @@ function loadAllDatabases() {
   globalSettings.bank.ifsc = "SBIN0000911";
   globalSettings.bank.branch = "Repalle";
 
+  if (!globalSettings.security) {
+    globalSettings.security = {};
+  }
+  if (!globalSettings.security.username || globalSettings.security.username === "1234") {
+    globalSettings.security.username = "Aaryanaqua";
+  }
+  if (!globalSettings.security.password || globalSettings.security.password === "1234" || globalSettings.security.pin === "1234") {
+    globalSettings.security.password = "Aaryan@2024";
+  }
+
   // Enforce address updates (GUNTURU -> GUNTUR)
   let updatedParties = false;
   partiesDb.forEach(p => {
@@ -572,8 +582,8 @@ function loadAllDatabases() {
     console.warn("Unable to persist settings:", err);
   }
 
-  activeUsername = globalSettings.security?.username || "1234";
-  activePassword = globalSettings.security?.password || globalSettings.security?.pin || "1234";
+  activeUsername = globalSettings.security?.username || "Aaryanaqua";
+  activePassword = globalSettings.security?.password || globalSettings.security?.pin || "Aaryan@2024";
   lockTimerSeconds = parseInt(globalSettings.security?.autolock || "300", 10);
   if (Number.isNaN(lockTimerSeconds)) {
     lockTimerSeconds = 300;
@@ -2623,8 +2633,8 @@ function loadSettingsFields() {
   }
 
   elements.setAutolockTimer.value = globalSettings.security?.autolock || "300";
-  elements.setLoginUsername.value = globalSettings.security?.username || "1234";
-  elements.setLoginPassword.value = globalSettings.security?.password || globalSettings.security?.pin || "1234";
+  elements.setLoginUsername.value = globalSettings.security?.username || "Aaryanaqua";
+  elements.setLoginPassword.value = globalSettings.security?.password || globalSettings.security?.pin || "Aaryan@2024";
 
   elements.setCName.value = globalSettings.company?.name || "";
   elements.setCTagline.value = globalSettings.company?.tagline || "";

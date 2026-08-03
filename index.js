@@ -151,8 +151,8 @@ elements.sumSgstRow = elements.sumSgst ? elements.sumSgst.closest('.summary-row'
 elements.sumIgstRow = elements.sumIgst ? elements.sumIgst.closest('.summary-row') : null;
 
 // Lock screen credentials state
-let activeUsername = "1234";
-let activePassword = "1234";
+let activeUsername = "Aaryanaqua";
+let activePassword = "Aaryan@2024";
 let lockTimerSeconds = 300; // 5 mins
 let isLocked = true;
 let autolockInterval;
@@ -386,7 +386,7 @@ function seedDatabasesIfEmpty() {
       },
       upiId: "7386262139@upi",
       telegram: { token: "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g", chatId: "6877857251" },
-      security: { autolock: "120", username: "1234", password: "1234" },
+      security: { autolock: "120", username: "Aaryanaqua", password: "Aaryan@2024" },
       terms: [
         "We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct."
       ]
@@ -419,6 +419,12 @@ function loadAllDatabases() {
   if (!globalSettings.security) {
     globalSettings.security = {};
   }
+  if (!globalSettings.security.username || globalSettings.security.username === "1234") {
+    globalSettings.security.username = "Aaryanaqua";
+  }
+  if (!globalSettings.security.password || globalSettings.security.password === "1234" || globalSettings.security.pin === "1234") {
+    globalSettings.security.password = "Aaryan@2024";
+  }
   if (!globalSettings.company) {
     globalSettings.company = {};
   }
@@ -432,8 +438,8 @@ function loadAllDatabases() {
     console.warn("Unable to persist settings:", err);
   }
 
-  activeUsername = globalSettings.security?.username || "1234";
-  activePassword = globalSettings.security?.password || globalSettings.security?.pin || "1234";
+  activeUsername = globalSettings.security?.username || "Aaryanaqua";
+  activePassword = globalSettings.security?.password || globalSettings.security?.pin || "Aaryan@2024";
   lockTimerSeconds = parseInt(globalSettings.security?.autolock || "300", 10);
   if (Number.isNaN(lockTimerSeconds)) {
     lockTimerSeconds = 300;
@@ -2074,8 +2080,8 @@ function loadSettingsFields() {
   }
 
   elements.setAutolockTimer.value = globalSettings.security?.autolock || "300";
-  elements.setLoginUsername.value = globalSettings.security?.username || "1234";
-  elements.setLoginPassword.value = globalSettings.security?.password || globalSettings.security?.pin || "1234";
+  elements.setLoginUsername.value = globalSettings.security?.username || "Aaryanaqua";
+  elements.setLoginPassword.value = globalSettings.security?.password || globalSettings.security?.pin || "Aaryan@2024";
 
   elements.setCName.value = globalSettings.company?.name || "";
   elements.setCTagline.value = globalSettings.company?.tagline || "";
