@@ -55,6 +55,7 @@ const elements = {
   billConsigneeName: document.getElementById('bill-consignee-name'),
   billConsigneeAddress: document.getElementById('bill-consignee-address'),
   billConsigneeGstin: document.getElementById('bill-consignee-gstin'),
+  billConsigneePhone: document.getElementById('bill-consignee-phone'),
   billConsigneeState: document.getElementById('bill-consignee-state'),
   billConsigneeStateCode: document.getElementById('bill-consignee-state-code'),
 
@@ -254,7 +255,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v38_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v39_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -269,7 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v38_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v39_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -815,6 +816,7 @@ function bindBillingFormInputs() {
     { el: elements.billConsigneeName, sub: 'consignee', key: 'name' },
     { el: elements.billConsigneeAddress, sub: 'consignee', key: 'address' },
     { el: elements.billConsigneeGstin, sub: 'consignee', key: 'gstin' },
+    { el: elements.billConsigneePhone, sub: 'consignee', key: 'phone' },
     { el: elements.billConsigneeState, sub: 'consignee', key: 'state' },
     { el: elements.billConsigneeStateCode, sub: 'consignee', key: 'stateCode' }
   ];
@@ -1241,6 +1243,7 @@ function resetBillingForm() {
   elements.billConsigneeName.value = "";
   elements.billConsigneeAddress.value = "";
   elements.billConsigneeGstin.value = "";
+  elements.billConsigneePhone.value = "";
   elements.billConsigneeState.value = "Andhra Pradesh";
   elements.billConsigneeStateCode.value = "37";
   elements.billPaymentStatus.value = "Paid";
@@ -2151,6 +2154,7 @@ window.editSavedInvoice = function(id) {
     elements.billConsigneeName.value = currentInvoice.consignee.name || "";
     elements.billConsigneeAddress.value = currentInvoice.consignee.address || "";
     elements.billConsigneeGstin.value = currentInvoice.consignee.gstin || "";
+    elements.billConsigneePhone.value = currentInvoice.consignee.phone || "";
     elements.billConsigneeState.value = currentInvoice.consignee.state || "Andhra Pradesh";
     elements.billConsigneeStateCode.value = currentInvoice.consignee.stateCode || "37";
 
