@@ -176,7 +176,7 @@ function syncDatabaseToServer(type, data) {
 let activeUsername = "1234";
 let activePassword = "1234";
 let lockTimerSeconds = 300; // 5 mins
-let isLocked = false;
+let isLocked = true;
 let autolockInterval;
 
 // --- NUMBER TO WORDS ENGINE (INDIAN RUPEES SYSTEM) ---
@@ -255,7 +255,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v43_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v44_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -270,7 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v43_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v44_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);

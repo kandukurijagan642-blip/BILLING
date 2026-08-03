@@ -154,7 +154,7 @@ elements.sumIgstRow = elements.sumIgst ? elements.sumIgst.closest('.summary-row'
 let activeUsername = "1234";
 let activePassword = "1234";
 let lockTimerSeconds = 300; // 5 mins
-let isLocked = false;
+let isLocked = true;
 let autolockInterval;
 
 // --- NUMBER TO WORDS ENGINE (INDIAN RUPEES SYSTEM) ---
