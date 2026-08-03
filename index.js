@@ -307,7 +307,7 @@ function seedDatabasesIfEmpty() {
         type: "receiver",
         name: "DEVI FISHERIES LIMITED",
         company: "DEVI FISHERIES LIMITED",
-        address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTURU\nAndhra Pradesh - 522264, India",
+        address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTUR\nAndhra Pradesh - 522264, India",
         gstin: "37AAACD7852Q1ZZ",
         state: "Andhra Pradesh",
         stateCode: "37",
@@ -318,7 +318,7 @@ function seedDatabasesIfEmpty() {
         type: "consignee",
         name: "DEVI FISHERIES LIMITED",
         company: "DEVI FISHERIES LIMITED",
-        address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTURU\nAndhra Pradesh - 522264, India",
+        address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTUR\nAndhra Pradesh - 522264, India",
         gstin: "37AAACD7852Q1ZZ",
         state: "Andhra Pradesh",
         stateCode: "37",
@@ -377,10 +377,10 @@ function seedDatabasesIfEmpty() {
         stateCode: "37"
       },
       bank: {
-        name: "AXIS BANK, REPALLE",
-        accountName: "Aaryan Aqua Needs",
-        accountNo: "923020001234567",
-        ifsc: "UTIB0000123",
+        name: "State Bank of India",
+        accountName: "Aaryan aqua Needs",
+        accountNo: "45413424177",
+        ifsc: "SBIN0000911",
         branch: "Repalle"
       },
       upiId: "7386262139@upi",
@@ -1244,13 +1244,13 @@ function populateA4PrintOverlay(invoice) {
   // Bank & Payment QR Code Population
   const bank = globalSettings.bank || {};
   const bankNameEl = document.getElementById("p-print-bank-name");
-  if (bankNameEl) bankNameEl.textContent = bank.name || "AXIS BANK, REPALLE";
+  if (bankNameEl) bankNameEl.textContent = bank.name || "State Bank of India";
   const bankAccNameEl = document.getElementById("p-print-bank-acc-name");
-  if (bankAccNameEl) bankAccNameEl.textContent = bank.accountName || company.name || "Aaryan Aqua Needs";
+  if (bankAccNameEl) bankAccNameEl.textContent = bank.accountName || company.name || "Aaryan aqua Needs";
   const bankAccNoEl = document.getElementById("p-print-bank-acc-no");
-  if (bankAccNoEl) bankAccNoEl.textContent = bank.accountNo || "923020001234567";
+  if (bankAccNoEl) bankAccNoEl.textContent = bank.accountNo || "45413424177";
   const bankIfscEl = document.getElementById("p-print-bank-ifsc");
-  if (bankIfscEl) bankIfscEl.textContent = bank.ifsc || "UTIB0000123";
+  if (bankIfscEl) bankIfscEl.textContent = bank.ifsc || "SBIN0000911";
   const bankBranchEl = document.getElementById("p-print-bank-branch");
   if (bankBranchEl) bankBranchEl.textContent = bank.branch || "Repalle";
   const upiIdEl = document.getElementById("p-print-upi-id");

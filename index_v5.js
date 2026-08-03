@@ -254,7 +254,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v36_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v37_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -269,7 +269,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v36_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v37_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -401,7 +401,7 @@ function seedDatabasesIfEmpty() {
         type: "receiver",
         name: "DEVI FISHERIES LIMITED",
         company: "DEVI FISHERIES LIMITED",
-        address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTURU\nAndhra Pradesh - 522264, India",
+        address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTUR\nAndhra Pradesh - 522264, India",
         gstin: "37AAACD7852Q1ZZ",
         state: "Andhra Pradesh",
         stateCode: "37",
@@ -412,7 +412,7 @@ function seedDatabasesIfEmpty() {
         type: "consignee",
         name: "DEVI FISHERIES LIMITED",
         company: "DEVI FISHERIES LIMITED",
-        address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTURU\nAndhra Pradesh - 522264, India",
+        address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTUR\nAndhra Pradesh - 522264, India",
         gstin: "37AAACD7852Q1ZZ",
         state: "Andhra Pradesh",
         stateCode: "37",
@@ -472,10 +472,10 @@ function seedDatabasesIfEmpty() {
         stateCode: "37"
       },
       bank: {
-        name: "AXIS BANK, REPALLE",
-        accountName: "Aaryan Aqua Needs",
-        accountNo: "923020001234567",
-        ifsc: "UTIB0000123",
+        name: "State Bank of India",
+        accountName: "Aaryan aqua Needs",
+        accountNo: "45413424177",
+        ifsc: "SBIN0000911",
         branch: "Repalle"
       },
       upiId: "7386262139@upi",
@@ -526,6 +526,43 @@ function loadAllDatabases() {
   if (globalSettings.company) {
     globalSettings.company.phones = "+91 74166 05652";
     globalSettings.company.website = "www.aaryan-aqua.com";
+  }
+
+  // Enforce new bank details for live update
+  if (!globalSettings.bank) {
+    globalSettings.bank = {};
+  }
+  globalSettings.bank.name = "State Bank of India";
+  globalSettings.bank.accountName = "Aaryan aqua Needs";
+  globalSettings.bank.accountNo = "45413424177";
+  globalSettings.bank.ifsc = "SBIN0000911";
+  globalSettings.bank.branch = "Repalle";
+
+  // Enforce address updates (GUNTURU -> GUNTUR)
+  let updatedParties = false;
+  partiesDb.forEach(p => {
+    if (p.address && p.address.includes("GUNTURU")) {
+      p.address = p.address.replace(/GUNTURU/g, "GUNTUR");
+      updatedParties = true;
+    }
+  });
+  if (updatedParties) {
+    localStorage.setItem("parties", JSON.stringify(partiesDb));
+  }
+
+  let updatedInvoices = false;
+  invoicesDb.forEach(inv => {
+    if (inv.buyer && inv.buyer.address && inv.buyer.address.includes("GUNTURU")) {
+      inv.buyer.address = inv.buyer.address.replace(/GUNTURU/g, "GUNTUR");
+      updatedInvoices = true;
+    }
+    if (inv.consignee && inv.consignee.address && inv.consignee.address.includes("GUNTURU")) {
+      inv.consignee.address = inv.consignee.address.replace(/GUNTURU/g, "GUNTUR");
+      updatedInvoices = true;
+    }
+  });
+  if (updatedInvoices) {
+    localStorage.setItem("invoices", JSON.stringify(invoicesDb));
   }
 
   try {
@@ -1715,9 +1752,9 @@ function populateA4PrintOverlay(invoice) {
   const bankAccNameEl = document.getElementById("p-print-bank-acc-name");
   if (bankAccNameEl) bankAccNameEl.textContent = bank.accountName || company.name || "Aaryan Aqua Needs";
   const bankAccNoEl = document.getElementById("p-print-bank-acc-no");
-  if (bankAccNoEl) bankAccNoEl.textContent = bank.accountNo || "12345678901";
+  if (bankAccNoEl) bankAccNoEl.textContent = bank.accountNo || "45413424177";
   const bankIfscEl = document.getElementById("p-print-bank-ifsc");
-  if (bankIfscEl) bankIfscEl.textContent = bank.ifsc || "SBIN0001234";
+  if (bankIfscEl) bankIfscEl.textContent = bank.ifsc || "SBIN0000911";
   const bankBranchEl = document.getElementById("p-print-bank-branch");
   if (bankBranchEl) bankBranchEl.textContent = bank.branch || "Repalle";
 
