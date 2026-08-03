@@ -2146,7 +2146,7 @@ body {
     width: 210mm !important;
     height: 297mm !important;
     margin: 0 !important;
-    padding: 4mm 5mm !important;
+    padding: 0 !important;
     box-sizing: border-box !important;
     background: #ffffff !important;
   }
@@ -2155,13 +2155,12 @@ body {
     display: none !important;
   }
 
-  body:not(.printing-thermal) .invoice-page {
-    width: 200mm !important;
-    height: 287mm !important;
-    max-height: 287mm !important;
+  body:not(.printing-thermal) .tally-invoice-container {
+    width: 210mm !important;
+    height: 297mm !important;
+    max-height: 297mm !important;
     margin: 0 auto !important;
-    padding: 3mm 4mm !important;
-    border: 2px solid #004d5a !important;
+    padding: 6mm 8mm !important;
     box-sizing: border-box !important;
     background: #ffffff !important;
     display: flex !important;

@@ -1172,7 +1172,7 @@ function populateA4PrintOverlay(invoice) {
     printItemsTbody.appendChild(tr);
   });
 
-  const minRows = 7;
+  const minRows = 5;
   const currRows = invoice.items.length;
   if (currRows < minRows) {
     for (let i = currRows; i < minRows; i++) {
