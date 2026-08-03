@@ -262,6 +262,21 @@ document.addEventListener("DOMContentLoaded", () => {
   bindBillingFormInputs();
   setupKeyboardShortcuts();
 
+  // Session Persistence calculation on page load
+  const lastActiveTime = parseInt(localStorage.getItem("last_active_time") || "0", 10);
+  const wasLocked = localStorage.getItem("app_locked") !== "false";
+  const elapsedSeconds = (Date.now() - lastActiveTime) / 1000;
+
+  if (wasLocked || elapsedSeconds > lockTimerSeconds) {
+    isLocked = true;
+    document.getElementById("lock-screen-overlay").classList.remove("hidden");
+  } else {
+    isLocked = false;
+    document.getElementById("lock-screen-overlay").classList.add("hidden");
+    const wrapper = document.querySelector('.dashboard-wrapper');
+    if (wrapper) wrapper.classList.remove("blur-dashboard-wrapper");
+  }
+
   // Reset lock timer on activity
   resetAutolockTimer();
   ['mousemove', 'mousedown', 'keypress', 'touchstart', 'scroll'].forEach(evt => {
@@ -2223,6 +2238,9 @@ async function sendTelegramInvoiceNotification(invoice) {
 function resetAutolockTimer() {
   if (isLocked) return;
 
+  localStorage.setItem("last_active_time", Date.now());
+  localStorage.setItem("app_locked", "false");
+
   clearTimeout(autolockInterval);
   if (lockTimerSeconds === 0) return;
 
@@ -2235,6 +2253,7 @@ window.triggerManualLock = function() {
 
 function triggerLockOverlay() {
   isLocked = true;
+  localStorage.setItem("app_locked", "true");
   document.getElementById("login-form").reset();
   document.getElementById("login-error-message").classList.add("hidden");
   
@@ -2277,6 +2296,8 @@ window.submitUnlockLogin = function(e) {
   setTimeout(() => {
     if (userText === activeUsername && pwdText === activePassword) {
       isLocked = false;
+      localStorage.setItem("app_locked", "false");
+      localStorage.setItem("last_active_time", Date.now());
       document.getElementById("lock-screen-overlay").classList.add("hidden");
       const wrapper = document.querySelector('.dashboard-wrapper');
       if (wrapper) wrapper.classList.remove("blur-dashboard-wrapper");
