@@ -254,7 +254,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v37_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v38_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -269,7 +269,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v37_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v38_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -1578,7 +1578,7 @@ function populateA4PrintOverlay(invoice) {
 
   document.getElementById("p-print-buyer-name").textContent = invoice.buyer.name;
   document.getElementById("p-print-buyer-address").innerHTML = (invoice.buyer.address || "").replace(/\n/g, "<br>");
-  document.getElementById("p-print-buyer-gstin").textContent = invoice.buyer.gstin || "—";
+  document.getElementById("p-print-buyer-gstin").textContent = invoice.buyer.gstin || "__________________";
   document.getElementById("p-print-buyer-state").textContent = invoice.buyer.state || "Andhra Pradesh";
   document.getElementById("p-print-buyer-state-code").textContent = invoice.buyer.stateCode || "37";
   const buyerPhoneEl = document.getElementById("p-print-buyer-phone");
@@ -1593,7 +1593,7 @@ function populateA4PrintOverlay(invoice) {
 
   document.getElementById("p-print-consignee-name").textContent = consigneeName;
   document.getElementById("p-print-consignee-address").innerHTML = (consigneeAddress || "").replace(/\n/g, "<br>");
-  document.getElementById("p-print-consignee-gstin").textContent = consigneeGstin || "—";
+  document.getElementById("p-print-consignee-gstin").textContent = consigneeGstin || "__________________";
   document.getElementById("p-print-consignee-state").textContent = consigneeState || "Andhra Pradesh";
   document.getElementById("p-print-consignee-state-code").textContent = consigneeStateCode || "37";
   const consigneePhoneEl = document.getElementById("p-print-consignee-phone");

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqua-billing-v37';
+const CACHE_NAME = 'aqua-billing-v38';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

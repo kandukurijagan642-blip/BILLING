@@ -37,8 +37,8 @@
     }
   </script>
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=37">
-  <script src="invoice_utils_v5.js?v=37"></script>
+  <link rel="stylesheet" href="index.css?v=38">
+  <script src="invoice_utils_v5.js?v=38"></script>
 </head>
 <body>
 
@@ -1191,6 +1191,11 @@
               <span class="separator">|</span>
               <span>State Code: <strong id="p-print-buyer-state-code">37</strong></span>
             </div>
+            <div class="party-gst-row" style="font-size: 7.8pt; color: #475569; display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+              <span>GSTIN/UIN</span>
+              <span>:</span>
+              <strong id="p-print-buyer-gstin" style="color: #004b73;">__________________</strong>
+            </div>
             <div class="party-phone-row">
               <span>Phone</span>
               <span>:</span>
@@ -1212,6 +1217,11 @@
               <span>State Name: <strong id="p-print-consignee-state">Andhra Pradesh</strong></span>
               <span class="separator">|</span>
               <span>State Code: <strong id="p-print-consignee-state-code">37</strong></span>
+            </div>
+            <div class="party-gst-row" style="font-size: 7.8pt; color: #475569; display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+              <span>GSTIN/UIN</span>
+              <span>:</span>
+              <strong id="p-print-consignee-gstin" style="color: #004b73;">__________________</strong>
             </div>
             <div class="party-phone-row">
               <span>Phone</span>
@@ -1390,8 +1400,6 @@
         <div id="p-print-hsn-total-igst"></div>
         <div id="p-print-hsn-total-tax"></div>
         <div id="p-print-tax-words"></div>
-        <div id="p-print-consignee-gstin"></div>
-        <div id="p-print-buyer-gstin"></div>
       </div>
       
     </div>
@@ -1441,6 +1449,6 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=37"></script>
+  <script src="index_v5.js?v=38"></script>
 </body>
 </html>
