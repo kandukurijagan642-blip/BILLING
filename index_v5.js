@@ -6,6 +6,7 @@ let globalSettings = {};
 
 // Active Form Invoice State
 let currentInvoice = {
+  id: "",
   invoiceType: "Bill of Supply",
   headerLogo: "ganesha",
   invoiceNo: "",
@@ -255,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v62_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v63_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -270,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v62_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v63_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -1329,6 +1330,7 @@ function resetBillingForm() {
   loadAllDatabases();
   
   currentInvoice = {
+    id: "",
     invoiceType: "Bill of Supply",
     headerLogo: "ganesha",
     invoiceNo: "",
@@ -1439,8 +1441,11 @@ window.generateAndPrintInvoice = function() {
   currentInvoice.roundOff = roundOff;
   currentInvoice.total = grandTotal;
 
+  const uniqueId = currentInvoice.id || "inv_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+  currentInvoice.id = uniqueId;
+
   const invoiceRecord = {
-    id: currentInvoice.invoiceNo,
+    id: uniqueId,
     invoiceNo: currentInvoice.invoiceNo,
     invoiceDate: currentInvoice.invoiceDate,
     customerName: currentInvoice.buyer.name,
@@ -1449,7 +1454,14 @@ window.generateAndPrintInvoice = function() {
     details: JSON.parse(JSON.stringify(currentInvoice))
   };
 
-  const existingIdx = invoicesDb.findIndex(inv => inv.id === invoiceRecord.id);
+  let existingIdx = -1;
+  const originalId = uniqueId;
+  if (originalId && invoicesDb.some(inv => inv.id === originalId)) {
+    existingIdx = invoicesDb.findIndex(inv => inv.id === originalId);
+  } else {
+    existingIdx = invoicesDb.findIndex(inv => inv.invoiceNo === invoiceRecord.invoiceNo);
+  }
+
   if (existingIdx > -1) {
     if (confirm(`Overwrite existing Invoice #${invoiceRecord.invoiceNo} in history?`)) {
       reconcileProductInventoryStock(invoicesDb[existingIdx].details, currentInvoice);
@@ -1521,8 +1533,11 @@ window.saveAndGenerateInvoiceOnly = function(btnEl) {
   currentInvoice.roundOff = roundOff;
   currentInvoice.total = grandTotal;
 
+  const uniqueId = currentInvoice.id || "inv_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+  currentInvoice.id = uniqueId;
+
   const invoiceRecord = {
-    id: currentInvoice.invoiceNo,
+    id: uniqueId,
     invoiceNo: currentInvoice.invoiceNo,
     invoiceDate: currentInvoice.invoiceDate,
     customerName: currentInvoice.buyer.name,
@@ -1531,7 +1546,14 @@ window.saveAndGenerateInvoiceOnly = function(btnEl) {
     details: JSON.parse(JSON.stringify(currentInvoice))
   };
 
-  const existingIdx = invoicesDb.findIndex(inv => inv.id === invoiceRecord.id);
+  let existingIdx = -1;
+  const originalId = uniqueId;
+  if (originalId && invoicesDb.some(inv => inv.id === originalId)) {
+    existingIdx = invoicesDb.findIndex(inv => inv.id === originalId);
+  } else {
+    existingIdx = invoicesDb.findIndex(inv => inv.invoiceNo === invoiceRecord.invoiceNo);
+  }
+
   if (existingIdx > -1) {
     if (confirm(`Overwrite existing Invoice #${invoiceRecord.invoiceNo} in history?`)) {
       reconcileProductInventoryStock(invoicesDb[existingIdx].details, currentInvoice);
@@ -1601,8 +1623,11 @@ window.generateAndPrintThermal = function(btnEl) {
   currentInvoice.roundOff = roundOff;
   currentInvoice.total = grandTotal;
 
+  const uniqueId = currentInvoice.id || "inv_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+  currentInvoice.id = uniqueId;
+
   const invoiceRecord = {
-    id: currentInvoice.invoiceNo,
+    id: uniqueId,
     invoiceNo: currentInvoice.invoiceNo,
     invoiceDate: currentInvoice.invoiceDate,
     customerName: currentInvoice.buyer.name,
@@ -1611,7 +1636,14 @@ window.generateAndPrintThermal = function(btnEl) {
     details: JSON.parse(JSON.stringify(currentInvoice))
   };
 
-  const existingIdx = invoicesDb.findIndex(inv => inv.id === invoiceRecord.id);
+  let existingIdx = -1;
+  const originalId = uniqueId;
+  if (originalId && invoicesDb.some(inv => inv.id === originalId)) {
+    existingIdx = invoicesDb.findIndex(inv => inv.id === originalId);
+  } else {
+    existingIdx = invoicesDb.findIndex(inv => inv.invoiceNo === invoiceRecord.invoiceNo);
+  }
+
   if (existingIdx > -1) {
     if (confirm(`Overwrite existing Invoice #${invoiceRecord.invoiceNo} in history?`)) {
       reconcileProductInventoryStock(invoicesDb[existingIdx].details, currentInvoice);
@@ -2280,6 +2312,7 @@ window.editSavedInvoice = function(id) {
   const inv = invoicesDb.find(i => i.id === id);
   if (inv) {
     currentInvoice = JSON.parse(JSON.stringify(inv.details));
+    currentInvoice.id = inv.id;
     
     // Safety check default structures
     if (!currentInvoice.buyer) {
