@@ -1789,7 +1789,7 @@ function renderProductsTable(records) {
   if (records.length === 0) {
     elements.productsListBody.innerHTML = `
       <tr>
-        <td colspan="4" class="text-center text-muted">No products found.</td>
+        <td colspan="5" class="text-center text-muted">No products found.</td>
       </tr>
     `;
     return;
@@ -1797,10 +1797,25 @@ function renderProductsTable(records) {
 
   records.forEach(p => {
     const tr = document.createElement("tr");
+    const stockVal = p.stock !== undefined ? parseInt(p.stock, 10) : 0;
+    let stockBadge = "";
+    
+    if (stockVal === 0) {
+      stockBadge = `<span style="display: inline-block; background: rgba(239, 68, 68, 0.12); color: #f87171; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; margin-left: 8px;"><i class="fa-solid fa-triangle-exclamation"></i> Out</span>`;
+    } else if (stockVal <= 10) {
+      stockBadge = `<span style="display: inline-block; background: rgba(245, 158, 11, 0.12); color: #fbbf24; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; margin-left: 8px;"><i class="fa-solid fa-circle-exclamation"></i> Low</span>`;
+    } else {
+      stockBadge = `<span style="display: inline-block; background: rgba(16, 185, 129, 0.12); color: #34d399; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; margin-left: 8px;"><i class="fa-solid fa-circle-check"></i> In Stock</span>`;
+    }
+
     tr.innerHTML = `
       <td style="font-weight: 600;">${p.description}</td>
       <td>${p.hsn || "—"}</td>
       <td style="text-align: right; font-weight: 700; color: var(--primary-teal);">₹ ${formatCurrency(p.rate)}</td>
+      <td style="text-align: center; font-weight: 700;">
+        <span style="color: var(--primary-teal);">${stockVal}</span>
+        ${stockBadge}
+      </td>
       <td class="actions-cell">
         <button class="action-btn edit" onclick="openProductModal('${p.id}')" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
         <button class="action-btn delete" onclick="deleteProductRowDb('${p.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
@@ -1818,17 +1833,35 @@ window.deleteProductRowDb = function(id) {
   }
 };
 
-elements.searchProductsInput.addEventListener("input", (e) => {
-  const query = e.target.value.toLowerCase().trim();
-  if (!query) {
-    renderProductsTable(productsDb);
-    return;
+window.filterProductsByStockStatus = function() {
+  const status = document.getElementById("filter-stock-status").value;
+  const searchQuery = elements.searchProductsInput.value.toLowerCase().trim();
+
+  let filtered = productsDb;
+
+  if (searchQuery) {
+    filtered = filtered.filter(p => 
+      (p.description && p.description.toLowerCase().includes(searchQuery)) || 
+      (p.hsn && p.hsn.toLowerCase().includes(searchQuery))
+    );
   }
-  const filtered = productsDb.filter(p => 
-    p.description.toLowerCase().includes(query) || 
-    p.hsn.toLowerCase().includes(query)
-  );
+
+  if (status === "instock") {
+    filtered = filtered.filter(p => (p.stock !== undefined ? parseInt(p.stock, 10) : 0) > 10);
+  } else if (status === "low") {
+    filtered = filtered.filter(p => {
+      const stock = p.stock !== undefined ? parseInt(p.stock, 10) : 0;
+      return stock > 0 && stock <= 10;
+    });
+  } else if (status === "out") {
+    filtered = filtered.filter(p => (p.stock !== undefined ? parseInt(p.stock, 10) : 0) === 0);
+  }
+
   renderProductsTable(filtered);
+};
+
+elements.searchProductsInput.addEventListener("input", () => {
+  filterProductsByStockStatus();
 });
 
 // --- PARTIES DIALOG MODALS & CARDS ---
@@ -1956,6 +1989,9 @@ function resetReportsView() {
   elements.reportResultsContent.classList.add("hidden");
 }
 
+let salesTrendChartInstance = null;
+let productSalesChartInstance = null;
+
 window.runSalesReport = function() {
   const start = elements.reportStartDate.value;
   const end = elements.reportEndDate.value;
@@ -2011,6 +2047,105 @@ window.runSalesReport = function() {
   elements.reportTotalTaxable.textContent = `₹ ${formatCurrency(totalTaxable)}`;
   elements.reportTotalTax.textContent = `₹ ${formatCurrency(totalTax)}`;
   elements.reportTotalGrand.textContent = `₹ ${formatCurrency(totalGrand)}`;
+
+  // --- RENDER DYNAMIC CHARTS ---
+  try {
+    if (typeof Chart !== 'undefined') {
+      const trendData = {};
+      filtered.forEach(inv => {
+        const dateStr = formatInputDateString(inv.invoiceDate);
+        trendData[dateStr] = (trendData[dateStr] || 0) + (inv.total || 0);
+      });
+
+      const trendLabels = Object.keys(trendData).sort((a, b) => new Date(a) - new Date(b));
+      const trendValues = trendLabels.map(label => trendData[label]);
+
+      const productData = {};
+      filtered.forEach(inv => {
+        const items = (inv.details && inv.details.items) || [];
+        items.forEach(item => {
+          const desc = item.description || "Unknown Product";
+          const revenue = item.amount || 0;
+          productData[desc] = (productData[desc] || 0) + revenue;
+        });
+      });
+
+      const productLabels = Object.keys(productData);
+      const productValues = productLabels.map(label => productData[label]);
+
+      const chartColors = [
+        '#06b6d4', '#0d9488', '#3b82f6', '#8b5cf6', '#ec4899', 
+        '#f59e0b', '#10b981', '#ef4444', '#6366f1', '#14b8a6'
+      ];
+
+      const trendCtx = document.getElementById('salesTrendChart').getContext('2d');
+      if (salesTrendChartInstance) salesTrendChartInstance.destroy();
+      salesTrendChartInstance = new Chart(trendCtx, {
+        type: 'line',
+        data: {
+          labels: trendLabels,
+          datasets: [{
+            label: 'Daily Sales (₹)',
+            data: trendValues,
+            borderColor: '#06b6d4',
+            backgroundColor: 'rgba(6, 182, 212, 0.15)',
+            borderWidth: 3,
+            fill: true,
+            tension: 0.3,
+            pointBackgroundColor: '#06b6d4',
+            pointHoverRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: {
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#94a3b8' }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { color: '#94a3b8' }
+            }
+          }
+        }
+      });
+
+      const productCtx = document.getElementById('productSalesChart').getContext('2d');
+      if (productSalesChartInstance) productSalesChartInstance.destroy();
+      productSalesChartInstance = new Chart(productCtx, {
+        type: 'doughnut',
+        data: {
+          labels: productLabels,
+          datasets: [{
+            data: productValues,
+            backgroundColor: chartColors.slice(0, productLabels.length || 10),
+            borderWidth: 1,
+            borderColor: '#1e293b'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right',
+              labels: {
+                color: '#cbd5e1',
+                font: { size: 10 }
+              }
+            }
+          }
+        }
+      });
+    }
+  } catch (err) {
+    console.error("Charts generation failed:", err);
+  }
 };
 
 window.exportSalesReportCSV = function() {
@@ -2527,4 +2662,68 @@ window.resetBillingDatabaseTo0001 = function() {
     alert("✅ Invoice database cleared successfully. Next invoice sequence starts at #0001!");
     switchTab("billing");
   }
+};
+
+window.exportDataBackupJSON = function() {
+  loadAllDatabases();
+  const backupObj = {
+    invoices: invoicesDb,
+    products: productsDb,
+    parties: partiesDb,
+    settings: globalSettings
+  };
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupObj, null, 2));
+  const downloadAnchor = document.createElement('a');
+  downloadAnchor.setAttribute("href", dataStr);
+  const today = new Date().toISOString().split('T')[0];
+  downloadAnchor.setAttribute("download", `Aaryan_Aqua_Backup_${today}.json`);
+  document.body.appendChild(downloadAnchor);
+  downloadAnchor.click();
+  downloadAnchor.remove();
+};
+
+window.importDataBackupJSON = function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data || typeof data !== 'object') {
+        throw new Error("Invalid backup format.");
+      }
+
+      if (confirm("Are you sure you want to restore this backup? This will overwrite all your current invoices, products, parties, and settings!")) {
+        const importedInvoices = data.invoices || [];
+        const importedProducts = data.products || [];
+        const importedParties = data.parties || [];
+        const importedSettings = data.settings || null;
+
+        localStorage.setItem("invoices", JSON.stringify(importedInvoices));
+        localStorage.setItem("products", JSON.stringify(importedProducts));
+        localStorage.setItem("parties", JSON.stringify(importedParties));
+        if (importedSettings) {
+          localStorage.setItem("settings", JSON.stringify(importedSettings));
+        }
+
+        if (typeof syncDatabaseToServer === 'function') {
+          for (const inv of importedInvoices) {
+            syncDatabaseToServer("invoices", inv);
+          }
+          syncDatabaseToServer("products", importedProducts);
+          syncDatabaseToServer("parties", importedParties);
+          if (importedSettings) {
+            syncDatabaseToServer("settings", importedSettings);
+          }
+        }
+
+        alert("✅ Database successfully restored! Reloading system...");
+        window.location.reload();
+      }
+    } catch (err) {
+      alert("❌ Failed to parse backup file: " + err.message);
+    }
+  };
+  reader.readAsText(file);
 };
