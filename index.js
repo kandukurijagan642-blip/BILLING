@@ -2215,6 +2215,9 @@ async function sendTelegramInvoiceNotification(invoice) {
 
   if (!token || !chat) return;
 
+  const chatIds = chat.split(/[\s,]+/).filter(id => id.trim() !== "");
+  if (chatIds.length === 0) return;
+
   try {
     const textMsg = `🔔 NEW INVOICE GENERATED!\n` +
                     `-------------------------\n` +
@@ -2228,7 +2231,9 @@ async function sendTelegramInvoiceNotification(invoice) {
                     `Aaryan Aqua Needs billing system`;
 
     const text = encodeURIComponent(textMsg);
-    fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${chat}&text=${text}`);
+    chatIds.forEach(id => {
+      fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${id}&text=${text}`);
+    });
   } catch (err) {
     console.error("Failed to dispatch Telegram bot notification", err);
   }
@@ -2359,22 +2364,42 @@ async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false) {
     printWrapper.style.position = "";
     printWrapper.style.left = "";
     
-    const formData = new FormData();
-    formData.append("chat_id", chat);
-    formData.append("document", blob, `Invoice_${invoiceDetails.invoiceNo}.pdf`);
-    formData.append("caption", `🔔 Invoice #${invoiceDetails.invoiceNo} generated for ${invoiceDetails.buyer.name}.\nGrand Total: ₹ ${formatCurrency(invoiceDetails.total || 0)}`);
+    const chatIds = chat.split(/[\s,]+/).filter(id => id.trim() !== "");
+    if (chatIds.length === 0) {
+      if (!silent) alert("No valid Telegram Chat IDs found.");
+      return false;
+    }
 
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
-      method: "POST",
-      body: formData
-    });
+    let successCount = 0;
+    let lastError = "";
 
-    const data = await res.json();
-    if (data.ok) {
-      if (!silent) alert(`Invoice PDF #${invoiceDetails.invoiceNo} successfully shared via Telegram!`);
+    for (const id of chatIds) {
+      const formData = new FormData();
+      formData.append("chat_id", id);
+      formData.append("document", blob, `Invoice_${invoiceDetails.invoiceNo}.pdf`);
+      formData.append("caption", `🔔 Invoice #${invoiceDetails.invoiceNo} generated for ${invoiceDetails.buyer.name}.\nGrand Total: ₹ ${formatCurrency(invoiceDetails.total || 0)}`);
+
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+          method: "POST",
+          body: formData
+        });
+        const data = await res.json();
+        if (data.ok) {
+          successCount++;
+        } else {
+          lastError = data.description;
+        }
+      } catch (err) {
+        lastError = err.message;
+      }
+    }
+
+    if (successCount === chatIds.length) {
+      if (!silent) alert(`Invoice PDF #${invoiceDetails.invoiceNo} successfully shared to all ${chatIds.length} Telegram chats!`);
       return true;
     } else {
-      if (!silent) alert(`Telegram error: ${data.description}`);
+      if (!silent) alert(`Telegram error: Shared to ${successCount}/${chatIds.length} chats. Last Error: ${lastError}`);
       return false;
     }
   } catch (err) {

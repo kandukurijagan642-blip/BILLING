@@ -255,7 +255,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v47_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v48_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -270,7 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v47_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v48_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -2697,17 +2697,34 @@ window.testTelegramConnection = async function() {
   elements.tgStatusIndicator.className = "info-note col-12";
   elements.tgStatusText.textContent = "Dispatching Telegram Bot request...";
 
+  const chatIds = chat.split(/[\s,]+/).filter(id => id.trim() !== "");
+  if (chatIds.length === 0) {
+    elements.tgStatusIndicator.className = "info-note col-12 text-danger";
+    elements.tgStatusText.textContent = "Error: Invalid Chat ID format.";
+    return;
+  }
+
   try {
     const text = encodeURIComponent("🔔 Aaryan Aqua Needs billing system has successfully connected your Telegram bot notification API!");
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${chat}&text=${text}`);
-    const data = await res.json();
+    let successCount = 0;
+    let lastError = "";
+
+    for (const id of chatIds) {
+      const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${id}&text=${text}`);
+      const data = await res.json();
+      if (data.ok) {
+        successCount++;
+      } else {
+        lastError = data.description;
+      }
+    }
     
-    if (data.ok) {
+    if (successCount === chatIds.length) {
       elements.tgStatusIndicator.className = "info-note col-12 text-success";
-      elements.tgStatusText.textContent = "Test Message Sent! Check your Telegram Chat.";
+      elements.tgStatusText.textContent = `Test Message Sent to all ${chatIds.length} Chat IDs! Check Telegram.`;
     } else {
       elements.tgStatusIndicator.className = "info-note col-12 text-danger";
-      elements.tgStatusText.textContent = `Error: ${data.description}`;
+      elements.tgStatusText.textContent = `Failed for some Chat IDs. Last Error: ${lastError}`;
     }
   } catch (err) {
     elements.tgStatusIndicator.className = "info-note col-12 text-danger";
@@ -2771,6 +2788,9 @@ async function sendTelegramInvoiceNotification(invoice) {
 
   if (!token || !chat) return;
 
+  const chatIds = chat.split(/[\s,]+/).filter(id => id.trim() !== "");
+  if (chatIds.length === 0) return;
+
   try {
     const textMsg = `🔔 NEW INVOICE GENERATED!\n` +
                     `-------------------------\n` +
@@ -2784,7 +2804,9 @@ async function sendTelegramInvoiceNotification(invoice) {
                     `Aaryan Aqua Needs billing system`;
 
     const text = encodeURIComponent(textMsg);
-    fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${chat}&text=${text}`);
+    chatIds.forEach(id => {
+      fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${id}&text=${text}`);
+    });
   } catch (err) {
     console.error("Failed to dispatch Telegram bot notification", err);
   }
@@ -2915,22 +2937,42 @@ async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false) {
     printWrapper.style.position = "";
     printWrapper.style.left = "";
     
-    const formData = new FormData();
-    formData.append("chat_id", chat);
-    formData.append("document", blob, `Invoice_${invoiceDetails.invoiceNo}.pdf`);
-    formData.append("caption", `🔔 Invoice #${invoiceDetails.invoiceNo} generated for ${invoiceDetails.buyer.name}.\nGrand Total: ₹ ${formatCurrency(invoiceDetails.total || 0)}`);
+    const chatIds = chat.split(/[\s,]+/).filter(id => id.trim() !== "");
+    if (chatIds.length === 0) {
+      if (!silent) alert("No valid Telegram Chat IDs found.");
+      return false;
+    }
 
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
-      method: "POST",
-      body: formData
-    });
+    let successCount = 0;
+    let lastError = "";
 
-    const data = await res.json();
-    if (data.ok) {
-      if (!silent) alert(`Invoice PDF #${invoiceDetails.invoiceNo} successfully shared via Telegram!`);
+    for (const id of chatIds) {
+      const formData = new FormData();
+      formData.append("chat_id", id);
+      formData.append("document", blob, `Invoice_${invoiceDetails.invoiceNo}.pdf`);
+      formData.append("caption", `🔔 Invoice #${invoiceDetails.invoiceNo} generated for ${invoiceDetails.buyer.name}.\nGrand Total: ₹ ${formatCurrency(invoiceDetails.total || 0)}`);
+
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+          method: "POST",
+          body: formData
+        });
+        const data = await res.json();
+        if (data.ok) {
+          successCount++;
+        } else {
+          lastError = data.description;
+        }
+      } catch (err) {
+        lastError = err.message;
+      }
+    }
+
+    if (successCount === chatIds.length) {
+      if (!silent) alert(`Invoice PDF #${invoiceDetails.invoiceNo} successfully shared to all ${chatIds.length} Telegram chats!`);
       return true;
     } else {
-      if (!silent) alert(`Telegram error: ${data.description}`);
+      if (!silent) alert(`Telegram error: Shared to ${successCount}/${chatIds.length} chats. Last Error: ${lastError}`);
       return false;
     }
   } catch (err) {
