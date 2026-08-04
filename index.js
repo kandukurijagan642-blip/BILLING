@@ -1470,6 +1470,17 @@ window.shareInvoicePdfNative = function(details, btnEl = null) {
   element.style.display = "block";
   document.body.classList.remove("printing-thermal");
 
+  const tallyContainer = element.querySelector('.tally-invoice-container');
+  const origTallyHeight = tallyContainer ? tallyContainer.style.height : "";
+  const origTallyMaxHeight = tallyContainer ? tallyContainer.style.maxHeight : "";
+  const origTallyPadding = tallyContainer ? tallyContainer.style.padding : "";
+
+  if (tallyContainer) {
+    tallyContainer.style.height = "294mm";
+    tallyContainer.style.maxHeight = "294mm";
+    tallyContainer.style.padding = "6mm 8mm";
+  }
+
   const customerClean = (details.buyer.name || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
   const filename = `Invoice_${details.invoiceNo}_${customerClean}.pdf`;
 
@@ -1483,6 +1494,11 @@ window.shareInvoicePdfNative = function(details, btnEl = null) {
 
   html2pdf().set(opt).from(element).outputPdf('blob').then(pdfBlob => {
     element.style.display = "none";
+    if (tallyContainer) {
+      tallyContainer.style.height = origTallyHeight;
+      tallyContainer.style.maxHeight = origTallyMaxHeight;
+      tallyContainer.style.padding = origTallyPadding;
+    }
     if (btnEl && btnEl.tagName) {
       btnEl.innerHTML = origHtml;
       btnEl.disabled = false;
@@ -1525,6 +1541,11 @@ window.shareInvoicePdfNative = function(details, btnEl = null) {
   }).catch(err => {
     console.error("PDF share generation error:", err);
     element.style.display = "none";
+    if (tallyContainer) {
+      tallyContainer.style.height = origTallyHeight;
+      tallyContainer.style.maxHeight = origTallyMaxHeight;
+      tallyContainer.style.padding = origTallyPadding;
+    }
     if (btnEl && btnEl.tagName) {
       btnEl.innerHTML = origHtml;
       btnEl.disabled = false;
@@ -2381,8 +2402,21 @@ async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false) {
 
   try {
     const element = printWrapper.querySelector('.tally-invoice-container') || printWrapper;
+    
+    const origTallyHeight = element.style.height;
+    const origTallyMaxHeight = element.style.maxHeight;
+    const origTallyPadding = element.style.padding;
+
+    element.style.height = "294mm";
+    element.style.maxHeight = "294mm";
+    element.style.padding = "6mm 8mm";
+
     const blob = await html2pdf().from(element).set(opt).toPdf().output('blob');
     
+    element.style.height = origTallyHeight;
+    element.style.maxHeight = origTallyMaxHeight;
+    element.style.padding = origTallyPadding;
+
     printWrapper.style.display = "";
     printWrapper.style.position = "";
     printWrapper.style.left = "";
@@ -2426,6 +2460,11 @@ async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false) {
       return false;
     }
   } catch (err) {
+    const element = printWrapper.querySelector('.tally-invoice-container') || printWrapper;
+    element.style.height = origTallyHeight;
+    element.style.maxHeight = origTallyMaxHeight;
+    element.style.padding = origTallyPadding;
+
     printWrapper.style.display = "";
     printWrapper.style.position = "";
     printWrapper.style.left = "";
