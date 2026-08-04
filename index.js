@@ -1485,14 +1485,14 @@ window.shareInvoicePdfNative = function(details, btnEl = null) {
   const filename = `Invoice_${details.invoiceNo}_${customerClean}.pdf`;
 
   const opt = {
-    margin: [3, 3, 3, 3],
+    margin: [0, 0, 0, 0],
     filename: filename,
     image: { type: 'jpeg', quality: 0.95 },
     html2canvas: { scale: 1.35, useCORS: true, logging: false },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
 
-  html2pdf().set(opt).from(element).outputPdf('blob').then(pdfBlob => {
+  html2pdf().set(opt).from(tallyContainer || element).outputPdf('blob').then(pdfBlob => {
     element.style.display = "none";
     if (tallyContainer) {
       tallyContainer.style.height = origTallyHeight;

@@ -255,7 +255,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v50_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v51_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -270,7 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v50_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v51_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -1946,14 +1946,14 @@ window.downloadInvoicePdf = function(invoiceData, btnEl = null) {
   const filename = `Invoice_${details.invoiceNo}_${customerClean}.pdf`;
 
   const opt = {
-    margin: [3, 3, 3, 3],
+    margin: [0, 0, 0, 0],
     filename: filename,
     image: { type: 'jpeg', quality: 0.95 },
     html2canvas: { scale: 1.35, useCORS: true, logging: false },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
 
-  html2pdf().set(opt).from(element).save().then(() => {
+  html2pdf().set(opt).from(tallyContainer || element).save().then(() => {
     element.style.display = "none";
     if (tallyContainer) {
       tallyContainer.style.height = origTallyHeight;
