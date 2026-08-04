@@ -255,7 +255,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v48_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v49_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -270,7 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v48_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v49_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -367,6 +367,17 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("lock-screen-overlay").classList.add("hidden");
     const wrapper = document.querySelector('.dashboard-wrapper');
     if (wrapper) wrapper.classList.remove("blur-dashboard-wrapper");
+  }
+
+  // Autofill remembered credentials if enabled
+  const remembered = localStorage.getItem("remember_me") === "true";
+  if (remembered) {
+    const userField = document.getElementById("login-username");
+    const pwdField = document.getElementById("login-password");
+    const rememberBox = document.getElementById("login-remember-me");
+    if (userField) userField.value = localStorage.getItem("saved_username") || "";
+    if (pwdField) pwdField.value = localStorage.getItem("saved_password") || "";
+    if (rememberBox) rememberBox.checked = true;
   }
 
   // Reset lock timer on activity
@@ -2876,6 +2887,18 @@ window.submitUnlockLogin = function(e) {
       isLocked = false;
       localStorage.setItem("app_locked", "false");
       localStorage.setItem("last_active_time", Date.now());
+      
+      const rememberBox = document.getElementById("login-remember-me");
+      if (rememberBox && rememberBox.checked) {
+        localStorage.setItem("remember_me", "true");
+        localStorage.setItem("saved_username", userText);
+        localStorage.setItem("saved_password", pwdText);
+      } else {
+        localStorage.setItem("remember_me", "false");
+        localStorage.removeItem("saved_username");
+        localStorage.removeItem("saved_password");
+      }
+
       document.getElementById("lock-screen-overlay").classList.add("hidden");
       const wrapper = document.querySelector('.dashboard-wrapper');
       if (wrapper) wrapper.classList.remove("blur-dashboard-wrapper");

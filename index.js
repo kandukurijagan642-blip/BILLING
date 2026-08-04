@@ -277,6 +277,17 @@ document.addEventListener("DOMContentLoaded", () => {
     if (wrapper) wrapper.classList.remove("blur-dashboard-wrapper");
   }
 
+  // Autofill remembered credentials if enabled
+  const remembered = localStorage.getItem("remember_me") === "true";
+  if (remembered) {
+    const userField = document.getElementById("login-username");
+    const pwdField = document.getElementById("login-password");
+    const rememberBox = document.getElementById("login-remember-me");
+    if (userField) userField.value = localStorage.getItem("saved_username") || "";
+    if (pwdField) pwdField.value = localStorage.getItem("saved_password") || "";
+    if (rememberBox) rememberBox.checked = true;
+  }
+
   // Reset lock timer on activity
   resetAutolockTimer();
   ['mousemove', 'mousedown', 'keypress', 'touchstart', 'scroll'].forEach(evt => {
@@ -2303,6 +2314,18 @@ window.submitUnlockLogin = function(e) {
       isLocked = false;
       localStorage.setItem("app_locked", "false");
       localStorage.setItem("last_active_time", Date.now());
+
+      const rememberBox = document.getElementById("login-remember-me");
+      if (rememberBox && rememberBox.checked) {
+        localStorage.setItem("remember_me", "true");
+        localStorage.setItem("saved_username", userText);
+        localStorage.setItem("saved_password", pwdText);
+      } else {
+        localStorage.setItem("remember_me", "false");
+        localStorage.removeItem("saved_username");
+        localStorage.removeItem("saved_password");
+      }
+
       document.getElementById("lock-screen-overlay").classList.add("hidden");
       const wrapper = document.querySelector('.dashboard-wrapper');
       if (wrapper) wrapper.classList.remove("blur-dashboard-wrapper");
