@@ -185,6 +185,20 @@ app.post('/api/invoices/delete', async (req, res) => {
   }
 });
 
+app.post('/api/invoices/reset', async (req, res) => {
+  try {
+    if (isMongoConnected) {
+      await InvoiceModel.deleteMany({});
+      res.json({ success: true });
+    } else {
+      writeLocalJsonFile('invoices.json', []);
+      res.json({ success: true });
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Reset invoices failed', details: err.message });
+  }
+});
+
 // 3. Products REST API (Bulk Save/Sync)
 app.post('/api/products', async (req, res) => {
   const productsList = req.body; // Expects array of products

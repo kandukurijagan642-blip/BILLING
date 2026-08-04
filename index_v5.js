@@ -255,7 +255,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v57_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v58_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -270,7 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v57_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v58_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -335,11 +335,29 @@ document.addEventListener("DOMContentLoaded", () => {
           localInvoices = [];
         }
         
+        let deletedIds = [];
+        try {
+          deletedIds = JSON.parse(localStorage.getItem("deleted_invoice_ids")) || [];
+        } catch (e) {
+          deletedIds = [];
+        }
+        const deletedSet = new Set(deletedIds);
+
+        // Filter out any locally deleted invoices from localInvoices immediately
+        if (deletedSet.size > 0) {
+          const cleanedLocal = localInvoices.filter(inv => !deletedSet.has(inv.id));
+          if (cleanedLocal.length !== localInvoices.length) {
+            localInvoices = cleanedLocal;
+            localStorage.setItem("invoices", JSON.stringify(localInvoices));
+            changed = true;
+          }
+        }
+
         const localIds = new Set(localInvoices.map(inv => inv.id));
         const serverIds = new Set(serverInvoices.map(inv => inv.id));
         
-        // Find local invoices not on server (need to push to cloud)
-        const toPush = localInvoices.filter(inv => !serverIds.has(inv.id));
+        // Find local invoices not on server (need to push to cloud) and NOT deleted
+        const toPush = localInvoices.filter(inv => !serverIds.has(inv.id) && !deletedSet.has(inv.id));
         if (toPush.length > 0) {
           console.log(`Pushing ${toPush.length} offline invoices to server...`);
           toPush.forEach(inv => {
@@ -347,15 +365,16 @@ document.addEventListener("DOMContentLoaded", () => {
           });
         }
         
-        // Find server invoices not on local (need to pull to local storage)
-        const toPull = serverInvoices.filter(inv => !localIds.has(inv.id));
+        // Find server invoices not on local (need to pull to local storage) and NOT deleted
+        const toPull = serverInvoices.filter(inv => !localIds.has(inv.id) && !deletedSet.has(inv.id));
         if (toPull.length > 0) {
           const mergedInvoices = [...localInvoices, ...toPull];
           mergedInvoices.sort((a, b) => a.invoiceNo.localeCompare(b.invoiceNo));
           localStorage.setItem("invoices", JSON.stringify(mergedInvoices));
           changed = true;
         } else if (serverInvoices.length > 0 && localInvoices.length === 0) {
-          localStorage.setItem("invoices", JSON.stringify(serverInvoices));
+          const validServer = serverInvoices.filter(inv => !deletedSet.has(inv.id));
+          localStorage.setItem("invoices", JSON.stringify(validServer));
           changed = true;
         }
         
@@ -2291,6 +2310,19 @@ window.deleteSavedInvoice = function(id) {
     if (inv) {
       reconcileProductInventoryStock(inv.details, null);
     }
+    
+    // Track deleted IDs locally to prevent sync recreation
+    let deletedIds = [];
+    try {
+      deletedIds = JSON.parse(localStorage.getItem("deleted_invoice_ids")) || [];
+    } catch (e) {
+      deletedIds = [];
+    }
+    if (!deletedIds.includes(id)) {
+      deletedIds.push(id);
+      localStorage.setItem("deleted_invoice_ids", JSON.stringify(deletedIds));
+    }
+
     invoicesDb = invoicesDb.filter(inv => inv.id !== id);
     localStorage.setItem("invoices", JSON.stringify(invoicesDb));
     fetch("/api/invoices/delete", {
@@ -3277,6 +3309,11 @@ window.resetBillingDatabaseTo0001 = function() {
   if (confirm("⚠️ WARNING: This will permanently delete all saved invoices from history and reset your sequence to #0001!\n\nAre you sure you want to proceed?")) {
     invoicesDb = [];
     localStorage.setItem("invoices", JSON.stringify([]));
+    localStorage.removeItem("deleted_invoice_ids");
+    fetch("/api/invoices/reset", {
+      method: "POST"
+    }).catch(err => console.warn("Failed to reset server database:", err));
+    
     autoSuggestInvoiceNo();
     resetBillingForm();
     alert("✅ Invoice database cleared successfully. Next invoice sequence starts at #0001!");

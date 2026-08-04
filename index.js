@@ -1711,8 +1711,30 @@ window.printSavedInvoice = function(id) {
 
 window.deleteSavedInvoice = function(id) {
   if (confirm("Delete this invoice record from history?")) {
+    const inv = invoicesDb.find(i => i.id === id);
+    if (inv && typeof reconcileProductInventoryStock === 'function') {
+      reconcileProductInventoryStock(inv.details, null);
+    }
+    
+    // Track deleted IDs locally to prevent sync recreation
+    let deletedIds = [];
+    try {
+      deletedIds = JSON.parse(localStorage.getItem("deleted_invoice_ids")) || [];
+    } catch (e) {
+      deletedIds = [];
+    }
+    if (!deletedIds.includes(id)) {
+      deletedIds.push(id);
+      localStorage.setItem("deleted_invoice_ids", JSON.stringify(deletedIds));
+    }
+
     invoicesDb = invoicesDb.filter(inv => inv.id !== id);
     localStorage.setItem("invoices", JSON.stringify(invoicesDb));
+    fetch("/api/invoices/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id })
+    }).catch(err => console.warn("Failed to delete invoice from server:", err));
     
     // Automatically recalculate next invoice number sequence
     autoSuggestInvoiceNo();
@@ -2669,6 +2691,11 @@ window.resetBillingDatabaseTo0001 = function() {
   if (confirm("⚠️ WARNING: This will permanently delete all saved invoices from history and reset your sequence to #0001!\n\nAre you sure you want to proceed?")) {
     invoicesDb = [];
     localStorage.setItem("invoices", JSON.stringify([]));
+    localStorage.removeItem("deleted_invoice_ids");
+    fetch("/api/invoices/reset", {
+      method: "POST"
+    }).catch(err => console.warn("Failed to reset server database:", err));
+    
     autoSuggestInvoiceNo();
     resetBillingForm();
     alert("✅ Invoice database cleared successfully. Next invoice sequence starts at #0001!");
