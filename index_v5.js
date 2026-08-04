@@ -255,7 +255,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v59_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v60_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -270,7 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v59_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v60_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -307,107 +307,122 @@ document.addEventListener("DOMContentLoaded", () => {
   bindBillingFormInputs();
   setupKeyboardShortcuts();
 
-  // Background Bidirectional Sync Pull & Push
-  fetch("/api/sync")
-    .then(res => res.json())
-    .then(data => {
-      if (data) {
-        let changed = false;
-        
-        // 1. Sync Products
-        if (data.products && data.products.length > 0) {
-          localStorage.setItem("products", JSON.stringify(data.products));
-          changed = true;
-        }
-        
-        // 2. Sync Parties
-        if (data.parties && data.parties.length > 0) {
-          localStorage.setItem("parties", JSON.stringify(data.parties));
-          changed = true;
-        }
-        
-        // 3. Bidirectional Sync for Invoices
-        const serverInvoices = data.invoices || [];
-        let localInvoices = [];
-        try {
-          localInvoices = JSON.parse(localStorage.getItem("invoices")) || [];
-        } catch (e) {
-          localInvoices = [];
-        }
-        
-        let deletedIds = [];
-        try {
-          deletedIds = JSON.parse(localStorage.getItem("deleted_invoice_ids")) || [];
-        } catch (e) {
-          deletedIds = [];
-        }
-        const deletedSet = new Set(deletedIds);
-
-        // Filter out any locally deleted invoices from localInvoices immediately
-        if (deletedSet.size > 0) {
-          const cleanedLocal = localInvoices.filter(inv => !deletedSet.has(inv.id));
-          if (cleanedLocal.length !== localInvoices.length) {
-            localInvoices = cleanedLocal;
-            localStorage.setItem("invoices", JSON.stringify(localInvoices));
+  // Background Bidirectional Sync Function
+  window.triggerDatabaseSync = function() {
+    fetch("/api/sync")
+      .then(res => res.json())
+      .then(data => {
+        if (data) {
+          let changed = false;
+          
+          // 1. Sync Products
+          if (data.products && data.products.length > 0) {
+            localStorage.setItem("products", JSON.stringify(data.products));
             changed = true;
           }
-        }
-
-        const localIds = new Set(localInvoices.map(inv => inv.id));
-        const serverIds = new Set(serverInvoices.map(inv => inv.id));
-        
-        // Find local invoices not on server (need to push to cloud) and NOT deleted
-        const toPush = localInvoices.filter(inv => !serverIds.has(inv.id) && !deletedSet.has(inv.id));
-        if (toPush.length > 0) {
-          console.log(`Pushing ${toPush.length} offline invoices to server...`);
-          toPush.forEach(inv => {
-            syncDatabaseToServer("invoices", inv);
-          });
-        }
-        
-        // Find server invoices not on local (need to pull to local storage) and NOT deleted
-        const toPull = serverInvoices.filter(inv => !localIds.has(inv.id) && !deletedSet.has(inv.id));
-        if (toPull.length > 0) {
-          const mergedInvoices = [...localInvoices, ...toPull];
-          mergedInvoices.sort((a, b) => a.invoiceNo.localeCompare(b.invoiceNo));
-          localStorage.setItem("invoices", JSON.stringify(mergedInvoices));
-          changed = true;
-        } else if (serverInvoices.length > 0 && localInvoices.length === 0) {
-          const validServer = serverInvoices.filter(inv => !deletedSet.has(inv.id));
-          localStorage.setItem("invoices", JSON.stringify(validServer));
-          changed = true;
-        }
-        
-        // 4. Sync Settings
-        if (data.globalSettings) {
-          localStorage.setItem("settings", JSON.stringify(data.globalSettings));
-          changed = true;
-        }
-        
-        if (changed) {
-          console.log("Database sync completed successfully! Reloading views...");
-          loadAllDatabases();
-          updateDashboardOverview();
-          calculateSummaryAndTable();
-          autoSuggestInvoiceNo();
           
-          // Re-render views if they are open/active
-          const prodView = document.getElementById("products-view");
-          if (prodView && !prodView.classList.contains("hidden")) {
-            loadProductsDatabaseTable();
+          // 2. Sync Parties
+          if (data.parties && data.parties.length > 0) {
+            localStorage.setItem("parties", JSON.stringify(data.parties));
+            changed = true;
           }
-          const partiesView = document.getElementById("parties-view");
-          if (partiesView && !partiesView.classList.contains("hidden")) {
-            loadPartiesDatabaseLists();
+          
+          // 3. Bidirectional Sync for Invoices
+          const serverInvoices = data.invoices || [];
+          let localInvoices = [];
+          try {
+            localInvoices = JSON.parse(localStorage.getItem("invoices")) || [];
+          } catch (e) {
+            localInvoices = [];
           }
-          const historyView = document.getElementById("history-view");
-          if (historyView && !historyView.classList.contains("hidden")) {
-            loadInvoicesHistoryTable();
+          
+          let deletedIds = [];
+          try {
+            deletedIds = JSON.parse(localStorage.getItem("deleted_invoice_ids")) || [];
+          } catch (e) {
+            deletedIds = [];
+          }
+          const deletedSet = new Set(deletedIds);
+
+          // Filter out any locally deleted invoices from localInvoices immediately
+          if (deletedSet.size > 0) {
+            const cleanedLocal = localInvoices.filter(inv => !deletedSet.has(inv.id));
+            if (cleanedLocal.length !== localInvoices.length) {
+              localInvoices = cleanedLocal;
+              localStorage.setItem("invoices", JSON.stringify(localInvoices));
+              changed = true;
+            }
+          }
+
+          const localIds = new Set(localInvoices.map(inv => inv.id));
+          const serverIds = new Set(serverInvoices.map(inv => inv.id));
+          
+          // Find local invoices not on server (need to push to cloud) and NOT deleted
+          const toPush = localInvoices.filter(inv => !serverIds.has(inv.id) && !deletedSet.has(inv.id));
+          if (toPush.length > 0) {
+            console.log(`Pushing ${toPush.length} offline invoices to server...`);
+            toPush.forEach(inv => {
+              syncDatabaseToServer("invoices", inv);
+            });
+          }
+          
+          // Find server invoices not on local (need to pull to local storage) and NOT deleted
+          const toPull = serverInvoices.filter(inv => !localIds.has(inv.id) && !deletedSet.has(inv.id));
+          if (toPull.length > 0) {
+            const mergedInvoices = [...localInvoices, ...toPull];
+            mergedInvoices.sort((a, b) => a.invoiceNo.localeCompare(b.invoiceNo));
+            localStorage.setItem("invoices", JSON.stringify(mergedInvoices));
+            changed = true;
+          } else if (serverInvoices.length > 0 && localInvoices.length === 0) {
+            const validServer = serverInvoices.filter(inv => !deletedSet.has(inv.id));
+            localStorage.setItem("invoices", JSON.stringify(validServer));
+            changed = true;
+          }
+          
+          // 4. Sync Settings
+          if (data.globalSettings) {
+            localStorage.setItem("settings", JSON.stringify(data.globalSettings));
+            changed = true;
+          }
+          
+          if (changed) {
+            console.log("Database sync completed successfully! Reloading views...");
+            loadAllDatabases();
+            updateDashboardOverview();
+            calculateSummaryAndTable();
+            autoSuggestInvoiceNo();
+            
+            // Re-render views if they are open/active
+            const prodView = document.getElementById("products-view");
+            if (prodView && !prodView.classList.contains("hidden")) {
+              loadProductsDatabaseTable();
+            }
+            const partiesView = document.getElementById("parties-view");
+            if (partiesView && !partiesView.classList.contains("hidden")) {
+              loadPartiesDatabaseLists();
+            }
+            const historyView = document.getElementById("history-view");
+            if (historyView && !historyView.classList.contains("hidden")) {
+              loadInvoicesHistoryTable();
+            }
           }
         }
-      }
-    })
-    .catch(err => console.warn("Background sync connection failed (offline mode):", err));
+      })
+      .catch(err => console.warn("Background sync connection failed (offline mode):", err));
+  };
+
+  // Run initial sync
+  window.triggerDatabaseSync();
+
+  // Run periodic sync every 30 seconds
+  setInterval(window.triggerDatabaseSync, 30000);
+
+  // Sync automatically when tab becomes visible (focused/returned to)
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      window.triggerDatabaseSync();
+    }
+  });
 
   // Session Persistence calculation on page load
   const lastActiveTime = parseInt(localStorage.getItem("last_active_time") || "0", 10);
