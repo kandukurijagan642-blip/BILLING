@@ -82,10 +82,15 @@ const SettingSchema = new mongoose.Schema({
   value: Object
 }, { timestamps: true });
 
+const DeletedInvoiceSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true }
+}, { timestamps: true });
+
 const InvoiceModel = mongoose.model('Invoice', InvoiceSchema);
 const ProductModel = mongoose.model('Product', ProductSchema);
 const PartyModel = mongoose.model('Party', PartySchema);
 const SettingModel = mongoose.model('Setting', SettingSchema);
+const DeletedInvoiceModel = mongoose.model('DeletedInvoice', DeletedInvoiceSchema);
 
 // --- CONNECT TO MONGODB (IF URI PROVIDED) ---
 const mongoUri = process.env.MONGODB_URI;
@@ -114,19 +119,23 @@ app.get('/api/sync', async (req, res) => {
       const products = await ProductModel.find().lean();
       const parties = await PartyModel.find().lean();
       const dbSettings = await SettingModel.findOne({ key: 'globalSettings' }).lean();
+      const deletedDocs = await DeletedInvoiceModel.find().lean();
+      const deletedInvoiceIds = deletedDocs.map(d => d.id);
       
       res.json({
         invoices: invoices || [],
         products: products || [],
         parties: parties || [],
-        globalSettings: dbSettings ? dbSettings.value : null
+        globalSettings: dbSettings ? dbSettings.value : null,
+        deletedInvoiceIds: deletedInvoiceIds || []
       });
     } else {
       res.json({
         invoices: readLocalJsonFile('invoices.json', []),
         products: readLocalJsonFile('products.json', []),
         parties: readLocalJsonFile('parties.json', []),
-        globalSettings: readLocalJsonFile('settings.json', null)
+        globalSettings: readLocalJsonFile('settings.json', null),
+        deletedInvoiceIds: readLocalJsonFile('deleted_invoices.json', [])
       });
     }
   } catch (err) {
@@ -173,11 +182,18 @@ app.post('/api/invoices/delete', async (req, res) => {
   try {
     if (isMongoConnected) {
       await InvoiceModel.deleteOne({ id });
+      await DeletedInvoiceModel.create({ id }).catch(() => {});
       res.json({ success: true });
     } else {
       let invoices = readLocalJsonFile('invoices.json', []);
       invoices = invoices.filter(i => i.id !== id);
       writeLocalJsonFile('invoices.json', invoices);
+      
+      let deleted = readLocalJsonFile('deleted_invoices.json', []);
+      if (!deleted.includes(id)) {
+        deleted.push(id);
+        writeLocalJsonFile('deleted_invoices.json', deleted);
+      }
       res.json({ success: true });
     }
   } catch (err) {
@@ -189,9 +205,11 @@ app.post('/api/invoices/reset', async (req, res) => {
   try {
     if (isMongoConnected) {
       await InvoiceModel.deleteMany({});
+      await DeletedInvoiceModel.deleteMany({});
       res.json({ success: true });
     } else {
       writeLocalJsonFile('invoices.json', []);
+      writeLocalJsonFile('deleted_invoices.json', []);
       res.json({ success: true });
     }
   } catch (err) {

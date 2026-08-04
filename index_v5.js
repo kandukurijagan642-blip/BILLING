@@ -255,7 +255,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v61_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v62_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -270,7 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v61_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v62_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -340,13 +340,29 @@ document.addEventListener("DOMContentLoaded", () => {
             localInvoices = [];
           }
           
+          // Merge deleted invoice IDs from server
+          const serverDeletedIds = data.deletedInvoiceIds || [];
           let deletedIds = [];
           try {
             deletedIds = JSON.parse(localStorage.getItem("deleted_invoice_ids")) || [];
           } catch (e) {
             deletedIds = [];
           }
+          
           const deletedSet = new Set(deletedIds);
+          let deletedChanged = false;
+          
+          serverDeletedIds.forEach(id => {
+            if (!deletedSet.has(id)) {
+              deletedIds.push(id);
+              deletedSet.add(id);
+              deletedChanged = true;
+            }
+          });
+          
+          if (deletedChanged) {
+            localStorage.setItem("deleted_invoice_ids", JSON.stringify(deletedIds));
+          }
 
           // Filter out any locally deleted invoices from localInvoices immediately
           if (deletedSet.size > 0) {
