@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqua-billing-v58';
+const CACHE_NAME = 'aqua-billing-v59';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -38,24 +38,37 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// Fetch Event - Cache First Strategy for instant loading
+// Fetch Event - Network First Strategy for HTML, CSS, and JS to ensure instant updates when online
 self.addEventListener('fetch', event => {
+  // Ignore non-GET requests (e.g. POST for API endpoints)
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
+  // Bypass caching for APIs
+  if (event.request.url.includes('/api/')) {
+    return;
+  }
+
   event.respondWith(
-    caches.match(event.request, { ignoreSearch: true }).then(cachedResponse => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).then(networkResponse => {
-        if (event.request.method === 'GET' && networkResponse.status === 200) {
+    fetch(event.request)
+      .then(networkResponse => {
+        if (networkResponse.status === 200) {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then(cache => {
             cache.put(event.request, responseToCache);
           });
         }
         return networkResponse;
-      });
-    }).catch(() => {
-      return caches.match('./index.html', { ignoreSearch: true });
-    })
+      })
+      .catch(() => {
+        // Offline fallback
+        return caches.match(event.request, { ignoreSearch: true }).then(cachedResponse => {
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          return caches.match('./index.html', { ignoreSearch: true });
+        });
+      })
   );
 });
