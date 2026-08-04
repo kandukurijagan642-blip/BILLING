@@ -255,7 +255,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v51_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v52_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -270,7 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v51_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v52_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -1935,11 +1935,13 @@ window.downloadInvoicePdf = function(invoiceData, btnEl = null) {
   const origTallyHeight = tallyContainer ? tallyContainer.style.height : "";
   const origTallyMaxHeight = tallyContainer ? tallyContainer.style.maxHeight : "";
   const origTallyPadding = tallyContainer ? tallyContainer.style.padding : "";
+  const origTallyOverflow = tallyContainer ? tallyContainer.style.overflow : "";
 
   if (tallyContainer) {
     tallyContainer.style.height = "294mm";
     tallyContainer.style.maxHeight = "294mm";
     tallyContainer.style.padding = "6mm 8mm";
+    tallyContainer.style.overflow = "hidden";
   }
 
   const customerClean = (details.buyer.name || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
@@ -1959,6 +1961,7 @@ window.downloadInvoicePdf = function(invoiceData, btnEl = null) {
       tallyContainer.style.height = origTallyHeight;
       tallyContainer.style.maxHeight = origTallyMaxHeight;
       tallyContainer.style.padding = origTallyPadding;
+      tallyContainer.style.overflow = origTallyOverflow;
     }
     if (btnEl && btnEl.tagName) {
       btnEl.innerHTML = origHtml;
@@ -1971,6 +1974,7 @@ window.downloadInvoicePdf = function(invoiceData, btnEl = null) {
       tallyContainer.style.height = origTallyHeight;
       tallyContainer.style.maxHeight = origTallyMaxHeight;
       tallyContainer.style.padding = origTallyPadding;
+      tallyContainer.style.overflow = origTallyOverflow;
     }
     if (btnEl && btnEl.tagName) {
       btnEl.innerHTML = origHtml;
@@ -2979,16 +2983,19 @@ async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false) {
     const origTallyHeight = element.style.height;
     const origTallyMaxHeight = element.style.maxHeight;
     const origTallyPadding = element.style.padding;
+    const origTallyOverflow = element.style.overflow;
 
     element.style.height = "294mm";
     element.style.maxHeight = "294mm";
     element.style.padding = "6mm 8mm";
+    element.style.overflow = "hidden";
 
     const blob = await html2pdf().from(element).set(opt).toPdf().output('blob');
     
     element.style.height = origTallyHeight;
     element.style.maxHeight = origTallyMaxHeight;
     element.style.padding = origTallyPadding;
+    element.style.overflow = origTallyOverflow;
 
     printWrapper.style.display = "";
     printWrapper.style.position = "";
@@ -3037,6 +3044,7 @@ async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false) {
     element.style.height = origTallyHeight;
     element.style.maxHeight = origTallyMaxHeight;
     element.style.padding = origTallyPadding;
+    element.style.overflow = origTallyOverflow;
 
     printWrapper.style.display = "";
     printWrapper.style.position = "";
