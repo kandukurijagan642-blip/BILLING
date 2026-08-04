@@ -1494,7 +1494,13 @@ window.shareInvoicePdfNative = function(details, btnEl = null) {
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
 
-  html2pdf().set(opt).from(tallyContainer || element).outputPdf('blob').then(pdfBlob => {
+  html2pdf().set(opt).from(tallyContainer || element).toPdf().get('pdf').then(pdf => {
+    const totalPages = pdf.internal.getNumberOfPages();
+    for (let i = totalPages; i > 1; i--) {
+      pdf.deletePage(i);
+    }
+    const pdfBlob = pdf.output('blob');
+
     element.style.display = "none";
     if (tallyContainer) {
       tallyContainer.style.height = origTallyHeight;
@@ -2417,7 +2423,13 @@ async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false) {
     element.style.padding = "6mm 8mm";
     element.style.overflow = "hidden";
 
-    const blob = await html2pdf().from(element).set(opt).toPdf().output('blob');
+    const blob = await html2pdf().from(element).set(opt).toPdf().get('pdf').then(pdf => {
+      const totalPages = pdf.internal.getNumberOfPages();
+      for (let i = totalPages; i > 1; i--) {
+        pdf.deletePage(i);
+      }
+      return pdf.output('blob');
+    });
     
     element.style.height = origTallyHeight;
     element.style.maxHeight = origTallyMaxHeight;

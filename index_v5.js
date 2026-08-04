@@ -255,7 +255,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v52_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v53_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -270,7 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v52_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v53_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -1955,7 +1955,13 @@ window.downloadInvoicePdf = function(invoiceData, btnEl = null) {
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
 
-  html2pdf().set(opt).from(tallyContainer || element).save().then(() => {
+  html2pdf().set(opt).from(tallyContainer || element).toPdf().get('pdf').then(pdf => {
+    const totalPages = pdf.internal.getNumberOfPages();
+    for (let i = totalPages; i > 1; i--) {
+      pdf.deletePage(i);
+    }
+    pdf.save(filename);
+    
     element.style.display = "none";
     if (tallyContainer) {
       tallyContainer.style.height = origTallyHeight;
@@ -2990,7 +2996,13 @@ async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false) {
     element.style.padding = "6mm 8mm";
     element.style.overflow = "hidden";
 
-    const blob = await html2pdf().from(element).set(opt).toPdf().output('blob');
+    const blob = await html2pdf().from(element).set(opt).toPdf().get('pdf').then(pdf => {
+      const totalPages = pdf.internal.getNumberOfPages();
+      for (let i = totalPages; i > 1; i--) {
+        pdf.deletePage(i);
+      }
+      return pdf.output('blob');
+    });
     
     element.style.height = origTallyHeight;
     element.style.maxHeight = origTallyMaxHeight;
