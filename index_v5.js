@@ -255,7 +255,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v46_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v47_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -270,7 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v46_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v47_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -2908,7 +2908,7 @@ async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false) {
   };
 
   try {
-    const element = printWrapper.querySelector('.invoice-page');
+    const element = printWrapper.querySelector('.tally-invoice-container') || printWrapper;
     const blob = await html2pdf().from(element).set(opt).toPdf().output('blob');
     
     printWrapper.style.display = "";

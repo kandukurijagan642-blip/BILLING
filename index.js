@@ -2352,7 +2352,7 @@ async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false) {
   };
 
   try {
-    const element = printWrapper.querySelector('.invoice-page');
+    const element = printWrapper.querySelector('.tally-invoice-container') || printWrapper;
     const blob = await html2pdf().from(element).set(opt).toPdf().output('blob');
     
     printWrapper.style.display = "";
