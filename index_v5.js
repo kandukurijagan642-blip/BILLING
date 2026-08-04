@@ -255,7 +255,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v55_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v56_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -270,7 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v55_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v56_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -3027,6 +3027,18 @@ window.toggleLoginPasswordVisibility = function() {
     pwdInput.type = "password";
     icon.classList.remove("fa-eye-slash");
     icon.classList.add("fa-eye");
+  }
+};
+
+window.toggleAdvancedSettings = function() {
+  const content = document.getElementById("advanced-settings-content");
+  const icon = document.getElementById("advanced-toggle-icon");
+  if (content.classList.contains("hidden")) {
+    content.classList.remove("hidden");
+    icon.innerHTML = `<i class="fa-solid fa-chevron-up"></i> Hide Panel`;
+  } else {
+    content.classList.add("hidden");
+    icon.innerHTML = `<i class="fa-solid fa-chevron-down"></i> Show Panel`;
   }
 };
 

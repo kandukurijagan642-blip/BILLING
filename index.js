@@ -2458,6 +2458,18 @@ window.toggleLoginPasswordVisibility = function() {
   }
 };
 
+window.toggleAdvancedSettings = function() {
+  const content = document.getElementById("advanced-settings-content");
+  const icon = document.getElementById("advanced-toggle-icon");
+  if (content.classList.contains("hidden")) {
+    content.classList.remove("hidden");
+    icon.innerHTML = `<i class="fa-solid fa-chevron-up"></i> Hide Panel`;
+  } else {
+    content.classList.add("hidden");
+    icon.innerHTML = `<i class="fa-solid fa-chevron-down"></i> Show Panel`;
+  }
+};
+
 window.submitUnlockLogin = function(e) {
   e.preventDefault();
   

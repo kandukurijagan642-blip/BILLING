@@ -39,8 +39,8 @@
     }
   </script>
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=55">
-  <script src="invoice_utils_v5.js?v=55"></script>
+  <link rel="stylesheet" href="index.css?v=56">
+  <script src="invoice_utils_v5.js?v=56"></script>
 </head>
 <body>
 
@@ -820,103 +820,10 @@
 
       <!-- VIEW: SETTINGS -->
       <section id="view-settings" class="content-view hidden">
-        <div class="dashboard-split-layout">
-          <!-- Left: Telegram Integration -->
-          <div class="card-box flex-50">
-            <div class="card-box-header">
-              <h3><i class="fa-solid fa-paper-plane"></i> Telegram Bot Integration</h3>
-            </div>
-            <form id="telegram-settings-form" class="form-grid" onsubmit="saveTelegramSettings(event)">
-              <div class="form-group col-12">
-                <label for="set-tg-token">Bot Token</label>
-                <input type="text" id="set-tg-token" placeholder="Enter Telegram Bot API Token">
-                <span class="info-lbl">Get from @BotFather on Telegram</span>
-              </div>
-              <div class="form-group col-12">
-                <label for="set-tg-chat-id">Default Chat ID</label>
-                <input type="text" id="set-tg-chat-id" placeholder="Enter Chat ID / Group ID">
-              </div>
-              <div id="tg-status-indicator" class="info-note col-12 hidden">
-                <i class="fa-solid fa-circle-info"></i>
-                <span id="tg-status-text">Credentials saved.</span>
-              </div>
-              <div class="form-group col-12 flex-row gap-10 margin-top-10">
-                <button type="button" class="btn btn-secondary" onclick="testTelegramConnection()">Test Connection</button>
-                <button type="submit" class="btn btn-primary flex-1">Save Telegram Settings</button>
-              </div>
-            </form>
-          </div>
-
-          <!-- Right: Login & Lock Security -->
-          <div class="card-box flex-50">
-            <div class="card-box-header">
-              <h3><i class="fa-solid fa-shield-halved"></i> Login & Lock Security</h3>
-            </div>
-            <form id="security-settings-form" class="form-grid" onsubmit="saveSecuritySettings(event)">
-              <div class="form-group col-12">
-                <label for="set-autolock-timer">Inactivity Auto-Lock Timer</label>
-                <select id="set-autolock-timer">
-                  <option value="60">1 Minute</option>
-                  <option value="120" selected>2 Minutes</option>
-                  <option value="300">5 Minutes</option>
-                  <option value="900">15 Minutes</option>
-                  <option value="1800">30 Minutes</option>
-                  <option value="0">Never</option>
-                </select>
-                <span class="info-lbl">Locks screen dynamically on no keyboard/mouse input</span>
-              </div>
-              <div class="form-group">
-                <label for="set-login-username">Login Username</label>
-                <input type="text" id="set-login-username" required placeholder="e.g. 1234">
-              </div>
-              <div class="form-group">
-                <label for="set-login-password">Login Password</label>
-                <input type="password" id="set-login-password" required placeholder="e.g. 1234">
-              </div>
-              <div class="form-group col-12 margin-top-20">
-                <button type="submit" class="btn btn-primary">Save Security Settings</button>
-              </div>
-            </form>
-          </div>
-
-        <div class="dashboard-split-layout margin-top-20">
-          <!-- Backup & Restore Hub -->
-          <div class="card-box flex-50" style="border-color: rgba(6, 182, 212, 0.4); background: rgba(6, 182, 212, 0.03);">
-            <div class="card-box-header" style="border-bottom: 1px solid rgba(6, 182, 212, 0.2);">
-              <h3 style="color: var(--accent-cyan);"><i class="fa-solid fa-database"></i> Backup & Data Recovery Center</h3>
-            </div>
-            <div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px; color: var(--text-dark);">
-              <p style="color: var(--text-muted); line-height: 1.4; margin: 0;">Export all your billing records, products, and customer databases into a single backup file, or restore them onto any device.</p>
-              <div style="display: flex; gap: 10px;">
-                <button type="button" class="btn btn-cyan" onclick="exportDataBackupJSON()" style="flex: 1; padding: 10px 14px; font-weight: 700; border-radius: 6px; cursor: pointer;">
-                  <i class="fa-solid fa-download"></i> Export Backup
-                </button>
-                <button type="button" class="btn btn-secondary" onclick="document.getElementById('import-backup-file').click()" style="flex: 1; padding: 10px 14px; font-weight: 700; border-radius: 6px; cursor: pointer;">
-                  <i class="fa-solid fa-upload"></i> Import Backup
-                </button>
-                <input type="file" id="import-backup-file" accept=".json" style="display: none;" onchange="importDataBackupJSON(event)">
-              </div>
-            </div>
-          </div>
-
-          <!-- Danger Zone: Reset Databases -->
-          <div class="card-box flex-50" style="border-color: rgba(244, 63, 94, 0.4); background: rgba(244, 63, 94, 0.03);">
-            <div class="card-box-header" style="border-bottom: 1px solid rgba(244, 63, 94, 0.2);">
-              <h3 style="color: var(--accent-rose);"><i class="fa-solid fa-triangle-exclamation"></i> Danger Zone / Reset Controls</h3>
-            </div>
-            <div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px; color: var(--text-dark);">
-              <p style="color: var(--text-muted); line-height: 1.4; margin: 0;">To start fresh and generate new invoices starting strictly from <strong>#0001</strong>, click below to clear the sample invoice database and reset the numbering sequence.</p>
-              <button type="button" class="btn btn-rose" onclick="resetBillingDatabaseTo0001()" style="padding: 10px 14px; font-weight: 700; width: 100%; border-radius: 6px; cursor: pointer;">
-                <i class="fa-solid fa-trash-can"></i> Clear History & Start Sequence from 0001
-              </button>
-            </div>
-          </div>
-        </div>
-
         <!-- Global Header & Bank Details defaults -->
-        <div class="card-box margin-top-20">
+        <div class="card-box">
           <div class="card-box-header">
-            <h3><i class="fa-solid fa-shop"></i> Store Defaults Configuration</h3>
+            <h3><i class="fa-solid fa-shop"></i> Store & Company Defaults Configuration</h3>
           </div>
           <form id="settings-global-form" class="form-grid" onsubmit="saveGlobalSettingsDefaults(event)">
             <div class="form-group">
@@ -991,11 +898,116 @@
             </div>
           </form>
         </div>
+
+        <!-- Collapsable Advanced System Settings -->
+        <div class="card-box margin-top-20" style="border-color: rgba(255, 255, 255, 0.08); background: rgba(15, 23, 42, 0.15);">
+          <div class="card-box-header" style="cursor: pointer; user-select: none;" onclick="toggleAdvancedSettings()">
+            <h3 style="color: var(--accent-cyan); display: flex; align-items: center; gap: 8px; margin: 0;">
+              <i class="fa-solid fa-gears"></i> Advanced System Panel (Bot, Security, Backup)
+            </h3>
+            <span id="advanced-toggle-icon" style="font-size: 13px; color: var(--text-muted); font-weight: 600;"><i class="fa-solid fa-chevron-down"></i> Show Panel</span>
+          </div>
+          
+          <div id="advanced-settings-content" class="hidden" style="margin-top: 20px;">
+            <div class="dashboard-split-layout">
+              <!-- Left: Telegram Integration -->
+              <div class="card-box flex-50">
+                <div class="card-box-header">
+                  <h3><i class="fa-solid fa-paper-plane"></i> Telegram Bot Integration</h3>
+                </div>
+                <form id="telegram-settings-form" class="form-grid" onsubmit="saveTelegramSettings(event)">
+                  <div class="form-group col-12">
+                    <label for="set-tg-token">Bot Token</label>
+                    <input type="text" id="set-tg-token" placeholder="Enter Telegram Bot API Token">
+                    <span class="info-lbl">Get from @BotFather on Telegram</span>
+                  </div>
+                  <div class="form-group col-12">
+                    <label for="set-tg-chat-id">Default Chat ID</label>
+                    <input type="text" id="set-tg-chat-id" placeholder="Enter Chat ID / Group ID">
+                  </div>
+                  <div id="tg-status-indicator" class="info-note col-12 hidden">
+                    <i class="fa-solid fa-circle-info"></i>
+                    <span id="tg-status-text">Credentials saved.</span>
+                  </div>
+                  <div class="form-group col-12 flex-row gap-10 margin-top-10">
+                    <button type="button" class="btn btn-secondary" onclick="testTelegramConnection()">Test Connection</button>
+                    <button type="submit" class="btn btn-primary flex-1">Save Telegram Settings</button>
+                  </div>
+                </form>
+              </div>
+
+              <!-- Right: Login & Lock Security -->
+              <div class="card-box flex-50">
+                <div class="card-box-header">
+                  <h3><i class="fa-solid fa-shield-halved"></i> Login & Lock Security</h3>
+                </div>
+                <form id="security-settings-form" class="form-grid" onsubmit="saveSecuritySettings(event)">
+                  <div class="form-group col-12">
+                    <label for="set-autolock-timer">Inactivity Auto-Lock Timer</label>
+                    <select id="set-autolock-timer">
+                      <option value="60">1 Minute</option>
+                      <option value="120" selected>2 Minutes</option>
+                      <option value="300">5 Minutes</option>
+                      <option value="900">15 Minutes</option>
+                      <option value="1800">30 Minutes</option>
+                      <option value="0">Never</option>
+                    </select>
+                    <span class="info-lbl">Locks screen dynamically on no keyboard/mouse input</span>
+                  </div>
+                  <div class="form-group">
+                    <label for="set-login-username">Login Username</label>
+                    <input type="text" id="set-login-username" required placeholder="e.g. 1234">
+                  </div>
+                  <div class="form-group">
+                    <label for="set-login-password">Login Password</label>
+                    <input type="password" id="set-login-password" required placeholder="e.g. 1234">
+                  </div>
+                  <div class="form-group col-12 margin-top-20">
+                    <button type="submit" class="btn btn-primary">Save Security Settings</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <div class="dashboard-split-layout margin-top-20">
+              <!-- Backup & Restore Hub -->
+              <div class="card-box flex-50" style="border-color: rgba(6, 182, 212, 0.4); background: rgba(6, 182, 212, 0.03);">
+                <div class="card-box-header" style="border-bottom: 1px solid rgba(6, 182, 212, 0.2);">
+                  <h3 style="color: var(--accent-cyan);"><i class="fa-solid fa-database"></i> Backup & Data Recovery Center</h3>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px; color: var(--text-dark);">
+                  <p style="color: var(--text-muted); line-height: 1.4; margin: 0;">Export all your billing records, products, and customer databases into a single backup file, or restore them onto any device.</p>
+                  <div style="display: flex; gap: 10px;">
+                    <button type="button" class="btn btn-cyan" onclick="exportDataBackupJSON()" style="flex: 1; padding: 10px 14px; font-weight: 700; border-radius: 6px; cursor: pointer;">
+                      <i class="fa-solid fa-download"></i> Export Backup
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('import-backup-file').click()" style="flex: 1; padding: 10px 14px; font-weight: 700; border-radius: 6px; cursor: pointer;">
+                      <i class="fa-solid fa-upload"></i> Import Backup
+                    </button>
+                    <input type="file" id="import-backup-file" accept=".json" style="display: none;" onchange="importDataBackupJSON(event)">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Danger Zone: Reset Databases -->
+              <div class="card-box flex-50" style="border-color: rgba(244, 63, 94, 0.4); background: rgba(244, 63, 94, 0.03);">
+                <div class="card-box-header" style="border-bottom: 1px solid rgba(244, 63, 94, 0.2);">
+                  <h3 style="color: var(--accent-rose);"><i class="fa-solid fa-triangle-exclamation"></i> Danger Zone / Reset Controls</h3>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px; color: var(--text-dark);">
+                  <p style="color: var(--text-muted); line-height: 1.4; margin: 0;">To start fresh and generate new invoices starting strictly from <strong>#0001</strong>, click below to clear the sample invoice database and reset the numbering sequence.</p>
+                  <button type="button" class="btn btn-rose" onclick="resetBillingDatabaseTo0001()" style="padding: 10px 14px; font-weight: 700; width: 100%; border-radius: 6px; cursor: pointer;">
+                    <i class="fa-solid fa-trash-can"></i> Clear History & Start Sequence from 0001
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
-
     </main>
-
   </div>
+
 
   <!-- PRODUCT EDIT POPUP MODAL -->
   <div id="product-modal" class="modal-overlay hidden no-print">
@@ -1511,6 +1523,6 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=55"></script>
+  <script src="index_v5.js?v=56"></script>
 </body>
 </html>
