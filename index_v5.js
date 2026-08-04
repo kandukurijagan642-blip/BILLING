@@ -255,7 +255,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v60_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v61_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -270,7 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v60_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v61_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -307,8 +307,12 @@ document.addEventListener("DOMContentLoaded", () => {
   bindBillingFormInputs();
   setupKeyboardShortcuts();
 
-  // Background Bidirectional Sync Function
+  // Background Bidirectional Sync Function with concurrency protection
+  let isSyncing = false;
   window.triggerDatabaseSync = function() {
+    if (isSyncing) return;
+    isSyncing = true;
+    
     fetch("/api/sync")
       .then(res => res.json())
       .then(data => {
@@ -408,14 +412,17 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         }
       })
-      .catch(err => console.warn("Background sync connection failed (offline mode):", err));
+      .catch(err => console.warn("Background sync connection failed (offline mode):", err))
+      .finally(() => {
+        isSyncing = false;
+      });
   };
 
   // Run initial sync
   window.triggerDatabaseSync();
 
-  // Run periodic sync every 30 seconds
-  setInterval(window.triggerDatabaseSync, 30000);
+  // Run periodic sync every 10 seconds (ultra-responsive mode)
+  setInterval(window.triggerDatabaseSync, 10000);
 
   // Sync automatically when tab becomes visible (focused/returned to)
   document.addEventListener("visibilitychange", () => {
