@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v82_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v83_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v82_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v83_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -2310,6 +2310,25 @@ function formatWhatsAppPhone(phoneStr) {
 
 let pendingWaMsg = "";
 
+function getCustomerPhoneNumber(details) {
+  let phone = "";
+  if (details && details.buyer && details.buyer.phone) {
+    phone = details.buyer.phone;
+  }
+  if (!phone && elements.billBuyerPhone && elements.billBuyerPhone.value) {
+    phone = elements.billBuyerPhone.value;
+  }
+  if (!phone && details && details.consignee && details.consignee.phone) {
+    phone = details.consignee.phone;
+  }
+  if (!phone && details && details.buyer && details.buyer.name && partiesDb && partiesDb.length > 0) {
+    const custNameLower = details.buyer.name.trim().toLowerCase();
+    const p = partiesDb.find(party => party.name && party.name.trim().toLowerCase() === custNameLower && party.phone);
+    if (p) phone = p.phone;
+  }
+  return phone;
+}
+
 window.shareInvoicePdfNative = async function(details, btnEl = null) {
   if (!details || !details.invoiceNo || !details.buyer?.name || !details.items || details.items.length === 0) {
     alert("Please fill invoice details and add items before sharing!");
@@ -2374,9 +2393,9 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
     }
 
     const file = new File([pdfBlob], filename, { type: 'application/pdf' });
-    let rawPhone = details.buyer?.phone || (elements.billBuyerPhone ? elements.billBuyerPhone.value : "");
+    let rawPhone = getCustomerPhoneNumber(details);
     if (!rawPhone) {
-      rawPhone = prompt(`Enter WhatsApp mobile number for ${details.buyer?.name || 'Customer'}:`, "") || "";
+      rawPhone = prompt(`Enter 10-digit WhatsApp mobile number for ${details.buyer?.name || 'Customer'}:`, "") || "";
     }
     const cleanPhone = formatWhatsAppPhone(rawPhone);
 
