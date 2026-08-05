@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v87_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v88_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v87_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v88_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -2569,12 +2569,13 @@ window.openBalanceQrModal = function(id) {
   const balEl = document.getElementById("bal-qr-balance");
   if (balEl) balEl.textContent = formatCurrency(balance);
 
-  const realUpiId = globalSettings.upiId || globalSettings.bank?.upi || "7386262139@upi";
+  const realUpiId = (globalSettings.upiId || globalSettings.bank?.upi || "7386262139@upi").trim();
   const upiIdEl = document.getElementById("bal-qr-upi-id");
   if (upiIdEl) upiIdEl.textContent = realUpiId;
 
-  const upiName = encodeURIComponent(globalSettings.company?.name || "Aaryan Aqua Needs");
-  const upiUri = `upi://pay?pa=${realUpiId}&pn=${upiName}&am=${balance.toFixed(2)}&tn=Balance%20Bill%20${inv.invoiceNo || ''}&cu=INR`;
+  const upiName = encodeURIComponent((globalSettings.company?.name || "Aaryan Aqua Needs").replace(/[^a-zA-Z0-9 ]/g, '').trim());
+  const cleanNote = `Bill${inv.invoiceNo || '1'}`.replace(/[^a-zA-Z0-9]/g, '');
+  const upiUri = `upi://pay?pa=${realUpiId}&pn=${upiName}&am=${balance.toFixed(2)}&cu=INR&tn=${cleanNote}`;
 
   const canvas = document.getElementById("balance-qr-canvas");
   const imgEl = document.getElementById("balance-qr-img");
@@ -2585,9 +2586,10 @@ window.openBalanceQrModal = function(id) {
       new QRious({
         element: canvas,
         value: upiUri,
-        size: 240
+        size: 300,
+        level: 'H'
       });
-      canvas.style.display = "inline-block";
+      canvas.style.display = "block";
       if (imgEl) imgEl.style.display = "none";
       canvasSuccess = true;
     } catch (e) {
@@ -2597,8 +2599,8 @@ window.openBalanceQrModal = function(id) {
 
   if (!canvasSuccess && imgEl) {
     if (canvas) canvas.style.display = "none";
-    imgEl.src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(upiUri)}`;
-    imgEl.style.display = "inline-block";
+    imgEl.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiUri)}`;
+    imgEl.style.display = "block";
   }
 
   const modalEl = document.getElementById("balance-qr-modal");
