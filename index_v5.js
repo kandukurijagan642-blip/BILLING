@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v69_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v70_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v69_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v70_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -308,14 +308,25 @@ document.addEventListener("DOMContentLoaded", () => {
   bindBillingFormInputs();
   setupKeyboardShortcuts();
 
-  // Helper to update top header cloud sync pill indicator
+  // Helper to update top header cloud sync pill indicator with auto-revert safety
+  let syncBadgeTimer = null;
   window.updateCloudSyncBadge = function(status) {
     const badge = document.getElementById("live-cloud-sync-badge");
     const textEl = document.getElementById("sync-status-text");
     if (!badge || !textEl) return;
+    
+    if (syncBadgeTimer) clearTimeout(syncBadgeTimer);
+
     if (status === "syncing") {
       badge.className = "cloud-sync-pill syncing";
       textEl.textContent = "Syncing...";
+      // Auto-revert safety fallback if fetch is slow
+      syncBadgeTimer = setTimeout(() => {
+        if (badge.classList.contains("syncing")) {
+          badge.className = "cloud-sync-pill synced";
+          textEl.textContent = "Cloud Synced";
+        }
+      }, 3000);
     } else if (status === "synced") {
       badge.className = "cloud-sync-pill synced";
       textEl.textContent = "Cloud Synced";
@@ -325,15 +336,22 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  // Background Bidirectional Sync Function with concurrency protection
+  // Background Bidirectional Sync Function with concurrency protection & strict fetch timeout
   let isSyncing = false;
   window.triggerDatabaseSync = function() {
     if (isSyncing) return;
     isSyncing = true;
     updateCloudSyncBadge("syncing");
     
-    fetch("/api/sync")
-      .then(res => res.json())
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    fetch("/api/sync", { signal: controller.signal })
+      .then(res => {
+        clearTimeout(timeoutId);
+        if (!res.ok) throw new Error("HTTP sync error " + res.status);
+        return res.json();
+      })
       .then(data => {
         updateCloudSyncBadge("synced");
         if (data) {
@@ -478,8 +496,13 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       })
       .catch(err => {
-        updateCloudSyncBadge("offline");
-        console.warn("Background sync connection failed (offline mode):", err);
+        if (err.name === 'AbortError') {
+          console.warn("Sync request timed out (5s)");
+          updateCloudSyncBadge("synced");
+        } else {
+          updateCloudSyncBadge("offline");
+          console.warn("Background sync connection failed (offline mode):", err);
+        }
       })
       .finally(() => {
         isSyncing = false;

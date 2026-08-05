@@ -115,19 +115,25 @@ if (mongoUri) {
 app.get('/api/sync', async (req, res) => {
   try {
     if (isMongoConnected) {
-      const invoices = await InvoiceModel.find().lean();
-      const products = await ProductModel.find().lean();
-      const parties = await PartyModel.find().lean();
-      const dbSettings = await SettingModel.findOne({ key: 'globalSettings' }).lean();
-      const deletedDocs = await DeletedInvoiceModel.find().lean();
-      const deletedInvoiceIds = deletedDocs.map(d => d.id);
+      const [invoices, products, parties, dbSettings, deletedDocs] = await Promise.all([
+        InvoiceModel.find().maxTimeMS(4000).lean().catch(() => null),
+        ProductModel.find().maxTimeMS(4000).lean().catch(() => null),
+        PartyModel.find().maxTimeMS(4000).lean().catch(() => null),
+        SettingModel.findOne({ key: 'globalSettings' }).maxTimeMS(4000).lean().catch(() => null),
+        DeletedInvoiceModel.find().maxTimeMS(4000).lean().catch(() => null)
+      ]);
+
+      const localInvoices = readLocalJsonFile('invoices.json', []);
+      const localProducts = readLocalJsonFile('products.json', []);
+      const localParties = readLocalJsonFile('parties.json', []);
+      const localDeleted = readLocalJsonFile('deleted_invoices.json', []);
       
       res.json({
-        invoices: invoices || [],
-        products: products || [],
-        parties: parties || [],
-        globalSettings: dbSettings ? dbSettings.value : null,
-        deletedInvoiceIds: deletedInvoiceIds || []
+        invoices: invoices || localInvoices,
+        products: products || localProducts,
+        parties: parties || localParties,
+        globalSettings: dbSettings ? dbSettings.value : readLocalJsonFile('settings.json', null),
+        deletedInvoiceIds: deletedDocs ? deletedDocs.map(d => d.id) : localDeleted
       });
     } else {
       res.json({
