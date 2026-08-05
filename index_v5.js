@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v80_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v81_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v80_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v81_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -2345,29 +2345,6 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
     const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
     element.style.display = "none";
 
-    // Convert Blob to Base64
-    const reader = new FileReader();
-    const pdfBase64 = await new Promise((resolve) => {
-      reader.onloadend = () => resolve(reader.result);
-      reader.readAsDataURL(pdfBlob);
-    });
-
-    // Upload PDF to server to get hosted public PDF link
-    let hostedPdfUrl = "";
-    try {
-      const uploadRes = await fetch("/api/invoices/upload-pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename, pdfBase64 })
-      });
-      const uploadData = await uploadRes.json();
-      if (uploadData && uploadData.ok) {
-        hostedPdfUrl = uploadData.pdfUrl;
-      }
-    } catch (e) {
-      console.warn("PDF upload to server fallback:", e);
-    }
-
     if (btnEl && btnEl.tagName) {
       btnEl.innerHTML = origHtml;
       btnEl.disabled = false;
@@ -2389,29 +2366,20 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
     text += `💰 *Grand Total:* ₹ ${formatCurrency(total)}\n`;
 
     if (balance <= 0 || status === 'Paid') {
-      // FULLY PAID RECEIPT
       text += `✅ *Payment Status:* FULLY PAID (₹ ${formatCurrency(total)})\n`;
       text += `💳 *Payment Mode:* ${details.paymentMode || 'UPI / Cash'}\n`;
       text += `-----------------------------------\n`;
-      if (hostedPdfUrl) {
-        text += `📄 *View / Download Official PDF Invoice:*\n${hostedPdfUrl}\n\n`;
-      }
       text += `Thank you for your business! 🙏`;
     } else {
-      // BALANCE DUE REPORT + PAYMENT LINK + PDF
       text += `✅ *Amount Paid:* ₹ ${formatCurrency(paid)}\n`;
       text += `🔴 *PENDING BALANCE DUE:* ₹ ${formatCurrency(balance)}\n`;
       text += `-----------------------------------\n`;
-      text += `📲 *Pay Pending Balance via UPI:*\n`;
-      text += `UPI ID: *${realUpiId}*\n`;
-      text += `Direct Link: upi://pay?pa=${realUpiId}&pn=Aaryan%20Aqua%20Needs&am=${balance.toFixed(2)}&tn=Balance_Bill_${details.invoiceNo}\n\n`;
-      if (hostedPdfUrl) {
-        text += `📄 *View / Download Official PDF Invoice:*\n${hostedPdfUrl}\n\n`;
-      }
+      text += `📲 *Pay Balance via UPI:* ${realUpiId}\n`;
+      text += `-----------------------------------\n`;
       text += `Kindly clear the pending balance at your earliest convenience. Thank you! 🙏`;
     }
 
-    // 1. Try Web Share API (native file attachment on mobile)
+    // 1. Try Web Share API (attaches the actual PDF file natively on Mobile/PWA)
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({
