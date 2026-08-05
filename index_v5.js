@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v83_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v84_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v83_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v84_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -2335,6 +2335,23 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
     return;
   }
 
+  // Open window synchronously on click to prevent browser popup blockers
+  const waWin = window.open("about:blank", "_blank");
+  if (waWin) {
+    try {
+      waWin.document.write(`
+        <html>
+          <head><title>Opening WhatsApp...</title></head>
+          <body style="font-family: system-ui, sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; height:90vh; background:#f8fafc; color:#0a4b5c;">
+            <div style="font-size:28px; margin-bottom:12px;">⏳</div>
+            <h3 style="margin:0 0 8px 0;">Compiling PDF & Opening WhatsApp...</h3>
+            <p style="color:#64748b; font-size:13px; margin:0;">Targeting customer phone: ${details.buyer?.name || 'Customer'}</p>
+          </body>
+        </html>
+      `);
+    } catch(e) {}
+  }
+
   let origHtml = "";
   if (btnEl && btnEl.tagName) {
     origHtml = btnEl.innerHTML;
@@ -2344,7 +2361,10 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
 
   populateA4PrintOverlay(details);
   const element = document.getElementById("print-invoice-wrapper");
-  if (!element) return;
+  if (!element) {
+    if (waWin && !waWin.closed) waWin.close();
+    return;
+  }
 
   element.style.display = "block";
   document.body.classList.remove("printing-thermal");
@@ -2392,7 +2412,6 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
       btnEl.disabled = false;
     }
 
-    const file = new File([pdfBlob], filename, { type: 'application/pdf' });
     let rawPhone = getCustomerPhoneNumber(details);
     if (!rawPhone) {
       rawPhone = prompt(`Enter 10-digit WhatsApp mobile number for ${details.buyer?.name || 'Customer'}:`, "") || "";
@@ -2432,24 +2451,30 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
       text += `Kindly clear the pending balance at your earliest convenience. Thank you! 🙏`;
     }
 
-    // Direct WhatsApp Link targeting customer phone directly
     const encodedText = encodeURIComponent(text);
     let waUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
     if (cleanPhone) {
       waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`;
     }
 
-    // Trigger local PDF file download for user to attach if desired
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(pdfBlob);
-    a.download = filename;
-    a.click();
+    // Trigger local PDF file download for user
+    try {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(pdfBlob);
+      a.download = filename;
+      a.click();
+    } catch(e) {}
 
-    // Open WhatsApp directly to target mobile number
-    window.open(waUrl, '_blank');
+    // Redirect the pre-opened window directly to target WhatsApp mobile number
+    if (waWin && !waWin.closed) {
+      waWin.location.href = waUrl;
+    } else {
+      window.location.href = waUrl;
+    }
 
   } catch (err) {
     console.error("PDF share generation error:", err);
+    if (waWin && !waWin.closed) waWin.close();
     element.style.display = "none";
     if (btnEl && btnEl.tagName) {
       btnEl.innerHTML = origHtml;
