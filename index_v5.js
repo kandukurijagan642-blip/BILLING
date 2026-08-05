@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v75_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v76_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v75_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v76_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -3680,25 +3680,35 @@ async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false) {
       return false;
     }
 
+    // Convert Blob to Base64
+    const reader = new FileReader();
+    const pdfBase64 = await new Promise((resolve) => {
+      reader.onloadend = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    });
+
     let successCount = 0;
     let lastError = "";
 
     for (const id of chatIds) {
-      const formData = new FormData();
-      formData.append("chat_id", id);
-      formData.append("document", blob, `Invoice_${invoiceDetails.invoiceNo}.pdf`);
-      formData.append("caption", `🔔 Invoice #${invoiceDetails.invoiceNo} generated for ${invoiceDetails.buyer.name}.\nGrand Total: ₹ ${formatCurrency(invoiceDetails.total || 0)}`);
-
       try {
-        const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+        const res = await fetch("/api/telegram/sendDocument", {
           method: "POST",
-          body: formData
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            token: token,
+            chat_id: id,
+            filename: `Invoice_${invoiceDetails.invoiceNo}.pdf`,
+            pdfBase64: pdfBase64,
+            caption: `🔔 Invoice #${invoiceDetails.invoiceNo} generated for ${invoiceDetails.buyer?.name || 'Customer'}.\nGrand Total: ₹ ${formatCurrency(invoiceDetails.total || 0)}`
+          })
         });
+
         const data = await res.json();
-        if (data.ok) {
+        if (data && data.ok) {
           successCount++;
         } else {
-          lastError = data.description;
+          lastError = (data && (data.description || data.error)) ? (data.description || data.error) : "Server request failed";
         }
       } catch (err) {
         lastError = err.message;
@@ -3709,7 +3719,7 @@ async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false) {
       if (!silent) alert(`Invoice PDF #${invoiceDetails.invoiceNo} successfully shared to all ${chatIds.length} Telegram chats!`);
       return true;
     } else {
-      if (!silent) alert(`Telegram error: Shared to ${successCount}/${chatIds.length} chats. Last Error: ${lastError}`);
+      if (!silent) alert(`Telegram status: Shared to ${successCount}/${chatIds.length} chats. ${lastError ? 'Last Error: ' + lastError : ''}`);
       return false;
     }
   } catch (err) {

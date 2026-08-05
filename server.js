@@ -223,6 +223,80 @@ app.post('/api/invoices/reset', async (req, res) => {
   }
 });
 
+// --- SERVER-SIDE TELEGRAM PDF PROXY ENDPOINT ---
+app.post('/api/telegram/sendDocument', async (req, res) => {
+  try {
+    const { token, chat_id, filename, pdfBase64, caption } = req.body;
+    if (!token || !chat_id || !pdfBase64) {
+      return res.status(400).json({ ok: false, description: 'Missing token, chat_id, or pdfBase64' });
+    }
+
+    const base64Data = pdfBase64.replace(/^data:application\/pdf;base64,/, "");
+    const fileBuffer = Buffer.from(base64Data, 'base64');
+    const safeFilename = filename || 'Invoice.pdf';
+
+    const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+
+    let body = '';
+    body += `--${boundary}\r\n`;
+    body += `Content-Disposition: form-data; name="chat_id"\r\n\r\n${chat_id}\r\n`;
+
+    if (caption) {
+      body += `--${boundary}\r\n`;
+      body += `Content-Disposition: form-data; name="caption"\r\n\r\n${caption}\r\n`;
+    }
+
+    body += `--${boundary}\r\n`;
+    body += `Content-Disposition: form-data; name="document"; filename="${safeFilename}"\r\n`;
+    body += `Content-Type: application/pdf\r\n\r\n`;
+
+    const footer = `\r\n--${boundary}--\r\n`;
+
+    const payloadBuffer = Buffer.concat([
+      Buffer.from(body, 'utf8'),
+      fileBuffer,
+      Buffer.from(footer, 'utf8')
+    ]);
+
+    const https = require('https');
+    const options = {
+      hostname: 'api.telegram.org',
+      port: 443,
+      path: `/bot${token}/sendDocument`,
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': payloadBuffer.length
+      }
+    };
+
+    const request = https.request(options, (response) => {
+      let responseData = '';
+      response.on('data', chunk => responseData += chunk);
+      response.on('end', () => {
+        try {
+          const json = JSON.parse(responseData);
+          res.json(json);
+        } catch (e) {
+          res.status(500).json({ ok: false, description: 'Invalid response from Telegram API', raw: responseData });
+        }
+      });
+    });
+
+    request.on('error', (err) => {
+      console.error('Telegram proxy HTTPS error:', err);
+      res.status(500).json({ ok: false, description: 'Server HTTPS error: ' + err.message });
+    });
+
+    request.write(payloadBuffer);
+    request.end();
+
+  } catch (err) {
+    console.error('Telegram proxy handler failed:', err);
+    res.status(500).json({ ok: false, description: err.message });
+  }
+});
+
 // 3. Products REST API (Bulk Save/Sync)
 app.post('/api/products', async (req, res) => {
   const productsList = req.body; // Expects array of products
