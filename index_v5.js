@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v70_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v71_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v70_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v71_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -553,15 +553,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Autofill remembered credentials if enabled
-  const remembered = localStorage.getItem("remember_me") === "true";
-  if (remembered) {
-    const userField = document.getElementById("login-username");
-    const pwdField = document.getElementById("login-password");
-    const rememberBox = document.getElementById("login-remember-me");
-    if (userField) userField.value = localStorage.getItem("saved_username") || "";
-    if (pwdField) pwdField.value = localStorage.getItem("saved_password") || "";
-    if (rememberBox) rememberBox.checked = true;
-  }
+  autofillRememberedCredentials();
 
   // Reset lock timer on activity
   resetAutolockTimer();
@@ -3344,6 +3336,21 @@ function resetAutolockTimer() {
   autolockInterval = setTimeout(triggerLockOverlay, lockTimerSeconds * 1000);
 }
 
+window.autofillRememberedCredentials = function() {
+  const remembered = localStorage.getItem("remember_me") === "true";
+  const userField = document.getElementById("login-username");
+  const pwdField = document.getElementById("login-password");
+  const rememberBox = document.getElementById("login-remember-me");
+  
+  if (remembered) {
+    if (userField) userField.value = localStorage.getItem("saved_username") || "";
+    if (pwdField) pwdField.value = localStorage.getItem("saved_password") || "";
+    if (rememberBox) rememberBox.checked = true;
+  } else {
+    if (rememberBox) rememberBox.checked = false;
+  }
+};
+
 window.triggerManualLock = function() {
   triggerLockOverlay();
 };
@@ -3354,6 +3361,9 @@ function triggerLockOverlay() {
   document.getElementById("login-form").reset();
   document.getElementById("login-error-message").classList.add("hidden");
   
+  // Re-fill saved credentials if Remember Password was checked
+  autofillRememberedCredentials();
+
   const wrapper = document.querySelector('.dashboard-wrapper');
   if (wrapper) wrapper.classList.add("blur-dashboard-wrapper");
   document.getElementById("lock-screen-overlay").classList.remove("hidden");
