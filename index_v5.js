@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v88_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v89_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v88_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v89_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -2310,6 +2310,80 @@ function formatWhatsAppPhone(phoneStr) {
   return digits;
 }
 
+async function sendTelegramTextMessage(messageText) {
+  const token = globalSettings.telegram?.token || "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g";
+  const rawChatId = globalSettings.telegram?.chatId || "6877857251";
+  if (!token || !rawChatId) return false;
+
+  const chatIds = rawChatId.split(",").map(id => id.trim()).filter(id => id.length > 0);
+  if (chatIds.length === 0) return false;
+
+  let success = false;
+  for (const chatId of chatIds) {
+    try {
+      const res = await fetch("/api/telegram/sendMessage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, chat_id: chatId, text: messageText, parse_mode: "Markdown" })
+      });
+      const data = await res.json();
+      if (data && data.ok) {
+        success = true;
+      } else {
+        const encodedText = encodeURIComponent(messageText);
+        await fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}&text=${encodedText}`);
+        success = true;
+      }
+    } catch (err) {
+      try {
+        const encodedText = encodeURIComponent(messageText);
+        await fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}&text=${encodedText}`);
+        success = true;
+      } catch (e) {}
+    }
+  }
+  return success;
+}
+
+async function sendStockTelegramReport(product, actionType, oldStock, newStock) {
+  if (!product) return;
+  const now = new Date();
+  const timeStr = now.toLocaleDateString('en-GB') + ' ' + now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+  let text = `📦 *STOCK AUDIT REPORT*\n`;
+  text += `🏛️ *${globalSettings.company?.name || 'AARYAN AQUA NEEDS'}*\n`;
+  text += `-----------------------------------\n`;
+  text += `🏷️ *Product:* ${product.description || 'Product'}\n`;
+  text += `🔢 *Action:* ${actionType}\n`;
+  text += `📊 *Previous Stock:* ${oldStock} ${product.unit || 'Units'}\n`;
+  text += `📈 *NEW LIVE STOCK:* ${newStock} ${product.unit || 'Units'}\n`;
+  text += `💰 *Unit Rate:* ₹ ${formatCurrency(product.rate || 0)}\n`;
+  text += `📅 *Timestamp:* ${timeStr}\n`;
+  text += `-----------------------------------`;
+
+  sendTelegramTextMessage(text);
+}
+
+async function sendPartyTelegramReport(party, isNew = true) {
+  if (!party) return;
+  const now = new Date();
+  const timeStr = now.toLocaleDateString('en-GB') + ' ' + now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+  let text = `👤 *${isNew ? 'NEW CUSTOMER / PARTY REGISTERED' : 'CUSTOMER DETAILS UPDATED'}*\n`;
+  text += `🏛️ *${globalSettings.company?.name || 'AARYAN AQUA NEEDS'}*\n`;
+  text += `-----------------------------------\n`;
+  text += `🏢 *Name:* ${party.name}\n`;
+  if (party.company) text += `🏬 *Company:* ${party.company}\n`;
+  text += `🏷️ *Party Type:* ${party.type === 'consignee' ? 'Ship-to Consignee' : 'Bill-to Receiver'}\n`;
+  text += `📱 *Mobile / WhatsApp:* ${party.phone || 'Not Provided'}\n`;
+  text += `🧾 *GSTIN:* ${party.gstin || 'Unregistered / UR'}\n`;
+  text += `📍 *Address:* ${party.address || 'N/A'}, ${party.state || 'Andhra Pradesh'} (${party.stateCode || '37'})\n`;
+  text += `📅 *Timestamp:* ${timeStr}\n`;
+  text += `-----------------------------------`;
+
+  sendTelegramTextMessage(text);
+}
+
 function savePhoneToPartyDb(customerName, phone) {
   if (!customerName || !phone || !partiesDb) return;
   const nameLower = customerName.trim().toLowerCase();
@@ -2317,6 +2391,7 @@ function savePhoneToPartyDb(customerName, phone) {
   if (party) {
     party.phone = phone;
     savePartiesDb();
+    sendPartyTelegramReport(party, false);
   }
 }
 
@@ -2931,6 +3006,12 @@ window.saveProductModal = function(e) {
   const disc = parseFloat(document.getElementById("modal-prod-discount").value) || 0;
   const stock = Math.max(0, parseInt(document.getElementById("modal-prod-stock").value, 10) || 0);
 
+  let oldStock = 0;
+  if (id) {
+    const existing = productsDb.find(p => p.id === id);
+    if (existing) oldStock = parseInt(existing.stock, 10) || 0;
+  }
+
   const product = { id: id || "prod-" + Date.now(), description: desc, hsn, packSize: pack, unit, rate, gstRate: 0, discount: disc, stock: stock };
 
   if (id) {
@@ -2946,6 +3027,8 @@ window.saveProductModal = function(e) {
   loadProductsDatabaseTable();
   populateBillingSelectors();
   if (window.triggerDatabaseSync) window.triggerDatabaseSync();
+
+  sendStockTelegramReport(product, id ? "Product Details / Stock Edited" : "New Product Added to Inventory", oldStock, stock);
 };
 
 window.adjustProductStock = function(id, delta) {
@@ -2958,6 +3041,9 @@ window.adjustProductStock = function(id, delta) {
   syncDatabaseToServer("products", productsDb);
   loadProductsDatabaseTable();
   if (window.triggerDatabaseSync) window.triggerDatabaseSync();
+
+  const actionText = delta > 0 ? `Inline Stock Added (+${delta})` : `Inline Stock Reduced (${delta})`;
+  sendStockTelegramReport(prod, actionText, current, prod.stock);
 };
 
 function loadProductsDatabaseTable() {
@@ -3098,6 +3184,7 @@ window.savePartyModal = function(e) {
   const phone = document.getElementById("modal-party-phone").value.trim();
 
   const party = { id: id || "party-" + Date.now(), type, name, company, address, gstin, state, stateCode, phone };
+  const isNew = !id;
 
   if (id) {
     const idx = partiesDb.findIndex(p => p.id === id);
@@ -3111,6 +3198,8 @@ window.savePartyModal = function(e) {
   closePartyModal();
   loadPartiesDatabaseLists();
   if (window.triggerDatabaseSync) window.triggerDatabaseSync();
+
+  sendPartyTelegramReport(party, isNew);
 };
 
 function loadPartiesDatabaseLists() {

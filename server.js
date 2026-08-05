@@ -302,6 +302,61 @@ app.post('/api/telegram/sendDocument', async (req, res) => {
     console.error('Telegram proxy handler failed:', err);
     res.status(500).json({ ok: false, description: err.message });
   }
+});
+
+// --- SERVER-SIDE TELEGRAM TEXT MESSAGE PROXY ENDPOINT ---
+app.post('/api/telegram/sendMessage', async (req, res) => {
+  try {
+    const { token, chat_id, text, parse_mode } = req.body;
+    if (!token || !chat_id || !text) {
+      return res.status(400).json({ ok: false, description: 'Missing token, chat_id, or text' });
+    }
+
+    const payload = JSON.stringify({
+      chat_id,
+      text,
+      parse_mode: parse_mode || 'Markdown'
+    });
+
+    const https = require('https');
+    const options = {
+      hostname: 'api.telegram.org',
+      port: 443,
+      path: `/bot${token}/sendMessage`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload)
+      }
+    };
+
+    const request = https.request(options, (response) => {
+      let responseData = '';
+      response.on('data', chunk => responseData += chunk);
+      response.on('end', () => {
+        try {
+          const json = JSON.parse(responseData);
+          res.json(json);
+        } catch (e) {
+          res.status(500).json({ ok: false, description: 'Invalid response from Telegram API', raw: responseData });
+        }
+      });
+    });
+
+    request.on('error', (err) => {
+      console.error('Telegram sendMessage proxy error:', err);
+      res.status(500).json({ ok: false, description: 'Server HTTPS error: ' + err.message });
+    });
+
+    request.write(payload);
+    request.end();
+
+  } catch (err) {
+    console.error('Telegram sendMessage proxy error:', err);
+    res.status(500).json({ ok: false, description: err.message });
+  }
+});
+
 app.post('/api/invoices/upload-pdf', (req, res) => {
   try {
     const { filename, pdfBase64 } = req.body;
