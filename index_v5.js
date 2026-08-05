@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v84_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v85_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v84_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v85_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -2304,8 +2304,29 @@ function formatWhatsAppPhone(phoneStr) {
   let digits = phoneStr.toString().replace(/\D/g, "");
   if (digits.length === 10) {
     digits = "91" + digits;
+  } else if (digits.length === 11 && digits.startsWith("0")) {
+    digits = "91" + digits.substring(1);
   }
   return digits;
+}
+
+function launchWhatsAppWebOrApp(cleanPhone, messageText) {
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const encodedText = encodeURIComponent(messageText);
+  let waUrl = "";
+  
+  if (cleanPhone) {
+    if (isMobile) {
+      waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`;
+    } else {
+      waUrl = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`;
+    }
+  } else {
+    waUrl = isMobile
+      ? `https://api.whatsapp.com/send?text=${encodedText}`
+      : `https://web.whatsapp.com/send?text=${encodedText}`;
+  }
+  return waUrl;
 }
 
 let pendingWaMsg = "";
@@ -2451,11 +2472,7 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
       text += `Kindly clear the pending balance at your earliest convenience. Thank you! 🙏`;
     }
 
-    const encodedText = encodeURIComponent(text);
-    let waUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
-    if (cleanPhone) {
-      waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`;
-    }
+    const waUrl = launchWhatsAppWebOrApp(cleanPhone, text);
 
     // Trigger local PDF file download for user
     try {
@@ -3127,13 +3144,8 @@ window.sendPartyPaymentReminderWhatsApp = function(partyName, phone) {
   text += `-----------------------------------\n`;
   text += `Kindly clear the outstanding balance at your earliest convenience. Thank you for your continued business! 🙏`;
 
-  const cleanPhone = phone ? phone.replace(/[^0-9]/g, '') : '';
-  const encodedText = encodeURIComponent(text);
-  let waUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
-  if (cleanPhone && cleanPhone.length >= 10) {
-    const formattedPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
-    waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedText}`;
-  }
+  const cleanPhone = formatWhatsAppPhone(phone);
+  const waUrl = launchWhatsAppWebOrApp(cleanPhone, text);
   window.open(waUrl, '_blank');
 };
 
