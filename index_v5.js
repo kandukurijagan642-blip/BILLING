@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v81_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v82_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v81_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v82_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -2345,13 +2345,41 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
     const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
     element.style.display = "none";
 
+    // Convert Blob to Base64
+    const reader = new FileReader();
+    const pdfBase64 = await new Promise((resolve) => {
+      reader.onloadend = () => resolve(reader.result);
+      reader.readAsDataURL(pdfBlob);
+    });
+
+    // Upload PDF to server to get hosted public PDF link
+    let hostedPdfUrl = "";
+    try {
+      const uploadRes = await fetch("/api/invoices/upload-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename, pdfBase64 })
+      });
+      const uploadData = await uploadRes.json();
+      if (uploadData && uploadData.ok) {
+        hostedPdfUrl = uploadData.pdfUrl;
+      }
+    } catch (e) {
+      console.warn("PDF upload to server fallback:", e);
+    }
+
     if (btnEl && btnEl.tagName) {
       btnEl.innerHTML = origHtml;
       btnEl.disabled = false;
     }
 
     const file = new File([pdfBlob], filename, { type: 'application/pdf' });
-    const phone = details.buyer?.phone ? details.buyer.phone.replace(/[^0-9]/g, '') : '';
+    let rawPhone = details.buyer?.phone || (elements.billBuyerPhone ? elements.billBuyerPhone.value : "");
+    if (!rawPhone) {
+      rawPhone = prompt(`Enter WhatsApp mobile number for ${details.buyer?.name || 'Customer'}:`, "") || "";
+    }
+    const cleanPhone = formatWhatsAppPhone(rawPhone);
+
     const total = parseFloat(details.total || 0);
     const status = details.paymentStatus || 'Paid';
     const paid = parseFloat(details.paidAmount !== undefined ? details.paidAmount : (status === 'Paid' ? total : 0));
@@ -2360,7 +2388,7 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
 
     let text = `🏛️ *${globalSettings.company?.name || 'AARYAN AQUA NEEDS'}*\n`;
     text += `-----------------------------------\n`;
-    text += `📄 *Invoice #:* #${details.invoiceNo} (${details.invoiceType || 'Tax Invoice'})\n`;
+    text += `📄 *Tax Invoice #:* #${details.invoiceNo} (${details.invoiceType || 'Tax Invoice'})\n`;
     text += `👤 *Customer:* ${details.buyer?.name || 'Customer'}\n`;
     text += `📅 *Date:* ${details.invoiceDate || ''}\n`;
     text += `💰 *Grand Total:* ₹ ${formatCurrency(total)}\n`;
@@ -2369,44 +2397,36 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
       text += `✅ *Payment Status:* FULLY PAID (₹ ${formatCurrency(total)})\n`;
       text += `💳 *Payment Mode:* ${details.paymentMode || 'UPI / Cash'}\n`;
       text += `-----------------------------------\n`;
+      if (hostedPdfUrl) {
+        text += `📄 *View / Download Official PDF Invoice:*\n${hostedPdfUrl}\n\n`;
+      }
       text += `Thank you for your business! 🙏`;
     } else {
       text += `✅ *Amount Paid:* ₹ ${formatCurrency(paid)}\n`;
       text += `🔴 *PENDING BALANCE DUE:* ₹ ${formatCurrency(balance)}\n`;
       text += `-----------------------------------\n`;
-      text += `📲 *Pay Balance via UPI:* ${realUpiId}\n`;
-      text += `-----------------------------------\n`;
+      text += `📲 *Pay Pending Balance via UPI:*\n`;
+      text += `UPI ID: *${realUpiId}*\n\n`;
+      if (hostedPdfUrl) {
+        text += `📄 *View / Download Official PDF Invoice:*\n${hostedPdfUrl}\n\n`;
+      }
       text += `Kindly clear the pending balance at your earliest convenience. Thank you! 🙏`;
     }
 
-    // 1. Try Web Share API (attaches the actual PDF file natively on Mobile/PWA)
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try {
-        await navigator.share({
-          title: `Invoice #${details.invoiceNo}`,
-          text: text,
-          files: [file]
-        });
-        return;
-      } catch (err) {
-        console.log("Web Share cancelled/failed, falling back to WhatsApp link:", err);
-      }
-    }
-
-    // 2. Direct WhatsApp Link Fallback targeting customer phone directly
+    // Direct WhatsApp Link targeting customer phone directly
     const encodedText = encodeURIComponent(text);
     let waUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
-    if (phone && phone.length >= 10) {
-      const formattedPhone = phone.length === 10 ? '91' + phone : phone;
-      waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedText}`;
+    if (cleanPhone) {
+      waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`;
     }
 
-    // Trigger local PDF file download for user
+    // Trigger local PDF file download for user to attach if desired
     const a = document.createElement('a');
     a.href = URL.createObjectURL(pdfBlob);
     a.download = filename;
     a.click();
 
+    // Open WhatsApp directly to target mobile number
     window.open(waUrl, '_blank');
 
   } catch (err) {
