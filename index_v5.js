@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v77_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v78_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v77_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v78_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -2310,7 +2310,7 @@ function formatWhatsAppPhone(phoneStr) {
 
 let pendingWaMsg = "";
 
-window.shareInvoicePdfNative = function(details, btnEl = null) {
+window.shareInvoicePdfNative = async function(details, btnEl = null) {
   if (!details || !details.invoiceNo || !details.buyer?.name || !details.items || details.items.length === 0) {
     alert("Please fill invoice details and add items before sharing!");
     return;
@@ -2341,55 +2341,89 @@ window.shareInvoicePdfNative = function(details, btnEl = null) {
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
 
-  html2pdf().set(opt).from(element).outputPdf('blob').then(pdfBlob => {
+  try {
+    const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
     element.style.display = "none";
+
+    // Convert Blob to Base64
+    const reader = new FileReader();
+    const pdfBase64 = await new Promise((resolve) => {
+      reader.onloadend = () => resolve(reader.result);
+      reader.readAsDataURL(pdfBlob);
+    });
+
+    // Upload PDF to server to get hosted public PDF link
+    let hostedPdfUrl = "";
+    try {
+      const uploadRes = await fetch("/api/invoices/upload-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename, pdfBase64 })
+      });
+      const uploadData = await uploadRes.json();
+      if (uploadData && uploadData.ok) {
+        hostedPdfUrl = uploadData.pdfUrl;
+      }
+    } catch (e) {
+      console.warn("PDF upload to server fallback:", e);
+    }
+
     if (btnEl && btnEl.tagName) {
       btnEl.innerHTML = origHtml;
       btnEl.disabled = false;
     }
-    
+
     const file = new File([pdfBlob], filename, { type: 'application/pdf' });
+    const phone = details.buyer?.phone ? details.buyer.phone.replace(/[^0-9]/g, '') : '';
 
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      navigator.share({
-        title: `Invoice #${details.invoiceNo}`,
-        text: `Official Tax Invoice #${details.invoiceNo} - Aaryan Aqua Needs`,
-        files: [file]
-      }).catch(err => {
-        console.log("Share cancelled:", err);
-      });
-    } else {
-      // Direct PDF Download Fallback
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(pdfBlob);
-      a.download = filename;
-      a.click();
+    let text = `🏛️ *${globalSettings.company?.name || 'AARYAN AQUA NEEDS'}*\n` +
+               `📄 *Invoice #:* #${details.invoiceNo} (${details.invoiceType || 'Tax Invoice'})\n` +
+               `👤 *Customer:* ${details.buyer.name}\n` +
+               `💰 *Grand Total:* ₹ ${formatCurrency(details.total || 0)}\n\n`;
 
-      const msg = `*${globalSettings.company?.name || 'AARYAN AQUA NEEDS'}*\n` +
-                  `*Invoice No:* #${details.invoiceNo} (${details.invoiceType || 'Tax Invoice'})\n` +
-                  `*Customer:* ${details.buyer.name}\n` +
-                  `*Grand Total:* ₹ ${formatCurrency(details.total || 0)}\n\n` +
-                  `📄 Please find attached official Tax Invoice PDF file (#${details.invoiceNo}).`;
-
-      pendingWaMsg = msg;
-
-      const customerPhone = details.buyer?.phone || (elements.billBuyerPhone ? elements.billBuyerPhone.value : "");
-      const phoneInput = document.getElementById("guide-whatsapp-phone");
-      if (phoneInput) phoneInput.value = customerPhone || "";
-
-      const fnEl = document.getElementById("guide-pdf-filename");
-      if (fnEl) fnEl.textContent = filename;
-      const modalEl = document.getElementById("whatsapp-pdf-guide-modal");
-      if (modalEl) modalEl.classList.remove("hidden");
+    if (hostedPdfUrl) {
+      text += `📄 *View / Download Official PDF Invoice:*\n${hostedPdfUrl}\n\n`;
     }
-  }).catch(err => {
+    text += `Thank you for your business! 🙏`;
+
+    // 1. Try Web Share API (native file attachment on mobile)
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          title: `Invoice #${details.invoiceNo}`,
+          text: text,
+          files: [file]
+        });
+        return;
+      } catch (err) {
+        console.log("Web Share cancelled/failed, falling back to WhatsApp link:", err);
+      }
+    }
+
+    // 2. Direct WhatsApp Link Fallback with hosted PDF URL & auto local download
+    const encodedText = encodeURIComponent(text);
+    let waUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
+    if (phone && phone.length >= 10) {
+      const formattedPhone = phone.length === 10 ? '91' + phone : phone;
+      waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedText}`;
+    }
+
+    // Trigger local PDF file download for user
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(pdfBlob);
+    a.download = filename;
+    a.click();
+
+    window.open(waUrl, '_blank');
+
+  } catch (err) {
     console.error("PDF share generation error:", err);
     element.style.display = "none";
     if (btnEl && btnEl.tagName) {
       btnEl.innerHTML = origHtml;
       btnEl.disabled = false;
     }
-  });
+  }
 };
 
 window.openWhatsappWebChat = function() {

@@ -21,6 +21,13 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR);
 }
 
+// PDF Storage directory for public WhatsApp sharing
+const PDF_DIR = path.join(__dirname, 'public', 'invoices');
+if (!fs.existsSync(PDF_DIR)) {
+  fs.mkdirSync(PDF_DIR, { recursive: true });
+}
+app.use('/invoices', express.static(PDF_DIR));
+
 function readLocalJsonFile(filename, defaultValue = []) {
   const filePath = path.join(DATA_DIR, filename);
   if (!fs.existsSync(filePath)) {
@@ -294,6 +301,30 @@ app.post('/api/telegram/sendDocument', async (req, res) => {
   } catch (err) {
     console.error('Telegram proxy handler failed:', err);
     res.status(500).json({ ok: false, description: err.message });
+  }
+app.post('/api/invoices/upload-pdf', (req, res) => {
+  try {
+    const { filename, pdfBase64 } = req.body;
+    if (!filename || !pdfBase64) {
+      return res.status(400).json({ ok: false, error: 'Missing filename or pdfBase64' });
+    }
+
+    const base64Data = pdfBase64.replace(/^data:application\/pdf;base64,/, "");
+    const fileBuffer = Buffer.from(base64Data, 'base64');
+    
+    const safeFilename = filename.replace(/[^a-zA-Z0-9_\.-]/g, '_');
+    const filePath = path.join(PDF_DIR, safeFilename);
+
+    fs.writeFileSync(filePath, fileBuffer);
+
+    const protocol = req.protocol || 'https';
+    const host = req.get('host');
+    const pdfUrl = `${protocol}://${host}/invoices/${safeFilename}`;
+
+    res.json({ ok: true, pdfUrl, filename: safeFilename });
+  } catch (err) {
+    console.error('PDF upload error:', err);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
