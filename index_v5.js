@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v73_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v74_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v73_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v74_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -2758,6 +2758,18 @@ window.saveProductModal = function(e) {
   if (window.triggerDatabaseSync) window.triggerDatabaseSync();
 };
 
+window.adjustProductStock = function(id, delta) {
+  const prod = productsDb.find(p => p.id === id);
+  if (!prod) return;
+  const current = parseInt(prod.stock, 10) || 0;
+  prod.stock = Math.max(0, current + delta);
+  
+  localStorage.setItem("products", JSON.stringify(productsDb));
+  syncDatabaseToServer("products", productsDb);
+  loadProductsDatabaseTable();
+  if (window.triggerDatabaseSync) window.triggerDatabaseSync();
+};
+
 function loadProductsDatabaseTable() {
   loadAllDatabases();
   elements.productCount.textContent = productsDb.length;
@@ -2781,20 +2793,24 @@ function renderProductsTable(records) {
     let stockBadge = "";
     
     if (stockVal === 0) {
-      stockBadge = `<span style="display: inline-block; background: rgba(239, 68, 68, 0.12); color: #f87171; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; margin-left: 8px;"><i class="fa-solid fa-triangle-exclamation"></i> Out</span>`;
+      stockBadge = `<span style="display: inline-block; background: rgba(239, 68, 68, 0.12); color: #f87171; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;"><i class="fa-solid fa-triangle-exclamation"></i> Out</span>`;
     } else if (stockVal <= 10) {
-      stockBadge = `<span style="display: inline-block; background: rgba(245, 158, 11, 0.12); color: #fbbf24; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; margin-left: 8px;"><i class="fa-solid fa-circle-exclamation"></i> Low</span>`;
+      stockBadge = `<span style="display: inline-block; background: rgba(245, 158, 11, 0.12); color: #fbbf24; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;"><i class="fa-solid fa-circle-exclamation"></i> Low</span>`;
     } else {
-      stockBadge = `<span style="display: inline-block; background: rgba(16, 185, 129, 0.12); color: #34d399; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; margin-left: 8px;"><i class="fa-solid fa-circle-check"></i> In Stock</span>`;
+      stockBadge = `<span style="display: inline-block; background: rgba(16, 185, 129, 0.12); color: #34d399; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;"><i class="fa-solid fa-circle-check"></i> In Stock</span>`;
     }
 
     tr.innerHTML = `
       <td style="font-weight: 600;">${p.description}</td>
       <td>${p.hsn || "—"}</td>
       <td style="text-align: right; font-weight: 700; color: var(--primary-teal);">₹ ${formatCurrency(p.rate)}</td>
-      <td style="text-align: center; font-weight: 700;">
-        <span style="color: var(--primary-teal);">${stockVal}</span>
-        ${stockBadge}
+      <td style="text-align: center;">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+          <button class="btn btn-secondary btn-xs" onclick="adjustProductStock('${p.id}', -1)" title="Decrease Stock" style="padding: 2px 8px; font-size: 11px; cursor: pointer; border-radius: 4px;">-</button>
+          <span style="font-weight: 700; min-width: 20px; text-align: center;">${stockVal}</span>
+          <button class="btn btn-secondary btn-xs" onclick="adjustProductStock('${p.id}', 1)" title="Increase Stock" style="padding: 2px 8px; font-size: 11px; cursor: pointer; border-radius: 4px;">+</button>
+          ${stockBadge}
+        </div>
       </td>
       <td class="actions-cell">
         <button class="action-btn edit" onclick="openProductModal('${p.id}')" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
@@ -2938,17 +2954,69 @@ function renderPartiesLists(records) {
   }
 }
 
+window.sendPartyPaymentReminderWhatsApp = function(partyName, phone) {
+  const customerInvoices = invoicesDb.filter(inv => inv.customerName === partyName || (inv.details?.buyer?.name) === partyName);
+  let totalBilled = 0, totalPaid = 0;
+  customerInvoices.forEach(inv => {
+    totalBilled += parseFloat(inv.total || 0);
+    const details = inv.details || {};
+    totalPaid += parseFloat(details.paidAmount !== undefined ? details.paidAmount : (details.paymentStatus === 'Paid' ? inv.total : 0));
+  });
+  const pendingDues = Math.max(0, totalBilled - totalPaid);
+
+  let text = `🙏 *GENTLE PAYMENT REMINDER*\n`;
+  text += `🏛️ *AARYAN AQUA NEEDS*\n`;
+  text += `-----------------------------------\n`;
+  text += `👤 *Customer:* ${partyName}\n`;
+  text += `📄 *Total Invoices:* ${customerInvoices.length}\n`;
+  text += `💰 *Total Billed:* ₹ ${formatCurrency(totalBilled)}\n`;
+  text += `✅ *Total Paid:* ₹ ${formatCurrency(totalPaid)}\n`;
+  text += `🔴 *Outstanding Dues:* ₹ ${formatCurrency(pendingDues)}\n`;
+  text += `-----------------------------------\n`;
+  text += `Kindly clear the outstanding balance at your earliest convenience. Thank you for your continued business! 🙏`;
+
+  const cleanPhone = phone ? phone.replace(/[^0-9]/g, '') : '';
+  const encodedText = encodeURIComponent(text);
+  let waUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
+  if (cleanPhone && cleanPhone.length >= 10) {
+    const formattedPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
+    waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedText}`;
+  }
+  window.open(waUrl, '_blank');
+};
+
 function createPartyListCard(p) {
+  const customerInvoices = invoicesDb.filter(inv => inv.customerName === p.name || (inv.details?.buyer?.name) === p.name);
+  let totalBilled = 0, totalPaid = 0;
+  customerInvoices.forEach(inv => {
+    totalBilled += parseFloat(inv.total || 0);
+    const details = inv.details || {};
+    totalPaid += parseFloat(details.paidAmount !== undefined ? details.paidAmount : (details.paymentStatus === 'Paid' ? inv.total : 0));
+  });
+  const pendingDues = Math.max(0, totalBilled - totalPaid);
+
+  let duesBadge = `<span style="background: rgba(16, 185, 129, 0.12); color: #10b981; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 700;">Paid</span>`;
+  if (pendingDues > 0) {
+    duesBadge = `<span style="background: rgba(239, 68, 68, 0.12); color: #ef4444; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 700;">Due: ₹ ${formatCurrency(pendingDues)}</span>`;
+  }
+
   const card = document.createElement("div");
   card.className = "party-list-card";
   card.innerHTML = `
-    <div class="party-list-card-details">
-      <h4>${p.name}</h4>
+    <div class="party-list-card-details" style="flex: 1;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+        <h4 style="margin: 0;">${p.name}</h4>
+        ${duesBadge}
+      </div>
       ${p.company ? `<p style="font-weight:600; color:var(--text-dark); margin: 2px 0;">${p.company}</p>` : ''}
-      <p style="font-size:10.5px; color:#475569; white-space: pre-line;">${p.address}</p>
-      <span>${p.phone ? 'Ph: ' + p.phone : ''}</span>
+      <p style="font-size:10.5px; color:#475569; white-space: pre-line; margin-bottom: 4px;">${p.address}</p>
+      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #64748b;">
+        <span>${p.phone ? 'Ph: ' + p.phone : ''}</span>
+        <span style="font-weight: 600;">Billed: ₹ ${formatCurrency(totalBilled)} (${customerInvoices.length} bills)</span>
+      </div>
     </div>
-    <div class="actions-cell">
+    <div class="actions-cell" style="display: flex; gap: 4px; align-items: center;">
+      ${pendingDues > 0 ? `<button class="action-btn share btn-whatsapp" onclick="sendPartyPaymentReminderWhatsApp('${p.name.replace(/'/g, "\\'")}', '${p.phone || ''}')" title="Send WhatsApp Payment Reminder"><i class="fa-brands fa-whatsapp"></i></button>` : ''}
       <button class="action-btn edit" onclick="openPartyModal('${p.type}', '${p.id}')" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
       <button class="action-btn delete" onclick="deletePartyRowDb('${p.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
     </div>
