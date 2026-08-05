@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v89_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v90_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v89_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v90_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -681,7 +681,7 @@ function seedDatabasesIfEmpty() {
         branch: "Repalle"
       },
       upiId: "7386262139@upi",
-      telegram: { token: "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g", chatId: "6877857251" },
+      telegram: { token: "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g", chatId: "6877857251, 7906132548" },
       security: { autolock: "120", username: "Aaryanaqua", password: "Aaryan@2024" },
       terms: [
         "We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct."
@@ -710,7 +710,17 @@ function loadAllDatabases() {
   }
 
   if (!globalSettings.telegram) {
-    globalSettings.telegram = { token: "", chatId: "" };
+    globalSettings.telegram = { token: "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g", chatId: "6877857251, 7906132548" };
+  } else {
+    if (!globalSettings.telegram.token) globalSettings.telegram.token = "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g";
+    if (!globalSettings.telegram.chatId || !globalSettings.telegram.chatId.includes("7906132548")) {
+      if (globalSettings.telegram.chatId && globalSettings.telegram.chatId.trim()) {
+        globalSettings.telegram.chatId = globalSettings.telegram.chatId + ", 7906132548";
+      } else {
+        globalSettings.telegram.chatId = "6877857251, 7906132548";
+      }
+      localStorage.setItem("settings", JSON.stringify(globalSettings));
+    }
   }
   if (!globalSettings.security) {
     globalSettings.security = {};
@@ -2312,7 +2322,7 @@ function formatWhatsAppPhone(phoneStr) {
 
 async function sendTelegramTextMessage(messageText) {
   const token = globalSettings.telegram?.token || "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g";
-  const rawChatId = globalSettings.telegram?.chatId || "6877857251";
+  const rawChatId = globalSettings.telegram?.chatId || "6877857251, 7906132548";
   if (!token || !rawChatId) return false;
 
   const chatIds = rawChatId.split(",").map(id => id.trim()).filter(id => id.length > 0);
