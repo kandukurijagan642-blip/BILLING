@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v67_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v68_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v67_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v68_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -308,15 +308,34 @@ document.addEventListener("DOMContentLoaded", () => {
   bindBillingFormInputs();
   setupKeyboardShortcuts();
 
+  // Helper to update top header cloud sync pill indicator
+  window.updateCloudSyncBadge = function(status) {
+    const badge = document.getElementById("live-cloud-sync-badge");
+    const textEl = document.getElementById("sync-status-text");
+    if (!badge || !textEl) return;
+    if (status === "syncing") {
+      badge.className = "cloud-sync-pill syncing";
+      textEl.textContent = "Syncing...";
+    } else if (status === "synced") {
+      badge.className = "cloud-sync-pill synced";
+      textEl.textContent = "Cloud Synced";
+    } else if (status === "offline") {
+      badge.className = "cloud-sync-pill offline";
+      textEl.textContent = "Offline Mode";
+    }
+  };
+
   // Background Bidirectional Sync Function with concurrency protection
   let isSyncing = false;
   window.triggerDatabaseSync = function() {
     if (isSyncing) return;
     isSyncing = true;
+    updateCloudSyncBadge("syncing");
     
     fetch("/api/sync")
       .then(res => res.json())
       .then(data => {
+        updateCloudSyncBadge("synced");
         if (data) {
           let changed = false;
           
@@ -458,7 +477,10 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         }
       })
-      .catch(err => console.warn("Background sync connection failed (offline mode):", err))
+      .catch(err => {
+        updateCloudSyncBadge("offline");
+        console.warn("Background sync connection failed (offline mode):", err);
+      })
       .finally(() => {
         isSyncing = false;
       });
@@ -2290,9 +2312,126 @@ window.shareCurrentInvoiceWhatsApp = function() {
 
 window.shareInvoiceToWhatsApp = function(id) {
   const inv = invoicesDb.find(i => i.id === id);
-  if (inv) {
-    shareInvoicePdfNative(inv.details);
+  if (!inv) return;
+  const details = inv.details || {};
+  const phone = (details.buyer && details.buyer.phone) ? details.buyer.phone.replace(/[^0-9]/g, '') : '';
+
+  let text = `🧾 *INVOICE DETAILS*\n`;
+  text += `🏛️ *AARYAN AQUA NEEDS*\n`;
+  text += `-----------------------------------\n`;
+  text += `📄 *Invoice #:* ${inv.invoiceNo}\n`;
+  text += `👤 *Customer:* ${inv.customerName}\n`;
+  text += `📅 *Date:* ${inv.invoiceDate}\n`;
+  text += `💰 *Amount:* ₹ ${formatCurrency(inv.total)}\n`;
+  text += `💳 *Status:* ${details.paymentStatus || 'Paid'}\n`;
+  text += `-----------------------------------\n`;
+  text += `Thank you for your business! 🙏`;
+
+  const encodedText = encodeURIComponent(text);
+  let waUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
+  if (phone && phone.length >= 10) {
+    const formattedPhone = phone.length === 10 ? '91' + phone : phone;
+    waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedText}`;
   }
+  window.open(waUrl, '_blank');
+};
+
+// --- ADVANCED DATA EXPORTERS (CSV / EXCEL) ---
+function downloadCSVFile(filename, csvContent) {
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+window.exportInvoicesToCSV = function() {
+  if (!invoicesDb || invoicesDb.length === 0) {
+    alert("No invoices available to export.");
+    return;
+  }
+  let csv = "Invoice No,Date,Customer Name,Payment Status,Payment Mode,Items Count,Total (INR)\n";
+  invoicesDb.forEach(inv => {
+    const details = inv.details || {};
+    const row = [
+      `"${inv.invoiceNo || ""}"`,
+      `"${inv.invoiceDate || ""}"`,
+      `"${(inv.customerName || "").replace(/"/g, '""')}"`,
+      `"${details.paymentStatus || "Paid"}"`,
+      `"${details.paymentMode || "UPI / QR"}"`,
+      inv.itemsCount || 0,
+      inv.total || 0
+    ].join(",");
+    csv += row + "\n";
+  });
+  downloadCSVFile(`Invoices_Export_${new Date().toISOString().split('T')[0]}.csv`, csv);
+};
+
+window.exportProductsToCSV = function() {
+  if (!productsDb || productsDb.length === 0) {
+    alert("No products available to export.");
+    return;
+  }
+  let csv = "ID,Description,HSN,Pack Size,Unit,Rate (INR),Stock\n";
+  productsDb.forEach(p => {
+    const row = [
+      `"${p.id || ""}"`,
+      `"${(p.description || "").replace(/"/g, '""')}"`,
+      `"${p.hsn || ""}"`,
+      `"${p.packSize || ""}"`,
+      `"${p.unit || ""}"`,
+      p.rate || 0,
+      p.stock || 0
+    ].join(",");
+    csv += row + "\n";
+  });
+  downloadCSVFile(`Products_Inventory_${new Date().toISOString().split('T')[0]}.csv`, csv);
+};
+
+window.exportPartiesToCSV = function() {
+  if (!partiesDb || partiesDb.length === 0) {
+    alert("No party profiles available to export.");
+    return;
+  }
+  let csv = "Type,Customer Name,Company Name,Address,GSTIN,State,Phone\n";
+  partiesDb.forEach(p => {
+    const row = [
+      `"${p.type || "receiver"}"`,
+      `"${(p.name || "").replace(/"/g, '""')}"`,
+      `"${(p.company || "").replace(/"/g, '""')}"`,
+      `"${(p.address || "").replace(/"/g, '""')}"`,
+      `"${p.gstin || ""}"`,
+      `"${p.state || ""}"`,
+      `"${p.phone || ""}"`
+    ].join(",");
+    csv += row + "\n";
+  });
+  downloadCSVFile(`Parties_Export_${new Date().toISOString().split('T')[0]}.csv`, csv);
+};
+
+window.filterInvoicesByStatus = function() {
+  const statusEl = document.getElementById("filter-history-status");
+  const statusFilter = statusEl ? statusEl.value : "all";
+  const query = elements.searchHistoryInput ? elements.searchHistoryInput.value.toLowerCase().trim() : "";
+
+  let filtered = invoicesDb;
+
+  if (statusFilter !== "all") {
+    filtered = filtered.filter(inv => (inv.details?.paymentStatus || "Paid") === statusFilter);
+  }
+
+  if (query) {
+    filtered = filtered.filter(inv => 
+      (inv.invoiceNo && inv.invoiceNo.toLowerCase().includes(query)) || 
+      (inv.customerName && inv.customerName.toLowerCase().includes(query))
+    );
+  }
+
+  renderHistoryTableRows(filtered);
 };
 
 // --- SAVED INVOICE VIEW EDIT & DELETE HISTORY ---
@@ -2342,17 +2481,8 @@ function renderHistoryTableRows(records) {
   });
 }
 
-elements.searchHistoryInput.addEventListener("input", (e) => {
-  const query = e.target.value.toLowerCase().trim();
-  if (!query) {
-    renderHistoryTableRows(invoicesDb);
-    return;
-  }
-  const filtered = invoicesDb.filter(inv => 
-    inv.invoiceNo.toLowerCase().includes(query) || 
-    inv.customerName.toLowerCase().includes(query)
-  );
-  renderHistoryTableRows(filtered);
+elements.searchHistoryInput.addEventListener("input", () => {
+  window.filterInvoicesByStatus();
 });
 
 window.editSavedInvoice = function(id) {
