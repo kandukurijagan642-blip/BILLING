@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v79_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v80_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v79_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v80_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -2375,16 +2375,41 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
 
     const file = new File([pdfBlob], filename, { type: 'application/pdf' });
     const phone = details.buyer?.phone ? details.buyer.phone.replace(/[^0-9]/g, '') : '';
+    const total = parseFloat(details.total || 0);
+    const status = details.paymentStatus || 'Paid';
+    const paid = parseFloat(details.paidAmount !== undefined ? details.paidAmount : (status === 'Paid' ? total : 0));
+    const balance = Math.max(0, total - paid);
+    const realUpiId = globalSettings.upiId || globalSettings.bank?.upi || "7386262139@upi";
 
-    let text = `🏛️ *${globalSettings.company?.name || 'AARYAN AQUA NEEDS'}*\n` +
-               `📄 *Invoice #:* #${details.invoiceNo} (${details.invoiceType || 'Tax Invoice'})\n` +
-               `👤 *Customer:* ${details.buyer.name}\n` +
-               `💰 *Grand Total:* ₹ ${formatCurrency(details.total || 0)}\n\n`;
+    let text = `🏛️ *${globalSettings.company?.name || 'AARYAN AQUA NEEDS'}*\n`;
+    text += `-----------------------------------\n`;
+    text += `📄 *Invoice #:* #${details.invoiceNo} (${details.invoiceType || 'Tax Invoice'})\n`;
+    text += `👤 *Customer:* ${details.buyer?.name || 'Customer'}\n`;
+    text += `📅 *Date:* ${details.invoiceDate || ''}\n`;
+    text += `💰 *Grand Total:* ₹ ${formatCurrency(total)}\n`;
 
-    if (hostedPdfUrl) {
-      text += `📄 *View / Download Official PDF Invoice:*\n${hostedPdfUrl}\n\n`;
+    if (balance <= 0 || status === 'Paid') {
+      // FULLY PAID RECEIPT
+      text += `✅ *Payment Status:* FULLY PAID (₹ ${formatCurrency(total)})\n`;
+      text += `💳 *Payment Mode:* ${details.paymentMode || 'UPI / Cash'}\n`;
+      text += `-----------------------------------\n`;
+      if (hostedPdfUrl) {
+        text += `📄 *View / Download Official PDF Invoice:*\n${hostedPdfUrl}\n\n`;
+      }
+      text += `Thank you for your business! 🙏`;
+    } else {
+      // BALANCE DUE REPORT + PAYMENT LINK + PDF
+      text += `✅ *Amount Paid:* ₹ ${formatCurrency(paid)}\n`;
+      text += `🔴 *PENDING BALANCE DUE:* ₹ ${formatCurrency(balance)}\n`;
+      text += `-----------------------------------\n`;
+      text += `📲 *Pay Pending Balance via UPI:*\n`;
+      text += `UPI ID: *${realUpiId}*\n`;
+      text += `Direct Link: upi://pay?pa=${realUpiId}&pn=Aaryan%20Aqua%20Needs&am=${balance.toFixed(2)}&tn=Balance_Bill_${details.invoiceNo}\n\n`;
+      if (hostedPdfUrl) {
+        text += `📄 *View / Download Official PDF Invoice:*\n${hostedPdfUrl}\n\n`;
+      }
+      text += `Kindly clear the pending balance at your earliest convenience. Thank you! 🙏`;
     }
-    text += `Thank you for your business! 🙏`;
 
     // 1. Try Web Share API (native file attachment on mobile)
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -2400,7 +2425,7 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
       }
     }
 
-    // 2. Direct WhatsApp Link Fallback with hosted PDF URL & auto local download
+    // 2. Direct WhatsApp Link Fallback targeting customer phone directly
     const encodedText = encodeURIComponent(text);
     let waUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
     if (phone && phone.length >= 10) {
@@ -2519,29 +2544,9 @@ window.closeBalanceQrModal = function() {
 
 window.shareBalanceQrWhatsApp = function() {
   if (!currentBalanceQrInv) return;
-  const { inv, details, total, paid, balance } = currentBalanceQrInv;
-  const phone = (details.buyer && details.buyer.phone) ? details.buyer.phone.replace(/[^0-9]/g, '') : '';
-  const realUpiId = globalSettings.upiId || globalSettings.bank?.upi || "7386262139@upi";
-
-  let text = `🙏 *PAYMENT REMINDER - BALANCE DUE*\n`;
-  text += `🏛️ *AARYAN AQUA NEEDS*\n`;
-  text += `-----------------------------------\n`;
-  text += `📄 *Invoice #:* ${inv.invoiceNo}\n`;
-  text += `👤 *Customer:* ${inv.customerName}\n`;
-  text += `💰 *Total Bill:* ₹ ${formatCurrency(total)}\n`;
-  text += `✅ *Amount Paid:* ₹ ${formatCurrency(paid)}\n`;
-  text += `🔴 *Pending Balance:* ₹ ${formatCurrency(balance)}\n`;
-  text += `-----------------------------------\n`;
-  text += `Please scan & pay the remaining balance amount using UPI ID: *${realUpiId}*\n\nThank you! 🙏`;
-
-  const cleanPhone = phone ? phone.replace(/[^0-9]/g, '') : '';
-  const encodedText = encodeURIComponent(text);
-  let waUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
-  if (cleanPhone && cleanPhone.length >= 10) {
-    const formattedPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
-    waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedText}`;
-  }
-  window.open(waUrl, '_blank');
+  const { details } = currentBalanceQrInv;
+  closeBalanceQrModal();
+  shareInvoicePdfNative(details);
 };
 
 window.shareInvoiceToWhatsApp = function(id, btnEl = null) {
