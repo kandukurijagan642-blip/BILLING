@@ -31,6 +31,28 @@
   color: var(--text-muted) !important;
 }
 
+/* Live Low Stock Alert Pill */
+.stock-alert-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 4px 12px !important;
+  border-radius: 20px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  background: rgba(244, 63, 94, 0.15) !important;
+  color: #f43f5e !important;
+  border: 1px solid rgba(244, 63, 94, 0.4) !important;
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+  animation: pulse-red 2s infinite ease-in-out !important;
+}
+
+@keyframes pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(244, 63, 94, 0); }
+}
+
 /* Live Cloud Sync Pill Indicator */
 .cloud-sync-pill {
   display: inline-flex !important;

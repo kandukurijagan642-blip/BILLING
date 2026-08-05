@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v71_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v72_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v71_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v72_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -940,7 +940,130 @@ function updateLiveDateTime() {
   elements.currentDatetime.textContent = new Date().toLocaleDateString('en-US', options);
 }
 
-// --- DASHBOARD LOADER ---
+// --- DASHBOARD LOADER & ANALYTICS CHARTS ---
+let salesChartInstance = null;
+let gstChartInstance = null;
+
+function checkLowStockAlerts() {
+  const alertPill = document.getElementById("live-stock-alert-pill");
+  const alertText = document.getElementById("low-stock-count-text");
+  if (!alertPill || !alertText) return;
+
+  const lowStockItems = productsDb.filter(p => (parseInt(p.stock, 10) || 0) <= 5);
+  if (lowStockItems.length > 0) {
+    alertPill.classList.remove("hidden");
+    alertText.textContent = `${lowStockItems.length} Low Stock Alert${lowStockItems.length > 1 ? 's' : ''}`;
+  } else {
+    alertPill.classList.add("hidden");
+  }
+}
+
+function renderDashboardCharts() {
+  const salesCanvas = document.getElementById("dashboard-sales-chart");
+  const gstCanvas = document.getElementById("dashboard-gst-chart");
+  if (!salesCanvas || !gstCanvas || typeof Chart === "undefined") return;
+
+  const monthlyRevenue = {};
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+    monthlyRevenue[key] = 0;
+  }
+
+  let totalCgst = 0, totalSgst = 0, totalIgst = 0;
+
+  invoicesDb.forEach(inv => {
+    if (inv.invoiceDate) {
+      const parts = inv.invoiceDate.split('-');
+      if (parts.length === 3) {
+        const mIdx = parseInt(parts[1], 10) - 1;
+        const yr = parts[0];
+        if (mIdx >= 0 && mIdx < 12) {
+          const key = `${monthNames[mIdx]} ${yr}`;
+          if (monthlyRevenue.hasOwnProperty(key)) {
+            monthlyRevenue[key] += parseFloat(inv.total || 0);
+          }
+        }
+      }
+    }
+
+    const details = inv.details || {};
+    totalCgst += parseFloat(details.totalCgst || 0);
+    totalSgst += parseFloat(details.totalSgst || 0);
+    totalIgst += parseFloat(details.totalIgst || 0);
+  });
+
+  const labels = Object.keys(monthlyRevenue);
+  const dataValues = Object.values(monthlyRevenue);
+
+  if (salesChartInstance) salesChartInstance.destroy();
+  if (gstChartInstance) gstChartInstance.destroy();
+
+  salesChartInstance = new Chart(salesCanvas, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Revenue (₹)',
+        data: dataValues,
+        backgroundColor: 'rgba(6, 182, 212, 0.65)',
+        borderColor: '#06b6d4',
+        borderWidth: 2,
+        borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  const hasTaxData = (totalCgst + totalSgst + totalIgst) > 0;
+  gstChartInstance = new Chart(gstCanvas, {
+    type: 'doughnut',
+    data: {
+      labels: ['CGST', 'SGST', 'IGST'],
+      datasets: [{
+        data: hasTaxData ? [totalCgst, totalSgst, totalIgst] : [1, 1, 1],
+        backgroundColor: hasTaxData ? ['#10b981', '#06b6d4', '#f59e0b'] : ['#334155', '#475569', '#64748b'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#cbd5e1', font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+window.calculateMarginWidget = function() {
+  const cost = parseFloat(document.getElementById("calc-cost-price")?.value || 0);
+  const sell = parseFloat(document.getElementById("calc-sell-price")?.value || 0);
+  const rate = parseFloat(document.getElementById("calc-gst-rate")?.value || 0);
+
+  const gstResult = document.getElementById("calc-result-gst");
+  const profitResult = document.getElementById("calc-result-profit");
+  if (!gstResult || !profitResult) return;
+
+  const gstAmt = (sell * rate) / 100;
+  const netProfit = sell - cost;
+  const marginPct = cost > 0 ? ((netProfit / cost) * 100).toFixed(1) : 0;
+
+  gstResult.textContent = `₹ ${formatCurrency(gstAmt)}`;
+  profitResult.textContent = `₹ ${formatCurrency(netProfit)} (${marginPct}%)`;
+};
+
 function updateDashboardOverview() {
   loadAllDatabases();
   elements.statTotalInvoices.textContent = invoicesDb.length;
@@ -951,6 +1074,9 @@ function updateDashboardOverview() {
 
   const totalRevenue = invoicesDb.reduce((sum, inv) => sum + parseFloat(inv.total), 0);
   elements.statTotalAmount.textContent = '₹ ' + formatCurrency(totalRevenue);
+
+  checkLowStockAlerts();
+  renderDashboardCharts();
 
   elements.dashboardRecentInvoicesBody.innerHTML = "";
   const recent = invoicesDb.slice().reverse().slice(0, 5);
@@ -2006,35 +2132,18 @@ function populateA4PrintOverlay(invoice) {
   const bankBranchEl = document.getElementById("p-print-bank-branch");
   if (bankBranchEl) bankBranchEl.textContent = bank.branch || "Repalle";
 
-  // Render SCAN TO PAY QR Canvas
-  const qrCanvas = document.getElementById("p-print-qr-canvas");
-  if (qrCanvas && qrCanvas.getContext) {
-    const ctx = qrCanvas.getContext("2d");
-    ctx.clearRect(0, 0, qrCanvas.width, qrCanvas.height);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, qrCanvas.width, qrCanvas.height);
-    ctx.fillStyle = "#004d5a";
-    // Outer border
-    ctx.strokeRect(1, 1, qrCanvas.width - 2, qrCanvas.height - 2);
-    // Three corner target boxes
-    ctx.fillRect(5, 5, 16, 16);
-    ctx.fillRect(qrCanvas.width - 21, 5, 16, 16);
-    ctx.fillRect(5, qrCanvas.height - 21, 16, 16);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(8, 8, 10, 10);
-    ctx.fillRect(qrCanvas.width - 18, 8, 10, 10);
-    ctx.fillRect(8, qrCanvas.height - 18, 10, 10);
-    ctx.fillStyle = "#004d5a";
-    ctx.fillRect(11, 11, 4, 4);
-    ctx.fillRect(qrCanvas.width - 15, 11, 4, 4);
-    ctx.fillRect(11, qrCanvas.height - 15, 4, 4);
-    // Random matrix dots pattern
-    for (let r = 0; r < 6; r++) {
-      for (let c = 0; c < 6; c++) {
-        if ((r * 3 + c * 7) % 2 === 0) {
-          ctx.fillRect(24 + c * 5, 24 + r * 5, 3.5, 3.5);
-        }
-      }
+  // Render real scannable UPI Payment QR Code via QRious
+  const upiQrCanvas = document.getElementById("p-print-upi-qr-canvas");
+  if (upiQrCanvas && typeof QRious !== "undefined") {
+    try {
+      const upiUri = `upi://pay?pa=aaryanaquaneeds@upi&pn=Aaryan%20Aqua%20Needs&am=${invoice.total || 0}&tn=Bill%20${invoice.invoiceNo || ''}&cu=INR`;
+      new QRious({
+        element: upiQrCanvas,
+        value: upiUri,
+        size: 140
+      });
+    } catch (e) {
+      console.warn("UPI QR Code generation fallback:", e);
     }
   }
 }
