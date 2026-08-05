@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v85_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v86_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v85_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v86_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -2433,9 +2433,28 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
       btnEl.disabled = false;
     }
 
+function savePhoneToPartyDb(customerName, phone) {
+  if (!customerName || !phone || !partiesDb) return;
+  const nameLower = customerName.trim().toLowerCase();
+  const party = partiesDb.find(p => p.name && p.name.trim().toLowerCase() === nameLower);
+  if (party) {
+    party.phone = phone;
+    savePartiesDb();
+  }
+}
+
     let rawPhone = getCustomerPhoneNumber(details);
-    if (!rawPhone) {
-      rawPhone = prompt(`Enter 10-digit WhatsApp mobile number for ${details.buyer?.name || 'Customer'}:`, "") || "";
+    if (!rawPhone || rawPhone.toString().replace(/\D/g, '').length < 10) {
+      const entered = prompt(`📱 Enter 10-digit WhatsApp mobile number for ${details.buyer?.name || 'Customer'}:`, rawPhone || "");
+      if (entered && entered.trim().replace(/\D/g, '').length >= 10) {
+        rawPhone = entered.trim();
+        if (details.buyer) details.buyer.phone = rawPhone;
+        savePhoneToPartyDb(details.buyer?.name, rawPhone);
+      } else {
+        alert("WhatsApp sharing requires a valid 10-digit mobile number to open the customer's chat directly.");
+        if (waWin && !waWin.closed) waWin.close();
+        return;
+      }
     }
     const cleanPhone = formatWhatsAppPhone(rawPhone);
 
