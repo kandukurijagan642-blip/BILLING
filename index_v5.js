@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v64_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v65_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v64_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v65_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -320,35 +320,71 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data) {
           let changed = false;
           
-          // 1. Sync Products
-          if (data.products && data.products.length > 0) {
-            localStorage.setItem("products", JSON.stringify(data.products));
+          // 1. Smart Sync Products
+          const serverProducts = data.products || [];
+          let localProducts = [];
+          try {
+            localProducts = JSON.parse(localStorage.getItem("products")) || [];
+          } catch (e) { localProducts = []; }
+
+          const serverProdIds = new Set(serverProducts.map(p => p.id));
+          const prodToPush = localProducts.filter(p => p.id && !serverProdIds.has(p.id));
+
+          const mergedProdMap = new Map();
+          serverProducts.forEach(p => { if (p.id) mergedProdMap.set(p.id, p); });
+          localProducts.forEach(p => { if (p.id && !mergedProdMap.has(p.id)) mergedProdMap.set(p.id, p); });
+          const mergedProducts = Array.from(mergedProdMap.values());
+
+          if (JSON.stringify(mergedProducts) !== JSON.stringify(localProducts)) {
+            localStorage.setItem("products", JSON.stringify(mergedProducts));
+            productsDb = mergedProducts;
             changed = true;
           }
-          
-          // 2. Sync Parties
-          if (data.parties && data.parties.length > 0) {
-            localStorage.setItem("parties", JSON.stringify(data.parties));
+
+          if (prodToPush.length > 0) {
+            console.log(`Pushing ${prodToPush.length} new local products to cloud server...`);
+            syncDatabaseToServer("products", mergedProducts);
+          }
+
+          // 2. Smart Sync Parties
+          const serverParties = data.parties || [];
+          let localParties = [];
+          try {
+            localParties = JSON.parse(localStorage.getItem("parties")) || [];
+          } catch (e) { localParties = []; }
+
+          const serverPartyIds = new Set(serverParties.map(p => p.id));
+          const partyToPush = localParties.filter(p => p.id && !serverPartyIds.has(p.id));
+
+          const mergedPartyMap = new Map();
+          serverParties.forEach(p => { if (p.id) mergedPartyMap.set(p.id, p); });
+          localParties.forEach(p => { if (p.id && !mergedPartyMap.has(p.id)) mergedPartyMap.set(p.id, p); });
+          const mergedParties = Array.from(mergedPartyMap.values());
+
+          if (JSON.stringify(mergedParties) !== JSON.stringify(localParties)) {
+            localStorage.setItem("parties", JSON.stringify(mergedParties));
+            partiesDb = mergedParties;
             changed = true;
           }
+
+          if (partyToPush.length > 0) {
+            console.log(`Pushing ${partyToPush.length} new local parties to cloud server...`);
+            syncDatabaseToServer("parties", mergedParties);
+          }
           
-          // 3. Bidirectional Sync for Invoices
+          // 3. Smart Bidirectional Sync for Invoices
           const serverInvoices = data.invoices || [];
           let localInvoices = [];
           try {
             localInvoices = JSON.parse(localStorage.getItem("invoices")) || [];
-          } catch (e) {
-            localInvoices = [];
-          }
+          } catch (e) { localInvoices = []; }
           
           // Merge deleted invoice IDs from server
           const serverDeletedIds = data.deletedInvoiceIds || [];
           let deletedIds = [];
           try {
             deletedIds = JSON.parse(localStorage.getItem("deleted_invoice_ids")) || [];
-          } catch (e) {
-            deletedIds = [];
-          }
+          } catch (e) { deletedIds = []; }
           
           const deletedSet = new Set(deletedIds);
           let deletedChanged = false;
@@ -367,10 +403,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
           // Filter out any locally deleted invoices from localInvoices immediately
           if (deletedSet.size > 0) {
-            const cleanedLocal = localInvoices.filter(inv => !deletedSet.has(inv.id));
+            const cleanedLocal = localInvoices.filter(inv => inv && inv.id && !deletedSet.has(inv.id));
             if (cleanedLocal.length !== localInvoices.length) {
               localInvoices = cleanedLocal;
               localStorage.setItem("invoices", JSON.stringify(localInvoices));
+              invoicesDb = localInvoices;
               changed = true;
             }
           }
@@ -379,7 +416,7 @@ document.addEventListener("DOMContentLoaded", () => {
           const serverIds = new Set(serverInvoices.map(inv => inv.id));
           
           // Find local invoices not on server (need to push to cloud) and NOT deleted
-          const toPush = localInvoices.filter(inv => !serverIds.has(inv.id) && !deletedSet.has(inv.id));
+          const toPush = localInvoices.filter(inv => inv && inv.id && !serverIds.has(inv.id) && !deletedSet.has(inv.id));
           if (toPush.length > 0) {
             console.log(`Pushing ${toPush.length} offline invoices to server...`);
             toPush.forEach(inv => {
@@ -388,22 +425,28 @@ document.addEventListener("DOMContentLoaded", () => {
           }
           
           // Find server invoices not on local (need to pull to local storage) and NOT deleted
-          const toPull = serverInvoices.filter(inv => !localIds.has(inv.id) && !deletedSet.has(inv.id));
+          const toPull = serverInvoices.filter(inv => inv && inv.id && !localIds.has(inv.id) && !deletedSet.has(inv.id));
           if (toPull.length > 0) {
             const mergedInvoices = [...localInvoices, ...toPull];
-            mergedInvoices.sort((a, b) => a.invoiceNo.localeCompare(b.invoiceNo));
+            mergedInvoices.sort((a, b) => String(a.invoiceNo || "").localeCompare(String(b.invoiceNo || "")));
             localStorage.setItem("invoices", JSON.stringify(mergedInvoices));
+            invoicesDb = mergedInvoices;
             changed = true;
           } else if (serverInvoices.length > 0 && localInvoices.length === 0) {
-            const validServer = serverInvoices.filter(inv => !deletedSet.has(inv.id));
+            const validServer = serverInvoices.filter(inv => inv && inv.id && !deletedSet.has(inv.id));
             localStorage.setItem("invoices", JSON.stringify(validServer));
+            invoicesDb = validServer;
             changed = true;
           }
           
           // 4. Sync Settings
-          if (data.globalSettings) {
-            localStorage.setItem("settings", JSON.stringify(data.globalSettings));
-            changed = true;
+          if (data.globalSettings && Object.keys(data.globalSettings).length > 0) {
+            const currentSettingsStr = localStorage.getItem("settings") || "{}";
+            if (currentSettingsStr !== JSON.stringify(data.globalSettings)) {
+              localStorage.setItem("settings", JSON.stringify(data.globalSettings));
+              globalSettings = data.globalSettings;
+              changed = true;
+            }
           }
           
           if (changed) {
@@ -1477,6 +1520,7 @@ window.generateAndPrintInvoice = function() {
   try {
     localStorage.setItem("invoices", JSON.stringify(invoicesDb));
     syncDatabaseToServer("invoices", invoiceRecord);
+    if (window.triggerDatabaseSync) window.triggerDatabaseSync();
   } catch (err) {
     console.warn("Unable to persist invoices:", err);
   }
@@ -1569,6 +1613,7 @@ window.saveAndGenerateInvoiceOnly = function(btnEl) {
   try {
     localStorage.setItem("invoices", JSON.stringify(invoicesDb));
     syncDatabaseToServer("invoices", invoiceRecord);
+    if (window.triggerDatabaseSync) window.triggerDatabaseSync();
   } catch (err) {
     console.warn("Unable to persist invoices:", err);
   }
@@ -1659,6 +1704,7 @@ window.generateAndPrintThermal = function(btnEl) {
   try {
     localStorage.setItem("invoices", JSON.stringify(invoicesDb));
     syncDatabaseToServer("invoices", invoiceRecord);
+    if (window.triggerDatabaseSync) window.triggerDatabaseSync();
   } catch (err) {
     console.warn("Unable to persist invoices:", err);
   }
@@ -2469,6 +2515,7 @@ window.saveProductModal = function(e) {
   closeProductModal();
   loadProductsDatabaseTable();
   populateBillingSelectors();
+  if (window.triggerDatabaseSync) window.triggerDatabaseSync();
 };
 
 function loadProductsDatabaseTable() {
@@ -2524,6 +2571,7 @@ window.deleteProductRowDb = function(id) {
     localStorage.setItem("products", JSON.stringify(productsDb));
     syncDatabaseToServer("products", productsDb);
     loadProductsDatabaseTable();
+    if (window.triggerDatabaseSync) window.triggerDatabaseSync();
   }
 };
 
@@ -2616,6 +2664,7 @@ window.savePartyModal = function(e) {
   syncDatabaseToServer("parties", partiesDb);
   closePartyModal();
   loadPartiesDatabaseLists();
+  if (window.triggerDatabaseSync) window.triggerDatabaseSync();
 };
 
 function loadPartiesDatabaseLists() {
@@ -2673,6 +2722,7 @@ window.deletePartyRowDb = function(id) {
     localStorage.setItem("parties", JSON.stringify(partiesDb));
     syncDatabaseToServer("parties", partiesDb);
     loadPartiesDatabaseLists();
+    if (window.triggerDatabaseSync) window.triggerDatabaseSync();
   }
 };
 
