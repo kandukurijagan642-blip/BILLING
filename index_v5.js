@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v72_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v73_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v72_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v73_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -2131,21 +2131,6 @@ function populateA4PrintOverlay(invoice) {
   if (bankIfscEl) bankIfscEl.textContent = bank.ifsc || "SBIN0000911";
   const bankBranchEl = document.getElementById("p-print-bank-branch");
   if (bankBranchEl) bankBranchEl.textContent = bank.branch || "Repalle";
-
-  // Render real scannable UPI Payment QR Code via QRious
-  const upiQrCanvas = document.getElementById("p-print-upi-qr-canvas");
-  if (upiQrCanvas && typeof QRious !== "undefined") {
-    try {
-      const upiUri = `upi://pay?pa=aaryanaquaneeds@upi&pn=Aaryan%20Aqua%20Needs&am=${invoice.total || 0}&tn=Bill%20${invoice.invoiceNo || ''}&cu=INR`;
-      new QRious({
-        element: upiQrCanvas,
-        value: upiUri,
-        size: 140
-      });
-    } catch (e) {
-      console.warn("UPI QR Code generation fallback:", e);
-    }
-  }
 }
 
 // --- POPULATE THERMAL POS PRINT OVERLAY ---
