@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v90_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v91_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v90_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v91_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -3662,17 +3662,21 @@ window.testTelegramConnection = async function() {
   }
 
   try {
-    const text = encodeURIComponent("🔔 Aaryan Aqua Needs billing system has successfully connected your Telegram bot notification API!");
+    const messageText = "🔔 Aaryan Aqua Needs billing system has successfully connected your Telegram bot notification API!";
     let successCount = 0;
     let lastError = "";
 
     for (const id of chatIds) {
-      const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${id}&text=${text}`);
+      const res = await fetch("/api/telegram/sendMessage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, chat_id: id, text: messageText })
+      });
       const data = await res.json();
-      if (data.ok) {
+      if (data && data.ok) {
         successCount++;
       } else {
-        lastError = data.description;
+        lastError = (data && data.description) ? data.description : "Chat ID failed";
       }
     }
     
@@ -3681,11 +3685,15 @@ window.testTelegramConnection = async function() {
       elements.tgStatusText.textContent = `Test Message Sent to all ${chatIds.length} Chat IDs! Check Telegram.`;
     } else {
       elements.tgStatusIndicator.className = "info-note col-12 text-danger";
-      elements.tgStatusText.textContent = `Failed for some Chat IDs. Last Error: ${lastError}`;
+      if (lastError.toLowerCase().includes("forbidden") || lastError.toLowerCase().includes("not found")) {
+        elements.tgStatusText.textContent = `Sent to ${successCount}/${chatIds.length} accounts. For Chat ID 7906132548, open your Bot in Telegram and press START (/start) to activate! Error: ${lastError}`;
+      } else {
+        elements.tgStatusText.textContent = `Sent to ${successCount}/${chatIds.length} Chat IDs. Error: ${lastError}`;
+      }
     }
   } catch (err) {
     elements.tgStatusIndicator.className = "info-note col-12 text-danger";
-    elements.tgStatusText.textContent = "Network Error! Bot API request failed.";
+    elements.tgStatusText.textContent = "Network Error! Bot API request failed: " + err.message;
   }
 };
 
