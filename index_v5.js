@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v78_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v79_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v78_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v79_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -2476,18 +2476,36 @@ window.openBalanceQrModal = function(id) {
   const balEl = document.getElementById("bal-qr-balance");
   if (balEl) balEl.textContent = formatCurrency(balance);
 
+  const realUpiId = globalSettings.upiId || globalSettings.bank?.upi || "7386262139@upi";
+  const upiIdEl = document.getElementById("bal-qr-upi-id");
+  if (upiIdEl) upiIdEl.textContent = realUpiId;
+
+  const upiName = encodeURIComponent(globalSettings.company?.name || "Aaryan Aqua Needs");
+  const upiUri = `upi://pay?pa=${realUpiId}&pn=${upiName}&am=${balance.toFixed(2)}&tn=Balance%20Bill%20${inv.invoiceNo || ''}&cu=INR`;
+
   const canvas = document.getElementById("balance-qr-canvas");
+  const imgEl = document.getElementById("balance-qr-img");
+
+  let canvasSuccess = false;
   if (canvas && typeof QRious !== "undefined") {
     try {
-      const upiUri = `upi://pay?pa=aaryanaquaneeds@upi&pn=Aaryan%20Aqua%20Needs&am=${balance.toFixed(2)}&tn=Balance%20Bill%20${inv.invoiceNo || ''}&cu=INR`;
       new QRious({
         element: canvas,
         value: upiUri,
         size: 240
       });
+      canvas.style.display = "inline-block";
+      if (imgEl) imgEl.style.display = "none";
+      canvasSuccess = true;
     } catch (e) {
-      console.warn("Balance QR generation fallback:", e);
+      console.warn("QRious canvas render failed, switching to image fallback:", e);
     }
+  }
+
+  if (!canvasSuccess && imgEl) {
+    if (canvas) canvas.style.display = "none";
+    imgEl.src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(upiUri)}`;
+    imgEl.style.display = "inline-block";
   }
 
   const modalEl = document.getElementById("balance-qr-modal");
@@ -2503,6 +2521,7 @@ window.shareBalanceQrWhatsApp = function() {
   if (!currentBalanceQrInv) return;
   const { inv, details, total, paid, balance } = currentBalanceQrInv;
   const phone = (details.buyer && details.buyer.phone) ? details.buyer.phone.replace(/[^0-9]/g, '') : '';
+  const realUpiId = globalSettings.upiId || globalSettings.bank?.upi || "7386262139@upi";
 
   let text = `🙏 *PAYMENT REMINDER - BALANCE DUE*\n`;
   text += `🏛️ *AARYAN AQUA NEEDS*\n`;
@@ -2513,7 +2532,7 @@ window.shareBalanceQrWhatsApp = function() {
   text += `✅ *Amount Paid:* ₹ ${formatCurrency(paid)}\n`;
   text += `🔴 *Pending Balance:* ₹ ${formatCurrency(balance)}\n`;
   text += `-----------------------------------\n`;
-  text += `Please scan & pay the remaining balance amount using UPI ID: *aaryanaquaneeds@upi*\n\nThank you! 🙏`;
+  text += `Please scan & pay the remaining balance amount using UPI ID: *${realUpiId}*\n\nThank you! 🙏`;
 
   const cleanPhone = phone ? phone.replace(/[^0-9]/g, '') : '';
   const encodedText = encodeURIComponent(text);
