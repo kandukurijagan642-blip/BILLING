@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v66_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v67_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v66_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v67_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -401,41 +401,36 @@ document.addEventListener("DOMContentLoaded", () => {
             localStorage.setItem("deleted_invoice_ids", JSON.stringify(deletedIds));
           }
 
-          // Filter out any locally deleted invoices from localInvoices immediately
-          if (deletedSet.size > 0) {
-            const cleanedLocal = localInvoices.filter(inv => inv && inv.id && !deletedSet.has(inv.id));
-            if (cleanedLocal.length !== localInvoices.length) {
-              localInvoices = cleanedLocal;
-              localStorage.setItem("invoices", JSON.stringify(localInvoices));
-              invoicesDb = localInvoices;
-              changed = true;
-            }
-          }
+          // Filter out any deleted invoices
+          const cleanedLocal = localInvoices.filter(inv => inv && inv.id && !deletedSet.has(inv.id));
+          const validServer = serverInvoices.filter(inv => inv && inv.id && !deletedSet.has(inv.id));
 
-          const localIds = new Set(localInvoices.map(inv => inv.id));
-          const serverIds = new Set(serverInvoices.map(inv => inv.id));
-          
-          // Find local invoices not on server (need to push to cloud) and NOT deleted
-          const toPush = localInvoices.filter(inv => inv && inv.id && !serverIds.has(inv.id) && !deletedSet.has(inv.id));
+          const serverIds = new Set(validServer.map(inv => inv.id));
+
+          // Find local invoices not on server (need to push to cloud)
+          const toPush = cleanedLocal.filter(inv => !serverIds.has(inv.id));
           if (toPush.length > 0) {
             console.log(`Pushing ${toPush.length} offline invoices to server...`);
             toPush.forEach(inv => {
               syncDatabaseToServer("invoices", inv);
             });
           }
-          
-          // Find server invoices not on local (need to pull to local storage) and NOT deleted
-          const toPull = serverInvoices.filter(inv => inv && inv.id && !localIds.has(inv.id) && !deletedSet.has(inv.id));
-          if (toPull.length > 0) {
-            const mergedInvoices = [...localInvoices, ...toPull];
-            mergedInvoices.sort((a, b) => String(a.invoiceNo || "").localeCompare(String(b.invoiceNo || "")));
+
+          // Smart merge server invoices and local invoices
+          const mergedInvoiceMap = new Map();
+          validServer.forEach(inv => mergedInvoiceMap.set(inv.id, inv));
+          cleanedLocal.forEach(inv => {
+            if (!mergedInvoiceMap.has(inv.id)) {
+              mergedInvoiceMap.set(inv.id, inv);
+            }
+          });
+
+          const mergedInvoices = Array.from(mergedInvoiceMap.values());
+          mergedInvoices.sort((a, b) => String(a.invoiceNo || "").localeCompare(String(b.invoiceNo || "")));
+
+          if (JSON.stringify(mergedInvoices) !== JSON.stringify(localInvoices)) {
             localStorage.setItem("invoices", JSON.stringify(mergedInvoices));
             invoicesDb = mergedInvoices;
-            changed = true;
-          } else if (serverInvoices.length > 0 && localInvoices.length === 0) {
-            const validServer = serverInvoices.filter(inv => inv && inv.id && !deletedSet.has(inv.id));
-            localStorage.setItem("invoices", JSON.stringify(validServer));
-            invoicesDb = validServer;
             changed = true;
           }
           
@@ -450,25 +445,16 @@ document.addEventListener("DOMContentLoaded", () => {
           }
           
           if (changed) {
-            console.log("Database sync completed successfully! Reloading views...");
+            console.log("Database sync completed successfully! Auto-reloading all views...");
             loadAllDatabases();
             updateDashboardOverview();
             calculateSummaryAndTable();
             autoSuggestInvoiceNo();
             
-            // Re-render views if they are open/active
-            const prodView = document.getElementById("products-view");
-            if (prodView && !prodView.classList.contains("hidden")) {
-              loadProductsDatabaseTable();
-            }
-            const partiesView = document.getElementById("parties-view");
-            if (partiesView && !partiesView.classList.contains("hidden")) {
-              loadPartiesDatabaseLists();
-            }
-            const historyView = document.getElementById("history-view");
-            if (historyView && !historyView.classList.contains("hidden")) {
-              loadInvoicesHistoryTable();
-            }
+            // Auto-reload active views instantly
+            loadProductsDatabaseTable();
+            loadPartiesDatabaseLists();
+            loadInvoicesHistoryTable();
           }
         }
       })
