@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v65_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v66_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v65_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v66_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -481,15 +481,30 @@ document.addEventListener("DOMContentLoaded", () => {
   // Run initial sync
   window.triggerDatabaseSync();
 
-  // Run periodic sync every 3 seconds (real-time responsive mode)
-  setInterval(window.triggerDatabaseSync, 3000);
+  // Run periodic ultra-fast sync every 1.5 seconds (1500ms near-instant real-time sync)
+  setInterval(window.triggerDatabaseSync, 1500);
 
-  // Sync automatically when tab becomes visible (focused/returned to)
+  // Sync automatically when window/tab is focused or returned to
+  window.addEventListener("focus", () => {
+    window.triggerDatabaseSync();
+  });
+
+  // Sync automatically when tab becomes visible
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       window.triggerDatabaseSync();
     }
   });
+
+  // Throttled sync on user screen interaction
+  let lastTouchSync = 0;
+  document.addEventListener("touchstart", () => {
+    const now = Date.now();
+    if (now - lastTouchSync > 1200) {
+      lastTouchSync = now;
+      window.triggerDatabaseSync();
+    }
+  }, { passive: true });
 
   // Session Persistence calculation on page load
   const lastActiveTime = parseInt(localStorage.getItem("last_active_time") || "0", 10);
