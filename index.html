@@ -39,8 +39,8 @@
     }
   </script>
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=76">
-  <script src="invoice_utils_v5.js?v=76"></script>
+  <link rel="stylesheet" href="index.css?v=77">
+  <script src="invoice_utils_v5.js?v=77"></script>
 </head>
 <body>
 
@@ -1603,9 +1603,52 @@
         <p>Thank you for your business!</p>
         <p>Aaryan Aqua Needs - Repalle</p>
       </div>
+  <!-- BALANCE UPI QR MODAL -->
+  <div id="balance-qr-modal" class="modal-overlay hidden">
+    <div class="modal-card text-center" style="max-width: 380px;">
+      <div class="modal-header" style="justify-content: center; position: relative;">
+        <h3 style="margin: 0; color: #0a4b5c; font-size: 16px;"><i class="fa-solid fa-qrcode text-teal"></i> Balance Payment QR</h3>
+        <button class="modal-close-btn" onclick="closeBalanceQrModal()" style="position: absolute; right: 12px; top: 12px;">&times;</button>
+      </div>
+      <div class="modal-body padding-20">
+        <div style="background: #f8fafc; border-radius: 8px; padding: 12px; margin-bottom: 14px; font-size: 12.5px; text-align: left; border: 1px solid #e2e8f0;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span style="color: #64748b;">Invoice #:</span>
+            <span style="font-weight: 700; color: #0a4b5c;" id="bal-qr-inv-no">#0001</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span style="color: #64748b;">Customer:</span>
+            <span style="font-weight: 600;" id="bal-qr-customer">Customer Name</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span style="color: #64748b;">Total Bill:</span>
+            <span style="font-weight: 600;">₹ <span id="bal-qr-total">0.00</span></span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span style="color: #64748b;">Already Paid:</span>
+            <span style="font-weight: 600; color: #10b981;">₹ <span id="bal-qr-paid">0.00</span></span>
+          </div>
+          <hr style="margin: 8px 0; border: none; border-top: 1px dashed #cbd5e1;">
+          <div style="display: flex; justify-content: space-between; font-size: 13.5px; font-weight: 700;">
+            <span style="color: #ef4444;">Pending Balance:</span>
+            <span style="color: #ef4444;">₹ <span id="bal-qr-balance">0.00</span></span>
+          </div>
+        </div>
+
+        <div style="display: inline-block; padding: 10px; background: #ffffff; border: 2px solid #0a4b5c; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+          <canvas id="balance-qr-canvas" style="width: 180px; height: 180px;"></canvas>
+        </div>
+        <p style="font-size: 11px; font-weight: 700; color: #0a4b5c; margin-top: 10px; margin-bottom: 0;">
+          <i class="fa-solid fa-mobile-screen-button"></i> Scan with GPay, PhonePe, Paytm or BHIM
+        </p>
+      </div>
+      <div class="modal-footer" style="justify-content: center; gap: 8px; padding-top: 0;">
+        <button class="btn btn-secondary" onclick="closeBalanceQrModal()">Close</button>
+        <button class="btn btn-primary" onclick="shareBalanceQrWhatsApp()"><i class="fa-brands fa-whatsapp"></i> Share Reminder</button>
+      </div>
     </div>
   </div>
 
-  <script src="index_v5.js?v=76"></script>
+  <script src="index_v5.js?v=77"></script>
 </body>
 </html>

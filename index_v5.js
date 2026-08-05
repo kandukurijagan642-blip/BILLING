@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v76_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v77_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v76_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v77_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -2419,30 +2419,82 @@ window.shareCurrentInvoiceWhatsApp = function() {
   shareInvoicePdfNative(currentInvoice);
 };
 
-window.shareInvoiceToWhatsApp = function(id) {
+let currentBalanceQrInv = null;
+
+window.openBalanceQrModal = function(id) {
   const inv = invoicesDb.find(i => i.id === id);
   if (!inv) return;
   const details = inv.details || {};
+  const total = parseFloat(inv.total || 0);
+  const paid = parseFloat(details.paidAmount !== undefined ? details.paidAmount : (details.paymentStatus === 'Paid' ? total : 0));
+  const balance = Math.max(0, total - paid);
+
+  currentBalanceQrInv = { inv, details, total, paid, balance };
+
+  const invNoEl = document.getElementById("bal-qr-inv-no");
+  if (invNoEl) invNoEl.textContent = `#${inv.invoiceNo || ''}`;
+  const custEl = document.getElementById("bal-qr-customer");
+  if (custEl) custEl.textContent = inv.customerName || 'Customer';
+  const totEl = document.getElementById("bal-qr-total");
+  if (totEl) totEl.textContent = formatCurrency(total);
+  const paidEl = document.getElementById("bal-qr-paid");
+  if (paidEl) paidEl.textContent = formatCurrency(paid);
+  const balEl = document.getElementById("bal-qr-balance");
+  if (balEl) balEl.textContent = formatCurrency(balance);
+
+  const canvas = document.getElementById("balance-qr-canvas");
+  if (canvas && typeof QRious !== "undefined") {
+    try {
+      const upiUri = `upi://pay?pa=aaryanaquaneeds@upi&pn=Aaryan%20Aqua%20Needs&am=${balance.toFixed(2)}&tn=Balance%20Bill%20${inv.invoiceNo || ''}&cu=INR`;
+      new QRious({
+        element: canvas,
+        value: upiUri,
+        size: 240
+      });
+    } catch (e) {
+      console.warn("Balance QR generation fallback:", e);
+    }
+  }
+
+  const modalEl = document.getElementById("balance-qr-modal");
+  if (modalEl) modalEl.classList.remove("hidden");
+};
+
+window.closeBalanceQrModal = function() {
+  const modalEl = document.getElementById("balance-qr-modal");
+  if (modalEl) modalEl.classList.add("hidden");
+};
+
+window.shareBalanceQrWhatsApp = function() {
+  if (!currentBalanceQrInv) return;
+  const { inv, details, total, paid, balance } = currentBalanceQrInv;
   const phone = (details.buyer && details.buyer.phone) ? details.buyer.phone.replace(/[^0-9]/g, '') : '';
 
-  let text = `🧾 *INVOICE DETAILS*\n`;
+  let text = `🙏 *PAYMENT REMINDER - BALANCE DUE*\n`;
   text += `🏛️ *AARYAN AQUA NEEDS*\n`;
   text += `-----------------------------------\n`;
   text += `📄 *Invoice #:* ${inv.invoiceNo}\n`;
   text += `👤 *Customer:* ${inv.customerName}\n`;
-  text += `📅 *Date:* ${inv.invoiceDate}\n`;
-  text += `💰 *Amount:* ₹ ${formatCurrency(inv.total)}\n`;
-  text += `💳 *Status:* ${details.paymentStatus || 'Paid'}\n`;
+  text += `💰 *Total Bill:* ₹ ${formatCurrency(total)}\n`;
+  text += `✅ *Amount Paid:* ₹ ${formatCurrency(paid)}\n`;
+  text += `🔴 *Pending Balance:* ₹ ${formatCurrency(balance)}\n`;
   text += `-----------------------------------\n`;
-  text += `Thank you for your business! 🙏`;
+  text += `Please scan & pay the remaining balance amount using UPI ID: *aaryanaquaneeds@upi*\n\nThank you! 🙏`;
 
+  const cleanPhone = phone ? phone.replace(/[^0-9]/g, '') : '';
   const encodedText = encodeURIComponent(text);
   let waUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
-  if (phone && phone.length >= 10) {
-    const formattedPhone = phone.length === 10 ? '91' + phone : phone;
+  if (cleanPhone && cleanPhone.length >= 10) {
+    const formattedPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
     waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedText}`;
   }
   window.open(waUrl, '_blank');
+};
+
+window.shareInvoiceToWhatsApp = function(id, btnEl = null) {
+  const inv = invoicesDb.find(i => i.id === id);
+  if (!inv) return;
+  shareInvoicePdfNative(inv.details, btnEl);
 };
 
 // --- ADVANCED DATA EXPORTERS (CSV / EXCEL) ---
@@ -2568,6 +2620,15 @@ function renderHistoryTableRows(records) {
     if (status === 'Partial') badgeClass = 'badge-partial';
     if (status === 'Unpaid') badgeClass = 'badge-unpaid';
 
+    const total = parseFloat(inv.total || 0);
+    const paid = parseFloat(details.paidAmount !== undefined ? details.paidAmount : (status === 'Paid' ? total : 0));
+    const balance = Math.max(0, total - paid);
+
+    let balanceQrBtn = "";
+    if (balance > 0 || status === 'Partial' || status === 'Unpaid') {
+      balanceQrBtn = `<button class="action-btn share" onclick="openBalanceQrModal('${inv.id}')" title="View Balance UPI QR Code (₹ ${formatCurrency(balance)})" style="background: rgba(6, 182, 212, 0.15); color: #06b6d4;"><i class="fa-solid fa-qrcode"></i></button>`;
+    }
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td style="font-weight: 700; color: var(--primary-teal);">#${inv.invoiceNo}</td>
@@ -2577,11 +2638,12 @@ function renderHistoryTableRows(records) {
       <td style="text-align: right; font-weight: 700;">₹ ${formatCurrency(inv.total)}</td>
       <td class="text-center"><span class="badge-status ${badgeClass}">${status}</span></td>
       <td class="actions-cell">
+        ${balanceQrBtn}
         <button class="action-btn edit" onclick="editSavedInvoice('${inv.id}')" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
         <button class="action-btn print" onclick="printSavedInvoice('${inv.id}')" title="Print A4"><i class="fa-solid fa-print"></i></button>
-        <button class="action-btn print" onclick="downloadSavedInvoicePdf('${inv.id}')" title="Download PDF"><i class="fa-solid fa-file-pdf text-rose"></i></button>
+        <button class="action-btn print" onclick="downloadSavedInvoicePdf('${inv.id}', this)" title="Download PDF"><i class="fa-solid fa-file-pdf text-rose"></i></button>
         <button class="action-btn print" onclick="printSavedInvoiceThermal('${inv.id}')" title="Print Thermal POS"><i class="fa-solid fa-receipt"></i></button>
-        <button class="action-btn share btn-whatsapp" onclick="shareInvoiceToWhatsApp('${inv.id}')" title="Share via WhatsApp"><i class="fa-brands fa-whatsapp"></i></button>
+        <button class="action-btn share btn-whatsapp" onclick="shareInvoiceToWhatsApp('${inv.id}', this)" title="Share PDF via WhatsApp"><i class="fa-brands fa-whatsapp"></i></button>
         <button class="action-btn share" onclick="shareInvoiceToTelegram('${inv.id}', this)" title="Share PDF to Telegram"><i class="fa-solid fa-paper-plane text-teal"></i></button>
         <button class="action-btn delete" onclick="deleteSavedInvoice('${inv.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
       </td>
