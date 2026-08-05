@@ -256,7 +256,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v86_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v87_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v86_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v87_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -2310,6 +2310,16 @@ function formatWhatsAppPhone(phoneStr) {
   return digits;
 }
 
+function savePhoneToPartyDb(customerName, phone) {
+  if (!customerName || !phone || !partiesDb) return;
+  const nameLower = customerName.trim().toLowerCase();
+  const party = partiesDb.find(p => p.name && p.name.trim().toLowerCase() === nameLower);
+  if (party) {
+    party.phone = phone;
+    savePartiesDb();
+  }
+}
+
 function launchWhatsAppWebOrApp(cleanPhone, messageText) {
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   const encodedText = encodeURIComponent(messageText);
@@ -2319,12 +2329,12 @@ function launchWhatsAppWebOrApp(cleanPhone, messageText) {
     if (isMobile) {
       waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`;
     } else {
-      waUrl = `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`;
+      waUrl = `https://web.whatsapp.com/send/?phone=${cleanPhone}&text=${encodedText}`;
     }
   } else {
     waUrl = isMobile
       ? `https://api.whatsapp.com/send?text=${encodedText}`
-      : `https://web.whatsapp.com/send?text=${encodedText}`;
+      : `https://web.whatsapp.com/send/?text=${encodedText}`;
   }
   return waUrl;
 }
@@ -2356,7 +2366,22 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
     return;
   }
 
-  // Open window synchronously on click to prevent browser popup blockers
+  // 1. Get & Validate Customer Phone Number FIRST
+  let rawPhone = getCustomerPhoneNumber(details);
+  if (!rawPhone || rawPhone.toString().replace(/\D/g, '').length < 10) {
+    const entered = prompt(`📱 Enter 10-digit WhatsApp mobile number for ${details.buyer?.name || 'Customer'}:`, rawPhone || "");
+    if (entered && entered.trim().replace(/\D/g, '').length >= 10) {
+      rawPhone = entered.trim();
+      if (details.buyer) details.buyer.phone = rawPhone;
+      savePhoneToPartyDb(details.buyer?.name, rawPhone);
+    } else {
+      alert("WhatsApp sharing requires a valid 10-digit mobile number to open the customer's chat directly.");
+      return;
+    }
+  }
+  const cleanPhone = formatWhatsAppPhone(rawPhone);
+
+  // 2. Open Window Synchronously on Click (bypasses browser popup blocker)
   const waWin = window.open("about:blank", "_blank");
   if (waWin) {
     try {
@@ -2366,7 +2391,7 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
           <body style="font-family: system-ui, sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; height:90vh; background:#f8fafc; color:#0a4b5c;">
             <div style="font-size:28px; margin-bottom:12px;">⏳</div>
             <h3 style="margin:0 0 8px 0;">Compiling PDF & Opening WhatsApp...</h3>
-            <p style="color:#64748b; font-size:13px; margin:0;">Targeting customer phone: ${details.buyer?.name || 'Customer'}</p>
+            <p style="color:#64748b; font-size:13px; margin:0;">Targeting customer phone: +${cleanPhone}</p>
           </body>
         </html>
       `);
@@ -2432,31 +2457,6 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
       btnEl.innerHTML = origHtml;
       btnEl.disabled = false;
     }
-
-function savePhoneToPartyDb(customerName, phone) {
-  if (!customerName || !phone || !partiesDb) return;
-  const nameLower = customerName.trim().toLowerCase();
-  const party = partiesDb.find(p => p.name && p.name.trim().toLowerCase() === nameLower);
-  if (party) {
-    party.phone = phone;
-    savePartiesDb();
-  }
-}
-
-    let rawPhone = getCustomerPhoneNumber(details);
-    if (!rawPhone || rawPhone.toString().replace(/\D/g, '').length < 10) {
-      const entered = prompt(`📱 Enter 10-digit WhatsApp mobile number for ${details.buyer?.name || 'Customer'}:`, rawPhone || "");
-      if (entered && entered.trim().replace(/\D/g, '').length >= 10) {
-        rawPhone = entered.trim();
-        if (details.buyer) details.buyer.phone = rawPhone;
-        savePhoneToPartyDb(details.buyer?.name, rawPhone);
-      } else {
-        alert("WhatsApp sharing requires a valid 10-digit mobile number to open the customer's chat directly.");
-        if (waWin && !waWin.closed) waWin.close();
-        return;
-      }
-    }
-    const cleanPhone = formatWhatsAppPhone(rawPhone);
 
     const total = parseFloat(details.total || 0);
     const status = details.paymentStatus || 'Paid';
