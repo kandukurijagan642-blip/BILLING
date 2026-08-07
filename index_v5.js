@@ -2,7 +2,16 @@
 let productsDb = [];
 let partiesDb = [];
 let invoicesDb = [];
-let globalSettings = {};
+// XSS Defense Helper
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 // Active Form Invoice State
 let currentInvoice = {
@@ -256,7 +265,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v92_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v93_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -271,7 +280,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v92_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v93_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);

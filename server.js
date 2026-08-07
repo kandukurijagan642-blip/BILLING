@@ -8,6 +8,56 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 8000;
 
+// Disable server fingerprinting header
+app.disable('x-powered-by');
+
+// --- SECURITY HEADERS MIDDLEWARE ---
+app.use((req, res, next) => {
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  next();
+});
+
+// --- RATE LIMITING MIDDLEWARE (Anti-DDoS / Anti-Brute-Force) ---
+const ipRequestCounts = new Map();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const MAX_REQUESTS_PER_MINUTE = 120; // 120 requests/min
+
+app.use((req, res, next) => {
+  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+  const now = Date.now();
+
+  let clientData = ipRequestCounts.get(clientIp);
+  if (!clientData || (now - clientData.startTime) > RATE_LIMIT_WINDOW_MS) {
+    clientData = { count: 1, startTime: now };
+  } else {
+    clientData.count++;
+  }
+  ipRequestCounts.set(clientIp, clientData);
+
+  // Periodic cleanup of stale IPs every 5 minutes
+  if (ipRequestCounts.size > 10000) {
+    for (const [ip, data] of ipRequestCounts.entries()) {
+      if (now - data.startTime > RATE_LIMIT_WINDOW_MS) {
+        ipRequestCounts.delete(ip);
+      }
+    }
+  }
+
+  if (clientData.count > MAX_REQUESTS_PER_MINUTE) {
+    return res.status(429).json({
+      ok: false,
+      error: 'Too Many Requests. Rate limit exceeded for security reasons. Please try again later.',
+      retryAfterSeconds: 60
+    });
+  }
+  next();
+});
+
 // Enable CORS and JSON parsing
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -367,8 +417,14 @@ app.post('/api/invoices/upload-pdf', (req, res) => {
     const base64Data = pdfBase64.replace(/^data:application\/pdf;base64,/, "");
     const fileBuffer = Buffer.from(base64Data, 'base64');
     
-    const safeFilename = filename.replace(/[^a-zA-Z0-9_\.-]/g, '_');
+    // Strict path traversal defense
+    const cleanBasename = path.basename(filename).replace(/[^a-zA-Z0-9_\.-]/g, '_');
+    const safeFilename = cleanBasename.endsWith('.pdf') ? cleanBasename : `${cleanBasename}.pdf`;
     const filePath = path.join(PDF_DIR, safeFilename);
+
+    if (!filePath.startsWith(PDF_DIR)) {
+      return res.status(403).json({ ok: false, error: 'Access denied: Directory traversal blocked' });
+    }
 
     fs.writeFileSync(filePath, fileBuffer);
 
