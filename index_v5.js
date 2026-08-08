@@ -265,7 +265,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v93_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v94_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -280,7 +280,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v93_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v94_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -1919,11 +1919,6 @@ function populateA4PrintOverlay(invoice) {
     if (divineImg) { divineImg.style.display = "block"; divineImg.src = "lord_ganesha.jpg"; }
     if (divineImgRight) { divineImgRight.style.display = "block"; divineImgRight.src = "lord_hanuman.jpg"; }
     if (mottoText) mottoText.innerHTML = "॥ श्री गणेशाय नमः ॥ &nbsp;&nbsp;&nbsp;&nbsp; ॥ श्री हनुमते नमः ॥";
-  } else if (logoChoice === "venkateswara") {
-    if (divineMottoRow) divineMottoRow.style.display = "flex";
-    if (divineImg) { divineImg.style.display = "block"; divineImg.src = "lord_venkateswara.jpg"; }
-    if (divineImgRight) { divineImgRight.style.display = "none"; }
-    if (mottoText) mottoText.textContent = "॥ श्री वेंकटेश्वराय नमः ॥";
   } else {
     if (divineMottoRow) divineMottoRow.style.display = "none";
   }
@@ -2158,8 +2153,7 @@ function populateThermalPrintOverlay(invoice) {
   
   const logoImg = document.getElementById("th-divine-img");
   if (logoImg) {
-    if (invoice.headerLogo === "venkateswara") logoImg.src = "lord_venkateswara.jpg";
-    else if (invoice.headerLogo === "none") logoImg.style.display = "none";
+    if (invoice.headerLogo === "none") logoImg.style.display = "none";
     else logoImg.src = "lord_ganesha.jpg";
   }
 

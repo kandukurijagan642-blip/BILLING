@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqua-billing-v93';
+const CACHE_NAME = 'aqua-billing-v94';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -7,7 +7,6 @@ const ASSETS_TO_CACHE = [
   './invoice_utils_v5.js',
   './manifest.json',
   './lord_ganesha.jpg',
-  './lord_venkateswara.jpg',
   './lord_hanuman.jpg',
   './rallis_logo.png'
 ];
