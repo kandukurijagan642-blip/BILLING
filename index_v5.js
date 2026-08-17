@@ -74,6 +74,7 @@ const elements = {
   billItemHsn: document.getElementById('bill-item-hsn'),
   billItemQty: document.getElementById('bill-item-qty'),
   billItemUnit: document.getElementById('bill-item-unit'),
+  billItemPack: document.getElementById('bill-item-pack'),
   billItemGstRate: document.getElementById('bill-item-gstrate'),
   billItemDiscount: document.getElementById('bill-item-discount'),
   billItemRate: document.getElementById('bill-item-rate'),
@@ -265,7 +266,7 @@ function formatTaxValue(val) {
 // --- INITIALIZE SPA DASHBOARD ---
 document.addEventListener("DOMContentLoaded", () => {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
-  if (localStorage.getItem("sw_cleared_v94_cache_clean") !== "true") {
+  if (localStorage.getItem("sw_cleared_v95_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let registration of registrations) {
@@ -280,7 +281,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     }
-    localStorage.setItem("sw_cleared_v94_cache_clean", "true");
+    localStorage.setItem("sw_cleared_v95_cache_clean", "true");
     setTimeout(() => {
       window.location.reload();
     }, 150);
@@ -1215,6 +1216,7 @@ function bindBillingFormInputs() {
       elements.billItemRate.value = "0";
       elements.billItemQty.value = "0";
       elements.billItemUnit.value = "";
+      if (elements.billItemPack) elements.billItemPack.value = "";
       elements.billItemGstRate.value = "0";
       elements.billItemDiscount.value = "0";
       if (elements.billItemStockQty) elements.billItemStockQty.value = "—";
@@ -1226,6 +1228,7 @@ function bindBillingFormInputs() {
       elements.billItemRate.value = prod.rate || "0";
       elements.billItemQty.value = "1";
       elements.billItemUnit.value = prod.unit || "Bucket";
+      if (elements.billItemPack) elements.billItemPack.value = prod.packSize || "";
       elements.billItemGstRate.value = "0";
       elements.billItemDiscount.value = prod.discount || "0";
       if (elements.billItemStockQty) {
@@ -1296,7 +1299,9 @@ function populateBillingSelectors() {
   productsDb.forEach(p => {
     const opt = document.createElement("option");
     opt.value = p.id;
-    opt.textContent = `${p.description} (₹${p.rate})`;
+    const packStr = p.packSize ? ` [${p.packSize}]` : '';
+    const unitStr = p.unit ? ` (${p.unit})` : '';
+    opt.textContent = `${p.description}${packStr}${unitStr} - ₹${formatCurrency(p.rate)}`;
     elements.billItemSelect.appendChild(opt);
   });
 }
@@ -1409,12 +1414,13 @@ window.addBillingItemRow = function() {
   const rawSubtotal = qty * rate;
   const amount = rawSubtotal * (1 - discount / 100);
 
+  const packVal = elements.billItemPack ? elements.billItemPack.value.trim() : "";
   const newItem = {
     id: Date.now().toString(),
     baleNo: (currentInvoice.items.length + 1).toString(),
     description: desc,
     hsn: hsn,
-    packSize: prod ? (prod.packSize || "—") : "—",
+    packSize: packVal || (prod ? (prod.packSize || "—") : "—"),
     quantity: qty,
     unit: unit,
     rate: rate,
@@ -1429,7 +1435,9 @@ window.addBillingItemRow = function() {
   elements.billItemHsn.value = "";
   elements.billItemQty.value = "0";
   elements.billItemUnit.value = "";
-  elements.billItemGstRate.value = "5";
+  if (elements.billItemPack) elements.billItemPack.value = "";
+  if (elements.billItemStockQty) elements.billItemStockQty.value = "—";
+  elements.billItemGstRate.value = "0";
   elements.billItemDiscount.value = "0";
   elements.billItemRate.value = "0";
 
@@ -1470,7 +1478,10 @@ function calculateSummaryAndTable() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td style="font-weight: 700; color: var(--primary-teal);">${item.baleNo}</td>
-      <td style="text-align: left; font-weight: 600;">${item.description}</td>
+      <td style="text-align: left; font-weight: 600;">
+        ${item.description}
+        ${item.packSize && item.packSize !== '—' ? `<div style="font-size: 11px; color: #64748b; font-weight: 500;">Pack: ${item.packSize}</div>` : ''}
+      </td>
       <td>${item.hsn || "—"}</td>
       <td>${item.quantity}</td>
       <td>${item.unit || "Bucket"}</td>

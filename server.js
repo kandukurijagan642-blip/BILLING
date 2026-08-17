@@ -117,8 +117,10 @@ const ProductSchema = new mongoose.Schema({
   id: { type: String, required: true },
   description: String,
   hsn: String,
+  packSize: String,
   unit: String,
   rate: Number,
+  discount: Number,
   stock: Number,
   gstRate: Number
 }, { timestamps: true });
