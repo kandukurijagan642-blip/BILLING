@@ -183,6 +183,36 @@ function syncDatabaseToServer(type, data) {
   });
 }
 
+function deleteProductFromServer(id) {
+  fetch("/api/products/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id })
+  })
+  .then(res => res.json())
+  .then(resData => {
+    console.log(`✅ Deleted product ${id} on server.`);
+  })
+  .catch(err => {
+    console.warn(`⚠️ Offline: Product ${id} deletion pending server sync.`, err);
+  });
+}
+
+function deletePartyFromServer(id) {
+  fetch("/api/parties/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id })
+  })
+  .then(res => res.json())
+  .then(resData => {
+    console.log(`✅ Deleted party ${id} on server.`);
+  })
+  .catch(err => {
+    console.warn(`⚠️ Offline: Party ${id} deletion pending server sync.`, err);
+  });
+}
+
 // Lock screen credentials state
 let activeUsername = "Aaryanaqua";
 let activePassword = "Aaryan@2024";
@@ -367,21 +397,53 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data) {
           let changed = false;
           
-          // 1. Smart Sync Products (LWW Timestamp Conflict Resolution)
+          // 1. Smart Sync Products (LWW Timestamp Conflict Resolution + Deleted Tracker)
           const serverProducts = data.products || [];
           let localProducts = [];
           try {
             localProducts = JSON.parse(localStorage.getItem("products")) || [];
           } catch (e) { localProducts = []; }
 
+          // Merge deleted product IDs from server
+          const serverDeletedProdIds = data.deletedProductIds || [];
+          let deletedProdIds = [];
+          try {
+            deletedProdIds = JSON.parse(localStorage.getItem("deleted_product_ids")) || [];
+          } catch (e) { deletedProdIds = []; }
+
+          const deletedProdSet = new Set(deletedProdIds);
+          let deletedProdChanged = false;
+
+          serverDeletedProdIds.forEach(id => {
+            if (!deletedProdSet.has(id)) {
+              deletedProdIds.push(id);
+              deletedProdSet.add(id);
+              deletedProdChanged = true;
+            }
+          });
+
+          if (deletedProdChanged) {
+            localStorage.setItem("deleted_product_ids", JSON.stringify(deletedProdIds));
+          }
+
+          // Push any offline deleted products to the server
+          const localDeletedProdsToPush = deletedProdIds.filter(id => !serverDeletedProdIds.includes(id));
+          localDeletedProdsToPush.forEach(id => {
+            deleteProductFromServer(id);
+          });
+
+          // Filter out deleted products
+          const cleanedLocalProducts = localProducts.filter(p => p && p.id && !deletedProdSet.has(p.id));
+          const validServerProducts = serverProducts.filter(p => p && p.id && !deletedProdSet.has(p.id));
+
           const mergedProdMap = new Map();
           let needsPushProducts = false;
 
-          serverProducts.forEach(sp => {
+          validServerProducts.forEach(sp => {
             if (sp.id) mergedProdMap.set(sp.id, sp);
           });
 
-          localProducts.forEach(lp => {
+          cleanedLocalProducts.forEach(lp => {
             if (!lp.id) return;
             const sp = mergedProdMap.get(lp.id);
             if (sp) {
@@ -417,21 +479,53 @@ document.addEventListener("DOMContentLoaded", () => {
             syncDatabaseToServer("products", mergedProducts);
           }
 
-          // 2. Smart Sync Parties (LWW Timestamp Conflict Resolution)
+          // 2. Smart Sync Parties (LWW Timestamp Conflict Resolution + Deleted Tracker)
           const serverParties = data.parties || [];
           let localParties = [];
           try {
             localParties = JSON.parse(localStorage.getItem("parties")) || [];
           } catch (e) { localParties = []; }
 
+          // Merge deleted party IDs from server
+          const serverDeletedPartyIds = data.deletedPartyIds || [];
+          let deletedPartyIds = [];
+          try {
+            deletedPartyIds = JSON.parse(localStorage.getItem("deleted_party_ids")) || [];
+          } catch (e) { deletedPartyIds = []; }
+
+          const deletedPartySet = new Set(deletedPartyIds);
+          let deletedPartyChanged = false;
+
+          serverDeletedPartyIds.forEach(id => {
+            if (!deletedPartySet.has(id)) {
+              deletedPartyIds.push(id);
+              deletedPartySet.add(id);
+              deletedPartyChanged = true;
+            }
+          });
+
+          if (deletedPartyChanged) {
+            localStorage.setItem("deleted_party_ids", JSON.stringify(deletedPartyIds));
+          }
+
+          // Push any offline deleted parties to the server
+          const localDeletedPartiesToPush = deletedPartyIds.filter(id => !serverDeletedPartyIds.includes(id));
+          localDeletedPartiesToPush.forEach(id => {
+            deletePartyFromServer(id);
+          });
+
+          // Filter out deleted parties
+          const cleanedLocalParties = localParties.filter(p => p && p.id && !deletedPartySet.has(p.id));
+          const validServerParties = serverParties.filter(p => p && p.id && !deletedPartySet.has(p.id));
+
           const mergedPartyMap = new Map();
           let needsPushParties = false;
 
-          serverParties.forEach(sp => {
+          validServerParties.forEach(sp => {
             if (sp.id) mergedPartyMap.set(sp.id, sp);
           });
 
-          localParties.forEach(lp => {
+          cleanedLocalParties.forEach(lp => {
             if (!lp.id) return;
             const sp = mergedPartyMap.get(lp.id);
             if (sp) {
@@ -495,6 +589,16 @@ document.addEventListener("DOMContentLoaded", () => {
           if (deletedChanged) {
             localStorage.setItem("deleted_invoice_ids", JSON.stringify(deletedIds));
           }
+
+          // Push any offline deleted invoices to the server
+          const localDeletedInvoiceIdsToPush = deletedIds.filter(id => !serverDeletedIds.includes(id));
+          localDeletedInvoiceIdsToPush.forEach(id => {
+            fetch("/api/invoices/delete", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id })
+            }).catch(() => {});
+          });
 
           // Filter out any deleted invoices
           const cleanedLocal = localInvoices.filter(inv => inv && inv.id && !deletedSet.has(inv.id));
@@ -3186,7 +3290,17 @@ window.deleteProductRowDb = function(id) {
   if (confirm("Delete product from inventory list permanently?")) {
     productsDb = productsDb.filter(p => p.id !== id);
     localStorage.setItem("products", JSON.stringify(productsDb));
-    syncDatabaseToServer("products", productsDb);
+    
+    let deletedProdIds = [];
+    try {
+      deletedProdIds = JSON.parse(localStorage.getItem("deleted_product_ids")) || [];
+    } catch (e) { deletedProdIds = []; }
+    if (!deletedProdIds.includes(id)) {
+      deletedProdIds.push(id);
+      localStorage.setItem("deleted_product_ids", JSON.stringify(deletedProdIds));
+    }
+
+    deleteProductFromServer(id);
     loadProductsDatabaseTable();
     if (window.triggerDatabaseSync) window.triggerDatabaseSync();
   }
@@ -3387,7 +3501,17 @@ window.deletePartyRowDb = function(id) {
   if (confirm("Delete this customer party profile permanently?")) {
     partiesDb = partiesDb.filter(p => p.id !== id);
     localStorage.setItem("parties", JSON.stringify(partiesDb));
-    syncDatabaseToServer("parties", partiesDb);
+    
+    let deletedPartyIds = [];
+    try {
+      deletedPartyIds = JSON.parse(localStorage.getItem("deleted_party_ids")) || [];
+    } catch (e) { deletedPartyIds = []; }
+    if (!deletedPartyIds.includes(id)) {
+      deletedPartyIds.push(id);
+      localStorage.setItem("deleted_party_ids", JSON.stringify(deletedPartyIds));
+    }
+
+    deletePartyFromServer(id);
     loadPartiesDatabaseLists();
     if (window.triggerDatabaseSync) window.triggerDatabaseSync();
   }

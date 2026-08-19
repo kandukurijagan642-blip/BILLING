@@ -145,11 +145,21 @@ const DeletedInvoiceSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true }
 }, { timestamps: true });
 
+const DeletedProductSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true }
+}, { timestamps: true });
+
+const DeletedPartySchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true }
+}, { timestamps: true });
+
 const InvoiceModel = mongoose.model('Invoice', InvoiceSchema);
 const ProductModel = mongoose.model('Product', ProductSchema);
 const PartyModel = mongoose.model('Party', PartySchema);
 const SettingModel = mongoose.model('Setting', SettingSchema);
 const DeletedInvoiceModel = mongoose.model('DeletedInvoice', DeletedInvoiceSchema);
+const DeletedProductModel = mongoose.model('DeletedProduct', DeletedProductSchema);
+const DeletedPartyModel = mongoose.model('DeletedParty', DeletedPartySchema);
 
 // --- CONNECT TO MONGODB (IF URI PROVIDED) ---
 const mongoUri = process.env.MONGODB_URI;
@@ -174,25 +184,31 @@ if (mongoUri) {
 app.get('/api/sync', async (req, res) => {
   try {
     if (isMongoConnected) {
-      const [invoices, products, parties, dbSettings, deletedDocs] = await Promise.all([
+      const [invoices, products, parties, dbSettings, deletedDocs, deletedProds, deletedParties] = await Promise.all([
         InvoiceModel.find().maxTimeMS(4000).lean().catch(() => null),
         ProductModel.find().maxTimeMS(4000).lean().catch(() => null),
         PartyModel.find().maxTimeMS(4000).lean().catch(() => null),
         SettingModel.findOne({ key: 'globalSettings' }).maxTimeMS(4000).lean().catch(() => null),
-        DeletedInvoiceModel.find().maxTimeMS(4000).lean().catch(() => null)
+        DeletedInvoiceModel.find().maxTimeMS(4000).lean().catch(() => null),
+        DeletedProductModel.find().maxTimeMS(4000).lean().catch(() => null),
+        DeletedPartyModel.find().maxTimeMS(4000).lean().catch(() => null)
       ]);
 
       const localInvoices = readLocalJsonFile('invoices.json', []);
       const localProducts = readLocalJsonFile('products.json', []);
       const localParties = readLocalJsonFile('parties.json', []);
       const localDeleted = readLocalJsonFile('deleted_invoices.json', []);
+      const localDeletedProds = readLocalJsonFile('deleted_products.json', []);
+      const localDeletedParties = readLocalJsonFile('deleted_parties.json', []);
       
       res.json({
         invoices: invoices || localInvoices,
         products: products || localProducts,
         parties: parties || localParties,
         globalSettings: dbSettings ? dbSettings.value : readLocalJsonFile('settings.json', null),
-        deletedInvoiceIds: deletedDocs ? deletedDocs.map(d => d.id) : localDeleted
+        deletedInvoiceIds: deletedDocs ? deletedDocs.map(d => d.id) : localDeleted,
+        deletedProductIds: deletedProds ? deletedProds.map(d => d.id) : localDeletedProds,
+        deletedPartyIds: deletedParties ? deletedParties.map(d => d.id) : localDeletedParties
       });
     } else {
       res.json({
@@ -200,7 +216,9 @@ app.get('/api/sync', async (req, res) => {
         products: readLocalJsonFile('products.json', []),
         parties: readLocalJsonFile('parties.json', []),
         globalSettings: readLocalJsonFile('settings.json', null),
-        deletedInvoiceIds: readLocalJsonFile('deleted_invoices.json', [])
+        deletedInvoiceIds: readLocalJsonFile('deleted_invoices.json', []),
+        deletedProductIds: readLocalJsonFile('deleted_products.json', []),
+        deletedPartyIds: readLocalJsonFile('deleted_parties.json', [])
       });
     }
   } catch (err) {
@@ -266,15 +284,73 @@ app.post('/api/invoices/delete', async (req, res) => {
   }
 });
 
+app.post('/api/products/delete', async (req, res) => {
+  const { id } = req.body;
+  if (!id) return res.status(400).json({ error: 'Missing product id' });
+  try {
+    if (isMongoConnected) {
+      await ProductModel.deleteOne({ id });
+      await DeletedProductModel.create({ id }).catch(() => {});
+      res.json({ success: true });
+    } else {
+      let products = readLocalJsonFile('products.json', []);
+      products = products.filter(p => p.id !== id);
+      writeLocalJsonFile('products.json', products);
+      
+      let deleted = readLocalJsonFile('deleted_products.json', []);
+      if (!deleted.includes(id)) {
+        deleted.push(id);
+        writeLocalJsonFile('deleted_products.json', deleted);
+      }
+      res.json({ success: true });
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Delete product failed', details: err.message });
+  }
+});
+
+app.post('/api/parties/delete', async (req, res) => {
+  const { id } = req.body;
+  if (!id) return res.status(400).json({ error: 'Missing party id' });
+  try {
+    if (isMongoConnected) {
+      await PartyModel.deleteOne({ id });
+      await DeletedPartyModel.create({ id }).catch(() => {});
+      res.json({ success: true });
+    } else {
+      let parties = readLocalJsonFile('parties.json', []);
+      parties = parties.filter(p => p.id !== id);
+      writeLocalJsonFile('parties.json', parties);
+      
+      let deleted = readLocalJsonFile('deleted_parties.json', []);
+      if (!deleted.includes(id)) {
+        deleted.push(id);
+        writeLocalJsonFile('deleted_parties.json', deleted);
+      }
+      res.json({ success: true });
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Delete party failed', details: err.message });
+  }
+});
+
 app.post('/api/invoices/reset', async (req, res) => {
   try {
     if (isMongoConnected) {
       await InvoiceModel.deleteMany({});
       await DeletedInvoiceModel.deleteMany({});
+      await ProductModel.deleteMany({});
+      await DeletedProductModel.deleteMany({});
+      await PartyModel.deleteMany({});
+      await DeletedPartyModel.deleteMany({});
       res.json({ success: true });
     } else {
       writeLocalJsonFile('invoices.json', []);
       writeLocalJsonFile('deleted_invoices.json', []);
+      writeLocalJsonFile('products.json', []);
+      writeLocalJsonFile('deleted_products.json', []);
+      writeLocalJsonFile('parties.json', []);
+      writeLocalJsonFile('deleted_parties.json', []);
       res.json({ success: true });
     }
   } catch (err) {
@@ -449,9 +525,6 @@ app.post('/api/products', async (req, res) => {
   }
   try {
     if (isMongoConnected) {
-      // Delete any products not present in the incoming sync list
-      const sentIds = productsList.map(p => p.id).filter(Boolean);
-      await ProductModel.deleteMany({ id: { $nin: sentIds } });
       
       if (productsList.length > 0) {
         // Upsert all active products to preserve individual timestamps
@@ -485,9 +558,6 @@ app.post('/api/parties', async (req, res) => {
   }
   try {
     if (isMongoConnected) {
-      // Delete any parties not present in the incoming sync list
-      const sentIds = partiesList.map(p => p.id).filter(Boolean);
-      await PartyModel.deleteMany({ id: { $nin: sentIds } });
       
       if (partiesList.length > 0) {
         // Upsert all active parties to preserve individual timestamps

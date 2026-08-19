@@ -1857,7 +1857,21 @@ window.deleteProductRowDb = function(id) {
   if (confirm("Delete product from inventory list permanently?")) {
     productsDb = productsDb.filter(p => p.id !== id);
     localStorage.setItem("products", JSON.stringify(productsDb));
+    
+    let deletedProdIds = [];
+    try {
+      deletedProdIds = JSON.parse(localStorage.getItem("deleted_product_ids")) || [];
+    } catch (e) { deletedProdIds = []; }
+    if (!deletedProdIds.includes(id)) {
+      deletedProdIds.push(id);
+      localStorage.setItem("deleted_product_ids", JSON.stringify(deletedProdIds));
+    }
+
+    if (typeof deleteProductFromServer === 'function') {
+      deleteProductFromServer(id);
+    }
     loadProductsDatabaseTable();
+    if (window.triggerDatabaseSync) window.triggerDatabaseSync();
   }
 };
 
@@ -2004,7 +2018,21 @@ window.deletePartyRowDb = function(id) {
   if (confirm("Delete this customer party profile permanently?")) {
     partiesDb = partiesDb.filter(p => p.id !== id);
     localStorage.setItem("parties", JSON.stringify(partiesDb));
+    
+    let deletedPartyIds = [];
+    try {
+      deletedPartyIds = JSON.parse(localStorage.getItem("deleted_party_ids")) || [];
+    } catch (e) { deletedPartyIds = []; }
+    if (!deletedPartyIds.includes(id)) {
+      deletedPartyIds.push(id);
+      localStorage.setItem("deleted_party_ids", JSON.stringify(deletedPartyIds));
+    }
+
+    if (typeof deletePartyFromServer === 'function') {
+      deletePartyFromServer(id);
+    }
     loadPartiesDatabaseLists();
+    if (window.triggerDatabaseSync) window.triggerDatabaseSync();
   }
 };
 
