@@ -449,10 +449,24 @@ app.post('/api/products', async (req, res) => {
   }
   try {
     if (isMongoConnected) {
-      // Re-populate products collection to match state
-      await ProductModel.deleteMany({});
-      const result = await ProductModel.insertMany(productsList);
-      res.json({ success: true, count: result.length });
+      // Delete any products not present in the incoming sync list
+      const sentIds = productsList.map(p => p.id).filter(Boolean);
+      await ProductModel.deleteMany({ id: { $nin: sentIds } });
+      
+      if (productsList.length > 0) {
+        // Upsert all active products to preserve individual timestamps
+        const ops = productsList.map(prod => ({
+          updateOne: {
+            filter: { id: prod.id },
+            update: { $set: prod },
+            upsert: true
+          }
+        }));
+        const result = await ProductModel.bulkWrite(ops);
+        res.json({ success: true, count: productsList.length, upserted: result.upsertedCount, modified: result.modifiedCount });
+      } else {
+        res.json({ success: true, count: 0 });
+      }
     } else {
       writeLocalJsonFile('products.json', productsList);
       res.json({ success: true, count: productsList.length });
@@ -471,9 +485,24 @@ app.post('/api/parties', async (req, res) => {
   }
   try {
     if (isMongoConnected) {
-      await PartyModel.deleteMany({});
-      const result = await PartyModel.insertMany(partiesList);
-      res.json({ success: true, count: result.length });
+      // Delete any parties not present in the incoming sync list
+      const sentIds = partiesList.map(p => p.id).filter(Boolean);
+      await PartyModel.deleteMany({ id: { $nin: sentIds } });
+      
+      if (partiesList.length > 0) {
+        // Upsert all active parties to preserve individual timestamps
+        const ops = partiesList.map(party => ({
+          updateOne: {
+            filter: { id: party.id },
+            update: { $set: party },
+            upsert: true
+          }
+        }));
+        const result = await PartyModel.bulkWrite(ops);
+        res.json({ success: true, count: partiesList.length, upserted: result.upsertedCount, modified: result.modifiedCount });
+      } else {
+        res.json({ success: true, count: 0 });
+      }
     } else {
       writeLocalJsonFile('parties.json', partiesList);
       res.json({ success: true, count: partiesList.length });

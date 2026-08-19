@@ -367,19 +367,43 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data) {
           let changed = false;
           
-          // 1. Smart Sync Products
+          // 1. Smart Sync Products (LWW Timestamp Conflict Resolution)
           const serverProducts = data.products || [];
           let localProducts = [];
           try {
             localProducts = JSON.parse(localStorage.getItem("products")) || [];
           } catch (e) { localProducts = []; }
 
-          const serverProdIds = new Set(serverProducts.map(p => p.id));
-          const prodToPush = localProducts.filter(p => p.id && !serverProdIds.has(p.id));
-
           const mergedProdMap = new Map();
-          serverProducts.forEach(p => { if (p.id) mergedProdMap.set(p.id, p); });
-          localProducts.forEach(p => { if (p.id && !mergedProdMap.has(p.id)) mergedProdMap.set(p.id, p); });
+          let needsPushProducts = false;
+
+          serverProducts.forEach(sp => {
+            if (sp.id) mergedProdMap.set(sp.id, sp);
+          });
+
+          localProducts.forEach(lp => {
+            if (!lp.id) return;
+            const sp = mergedProdMap.get(lp.id);
+            if (sp) {
+              const localTime = new Date(lp.updatedAt || lp.updated_at || 0).getTime();
+              const serverTime = new Date(sp.updatedAt || sp.updated_at || 0).getTime();
+              if (localTime > serverTime) {
+                mergedProdMap.set(lp.id, lp);
+                needsPushProducts = true;
+              } else if (localTime < serverTime) {
+                // Server version is newer, keep it
+              } else {
+                if (JSON.stringify(lp) !== JSON.stringify(sp)) {
+                  mergedProdMap.set(lp.id, lp);
+                  needsPushProducts = true;
+                }
+              }
+            } else {
+              mergedProdMap.set(lp.id, lp);
+              needsPushProducts = true;
+            }
+          });
+
           const mergedProducts = Array.from(mergedProdMap.values());
 
           if (JSON.stringify(mergedProducts) !== JSON.stringify(localProducts)) {
@@ -388,24 +412,48 @@ document.addEventListener("DOMContentLoaded", () => {
             changed = true;
           }
 
-          if (prodToPush.length > 0) {
-            console.log(`Pushing ${prodToPush.length} new local products to cloud server...`);
+          if (needsPushProducts) {
+            console.log(`Pushing newer/updated local products to cloud server...`);
             syncDatabaseToServer("products", mergedProducts);
           }
 
-          // 2. Smart Sync Parties
+          // 2. Smart Sync Parties (LWW Timestamp Conflict Resolution)
           const serverParties = data.parties || [];
           let localParties = [];
           try {
             localParties = JSON.parse(localStorage.getItem("parties")) || [];
           } catch (e) { localParties = []; }
 
-          const serverPartyIds = new Set(serverParties.map(p => p.id));
-          const partyToPush = localParties.filter(p => p.id && !serverPartyIds.has(p.id));
-
           const mergedPartyMap = new Map();
-          serverParties.forEach(p => { if (p.id) mergedPartyMap.set(p.id, p); });
-          localParties.forEach(p => { if (p.id && !mergedPartyMap.has(p.id)) mergedPartyMap.set(p.id, p); });
+          let needsPushParties = false;
+
+          serverParties.forEach(sp => {
+            if (sp.id) mergedPartyMap.set(sp.id, sp);
+          });
+
+          localParties.forEach(lp => {
+            if (!lp.id) return;
+            const sp = mergedPartyMap.get(lp.id);
+            if (sp) {
+              const localTime = new Date(lp.updatedAt || lp.updated_at || 0).getTime();
+              const serverTime = new Date(sp.updatedAt || sp.updated_at || 0).getTime();
+              if (localTime > serverTime) {
+                mergedPartyMap.set(lp.id, lp);
+                needsPushParties = true;
+              } else if (localTime < serverTime) {
+                // Server version is newer, keep it
+              } else {
+                if (JSON.stringify(lp) !== JSON.stringify(sp)) {
+                  mergedPartyMap.set(lp.id, lp);
+                  needsPushParties = true;
+                }
+              }
+            } else {
+              mergedPartyMap.set(lp.id, lp);
+              needsPushParties = true;
+            }
+          });
+
           const mergedParties = Array.from(mergedPartyMap.values());
 
           if (JSON.stringify(mergedParties) !== JSON.stringify(localParties)) {
@@ -414,8 +462,8 @@ document.addEventListener("DOMContentLoaded", () => {
             changed = true;
           }
 
-          if (partyToPush.length > 0) {
-            console.log(`Pushing ${partyToPush.length} new local parties to cloud server...`);
+          if (needsPushParties) {
+            console.log(`Pushing newer/updated local parties to cloud server...`);
             syncDatabaseToServer("parties", mergedParties);
           }
           
@@ -617,7 +665,8 @@ function seedDatabasesIfEmpty() {
         gstin: "37AAACD7852Q1ZZ",
         state: "Andhra Pradesh",
         stateCode: "37",
-        phone: "9848012345"
+        phone: "9848012345",
+        updatedAt: new Date().toISOString()
       },
       {
         id: "party-2",
@@ -628,7 +677,8 @@ function seedDatabasesIfEmpty() {
         gstin: "37AAACD7852Q1ZZ",
         state: "Andhra Pradesh",
         stateCode: "37",
-        phone: "9848012345"
+        phone: "9848012345",
+        updatedAt: new Date().toISOString()
       }
     ];
     localStorage.setItem("parties", JSON.stringify(sampleParties));
@@ -644,7 +694,8 @@ function seedDatabasesIfEmpty() {
         unit: "Bucket",
         rate: 3600.00,
         gstRate: 5,
-        discount: 42.50
+        discount: 42.50,
+        updatedAt: new Date().toISOString()
       },
       {
         id: "prod-2",
@@ -654,7 +705,8 @@ function seedDatabasesIfEmpty() {
         unit: "Can",
         rate: 850.00,
         gstRate: 5,
-        discount: 10.00
+        discount: 10.00,
+        updatedAt: new Date().toISOString()
       },
       {
         id: "prod-3",
@@ -664,7 +716,8 @@ function seedDatabasesIfEmpty() {
         unit: "Bag",
         rate: 450.00,
         gstRate: 12,
-        discount: 5.00
+        discount: 5.00,
+        updatedAt: new Date().toISOString()
       }
     ];
     localStorage.setItem("products", JSON.stringify(sampleProducts));
@@ -3042,7 +3095,7 @@ window.saveProductModal = function(e) {
     if (existing) oldStock = parseInt(existing.stock, 10) || 0;
   }
 
-  const product = { id: id || "prod-" + Date.now(), description: desc, hsn, packSize: pack, unit, rate, gstRate: 0, discount: disc, stock: stock };
+  const product = { id: id || "prod-" + Date.now(), description: desc, hsn, packSize: pack, unit, rate, gstRate: 0, discount: disc, stock: stock, updatedAt: new Date().toISOString() };
 
   if (id) {
     const idx = productsDb.findIndex(p => p.id === id);
@@ -3066,6 +3119,7 @@ window.adjustProductStock = function(id, delta) {
   if (!prod) return;
   const current = parseInt(prod.stock, 10) || 0;
   prod.stock = Math.max(0, current + delta);
+  prod.updatedAt = new Date().toISOString();
   
   localStorage.setItem("products", JSON.stringify(productsDb));
   syncDatabaseToServer("products", productsDb);
@@ -3109,6 +3163,7 @@ function renderProductsTable(records) {
     tr.innerHTML = `
       <td style="font-weight: 600;">${p.description}</td>
       <td>${p.hsn || "—"}</td>
+      <td style="text-align: center; font-weight: 500; color: #475569;">${p.packSize || "—"}</td>
       <td style="text-align: right; font-weight: 700; color: var(--primary-teal);">₹ ${formatCurrency(p.rate)}</td>
       <td style="text-align: center;">
         <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
@@ -3213,7 +3268,7 @@ window.savePartyModal = function(e) {
   const stateCode = document.getElementById("modal-party-state-code").value.trim();
   const phone = document.getElementById("modal-party-phone").value.trim();
 
-  const party = { id: id || "party-" + Date.now(), type, name, company, address, gstin, state, stateCode, phone };
+  const party = { id: id || "party-" + Date.now(), type, name, company, address, gstin, state, stateCode, phone, updatedAt: new Date().toISOString() };
   const isNew = !id;
 
   if (id) {

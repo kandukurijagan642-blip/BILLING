@@ -338,7 +338,8 @@ function seedDatabasesIfEmpty() {
         gstin: "37AAACD7852Q1ZZ",
         state: "Andhra Pradesh",
         stateCode: "37",
-        phone: "9848012345"
+        phone: "9848012345",
+        updatedAt: new Date().toISOString()
       },
       {
         id: "party-2",
@@ -349,7 +350,8 @@ function seedDatabasesIfEmpty() {
         gstin: "37AAACD7852Q1ZZ",
         state: "Andhra Pradesh",
         stateCode: "37",
-        phone: "9848012345"
+        phone: "9848012345",
+        updatedAt: new Date().toISOString()
       }
     ];
     localStorage.setItem("parties", JSON.stringify(sampleParties));
@@ -365,7 +367,8 @@ function seedDatabasesIfEmpty() {
         unit: "Bucket",
         rate: 3600.00,
         gstRate: 5,
-        discount: 42.50
+        discount: 42.50,
+        updatedAt: new Date().toISOString()
       },
       {
         id: "prod-2",
@@ -375,7 +378,8 @@ function seedDatabasesIfEmpty() {
         unit: "Can",
         rate: 850.00,
         gstRate: 5,
-        discount: 10.00
+        discount: 10.00,
+        updatedAt: new Date().toISOString()
       },
       {
         id: "prod-3",
@@ -385,7 +389,8 @@ function seedDatabasesIfEmpty() {
         unit: "Bag",
         rate: 450.00,
         gstRate: 12,
-        discount: 5.00
+        discount: 5.00,
+        updatedAt: new Date().toISOString()
       }
     ];
     localStorage.setItem("products", JSON.stringify(sampleProducts));
@@ -1786,7 +1791,7 @@ window.saveProductModal = function(e) {
   const rate = parseFloat(document.getElementById("modal-prod-rate").value) || 0;
   const disc = parseFloat(document.getElementById("modal-prod-discount").value) || 0;
 
-  const product = { id: id || "prod-" + Date.now(), description: desc, hsn, packSize: pack, unit, rate, gstRate: 5, discount: disc };
+  const product = { id: id || "prod-" + Date.now(), description: desc, hsn, packSize: pack, unit, rate, gstRate: 5, discount: disc, updatedAt: new Date().toISOString() };
 
   if (id) {
     const idx = productsDb.findIndex(p => p.id === id);
@@ -1833,6 +1838,7 @@ function renderProductsTable(records) {
     tr.innerHTML = `
       <td style="font-weight: 600;">${p.description}</td>
       <td>${p.hsn || "—"}</td>
+      <td style="text-align: center; font-weight: 500; color: #475569;">${p.packSize || "—"}</td>
       <td style="text-align: right; font-weight: 700; color: var(--primary-teal);">₹ ${formatCurrency(p.rate)}</td>
       <td style="text-align: center; font-weight: 700;">
         <span style="color: var(--primary-teal);">${stockVal}</span>
@@ -1931,7 +1937,7 @@ window.savePartyModal = function(e) {
   const stateCode = document.getElementById("modal-party-state-code").value.trim();
   const phone = document.getElementById("modal-party-phone").value.trim();
 
-  const party = { id: id || "party-" + Date.now(), type, name, company, address, gstin, state, stateCode, phone };
+  const party = { id: id || "party-" + Date.now(), type, name, company, address, gstin, state, stateCode, phone, updatedAt: new Date().toISOString() };
 
   if (id) {
     const idx = partiesDb.findIndex(p => p.id === id);
