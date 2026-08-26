@@ -2,9 +2,10 @@
   "name": "aaryan-aqua-billing",
   "version": "1.0.0",
   "description": "GST-Free Commercial Billing & Stock Management System for Aaryan Aqua Needs",
-  "main": "server.js",
+  "main": "main.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "app": "electron ."
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -13,5 +14,8 @@
     "mongoose": "^8.3.1"
   },
   "author": "Antigravity",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^44.0.0"
+  }
 }
