@@ -92,6 +92,185 @@
   display: inline-block !important;
 }
 
+/* WhatsApp Automation Pill Indicator & Advanced Rotating Animations */
+@keyframes wa-radar-wave {
+  0% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+  }
+  70% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 7px rgba(34, 197, 94, 0);
+  }
+  100% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+@keyframes wa-pulse-glow {
+  0%, 100% {
+    border-color: rgba(245, 158, 11, 0.8);
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.35);
+  }
+  50% {
+    border-color: rgba(245, 158, 11, 0.35);
+    box-shadow: 0 0 3px rgba(245, 158, 11, 0.1);
+  }
+}
+
+@keyframes wa-dispatch-glow {
+  0%, 100% {
+    border-color: rgba(14, 165, 233, 0.9);
+    box-shadow: 0 0 12px rgba(14, 165, 233, 0.4);
+  }
+  50% {
+    border-color: rgba(14, 165, 233, 0.4);
+    box-shadow: 0 0 4px rgba(14, 165, 233, 0.15);
+  }
+}
+
+.whatsapp-sync-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 5px 13px !important;
+  border-radius: 20px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  background: rgba(37, 211, 102, 0.15) !important;
+  color: #16a34a !important;
+  border: 1px solid rgba(37, 211, 102, 0.4) !important;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  user-select: none !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+  cursor: pointer !important;
+  position: relative !important;
+}
+
+.whatsapp-sync-pill:hover {
+  transform: translateY(-1.5px);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Radar pulse dot inside pill */
+.wa-radar-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #22c55e;
+  display: inline-block;
+  animation: wa-radar-wave 1.8s infinite ease-in-out;
+  flex-shrink: 0;
+}
+
+/* 1. CONNECTED STATE */
+.whatsapp-sync-pill.connected {
+  background: #f0fdf4 !important;
+  color: #15803d !important;
+  border: 1.5px solid #22c55e !important;
+  box-shadow: 0 1px 6px rgba(34, 197, 94, 0.2) !important;
+}
+
+/* 2. CONNECTING / AUTHENTICATING / INITIALIZING (ROTATING SPINNER) */
+.whatsapp-sync-pill.connecting,
+.whatsapp-sync-pill.authenticating,
+.whatsapp-sync-pill.initializing {
+  background: #fffbeb !important;
+  color: #b45309 !important;
+  border: 1.5px solid #f59e0b !important;
+  animation: wa-pulse-glow 2s infinite ease-in-out !important;
+}
+
+.whatsapp-sync-pill.connecting i,
+.whatsapp-sync-pill.authenticating i,
+.whatsapp-sync-pill.initializing i {
+  color: #f59e0b !important;
+}
+
+/* 3. DISPATCHING INVOICE (ROTATING ARROWS / CYBER GLOW) */
+.whatsapp-sync-pill.dispatching {
+  background: #f0f9ff !important;
+  color: #0369a1 !important;
+  border: 1.5px solid #0ea5e9 !important;
+  animation: wa-dispatch-glow 1.5s infinite ease-in-out !important;
+}
+
+.whatsapp-sync-pill.dispatching i {
+  color: #0284c7 !important;
+}
+
+/* 4. WAITING FOR QR SCAN */
+.whatsapp-sync-pill.waiting-qr {
+  background: #fff7ed !important;
+  color: #c2410c !important;
+  border: 1.5px solid #ea580c !important;
+}
+
+/* 5. DISCONNECTED / OFFLINE */
+.whatsapp-sync-pill.disconnected {
+  background: rgba(148, 163, 184, 0.12) !important;
+  color: #64748b !important;
+  border: 1px solid rgba(148, 163, 184, 0.35) !important;
+}
+
+/* WhatsApp Modal Styles */
+.wa-status-card {
+  border-radius: 10px;
+  padding: 12px 14px;
+  transition: all 0.3s ease;
+}
+
+.wa-status-card.wa-status-connected {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+}
+
+.wa-status-card.wa-status-waiting {
+  background: #fffbeb;
+  border: 1px solid #fef3c7;
+  color: #92400e;
+}
+
+.wa-status-card.wa-status-disconnected {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+}
+
+.wa-pulse-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  background-color: #94a3b8;
+}
+
+.wa-status-connected .wa-pulse-dot {
+  background-color: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+  animation: pulse-dot 1.8s infinite ease-in-out;
+}
+
+.wa-status-waiting .wa-pulse-dot {
+  background-color: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+  animation: pulse-dot 1.2s infinite ease-in-out;
+}
+
+.wa-status-disconnected .wa-pulse-dot {
+  background-color: #94a3b8;
+}
+
+.wa-section-box {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(1.25); }
@@ -3015,4 +3194,881 @@ body {
     padding: 24px 12px;
   }
 }
+
+#whatsapp-bot-modal:not(.hidden) {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 999999 !important;
+}
+
+/* ==========================================================================
+   ADVANCED PRODUCTS INVENTORY & MASTER CATALOG STYLES
+   ========================================================================== */
+
+/* 1. KPI Top Summary Metrics Cards */
+.products-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.prod-kpi-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.25s ease;
+}
+
+.prod-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px -2px rgba(0, 0, 0, 0.08);
+  border-color: #cbd5e1;
+}
+
+.kpi-icon-pill {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.bg-blue-light { background: #eff6ff; color: #2563eb; }
+.bg-teal-light { background: #f0fdfa; color: #0d9488; }
+.bg-emerald-light { background: #f0fdf4; color: #16a34a; }
+.bg-amber-light { background: #fffbeb; color: #d97706; }
+
+.kpi-data {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.kpi-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.kpi-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+  font-family: 'Outfit', sans-serif;
+  line-height: 1.2;
+}
+
+.kpi-hint {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+/* 2. Master Card & Unified Toolbar */
+.products-main-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.05) !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+.products-header-bar {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 16px !important;
+  padding: 16px 20px !important;
+  background: #ffffff !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+.products-header-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.title-with-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.products-count-badge {
+  background: #e0f2fe;
+  color: #0284c7;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid #bae6fd;
+}
+
+.products-header-sub {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+  font-weight: 500;
+}
+
+.products-toolbar-controls {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  flex-wrap: wrap !important;
+}
+
+.products-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 7px 12px;
+  transition: all 0.2s ease;
+}
+
+.products-search-box:focus-within {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+  background: #ffffff;
+}
+
+.products-search-box i {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.products-search-box input {
+  border: none !important;
+  background: transparent !important;
+  outline: none !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  color: #0f172a !important;
+  width: 200px !important;
+  padding: 0 !important;
+}
+
+.products-filter-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.products-filter-wrapper .filter-icon {
+  position: absolute;
+  left: 11px;
+  pointer-events: none;
+  color: #64748b;
+  font-size: 11.5px;
+}
+
+.products-filter-wrapper select {
+  background: #f8fafc !important;
+  border: 1.5px solid #cbd5e1 !important;
+  border-radius: 8px !important;
+  padding: 7px 14px 7px 30px !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  color: #1e293b !important;
+  outline: none !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  width: auto !important;
+}
+
+.products-filter-wrapper select:hover {
+  border-color: #94a3b8 !important;
+}
+
+.products-filter-wrapper select:focus {
+  border-color: #0f766e !important;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12) !important;
+}
+
+.export-btn {
+  background: #ffffff !important;
+  border: 1.5px solid #cbd5e1 !important;
+  color: #334155 !important;
+  font-weight: 600 !important;
+  padding: 7px 12px !important;
+  border-radius: 8px !important;
+  font-size: 12.5px !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04) !important;
+}
+
+.export-btn:hover {
+  background: #f8fafc !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+}
+
+.btn-add-product {
+  background: linear-gradient(135deg, #0a4b5c, #0f766e) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  border: none !important;
+  padding: 8px 16px !important;
+  border-radius: 8px !important;
+  font-size: 12.5px !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  box-shadow: 0 2px 6px rgba(10, 75, 92, 0.25) !important;
+  transition: all 0.2s ease !important;
+}
+
+.btn-add-product:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(10, 75, 92, 0.35) !important;
+}
+
+/* 3. Products Table Styling */
+.products-table-responsive {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.products-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+
+.products-table thead th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 13px 16px;
+  border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.products-table tbody td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.products-table tbody tr:hover td {
+  background-color: #f8fafc;
+}
+
+/* Interactive Discount Badge */
+.prod-discount-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 6px;
+  padding: 2px 7px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+}
+
+.prod-discount-badge:focus-within {
+  border-color: #16a34a;
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
+}
+
+.prod-discount-input {
+  width: 48px;
+  border: none !important;
+  outline: none !important;
+  text-align: right;
+  font-weight: 800;
+  font-size: 12.5px;
+  color: #15803d;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+.prod-discount-pct {
+  font-size: 11px;
+  color: #16a34a;
+  font-weight: 800;
+}
+
+/* Stock Stepper Controls */
+.prod-stock-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn-stock-step {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.btn-stock-step:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.stock-qty-text {
+  font-weight: 800;
+  font-size: 13px;
+  min-width: 22px;
+  text-align: center;
+  color: #0f172a;
+}
+
+/* Action Buttons */
+.prod-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.prod-action-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.prod-action-btn.edit {
+  background: #eff6ff;
+  color: #2563eb;
+  border-color: #bfdbfe;
+}
+
+.prod-action-btn.edit:hover {
+  background: #dbeafe;
+  color: #1d4ed8;
+  transform: scale(1.06);
+}
+
+.prod-action-btn.delete {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.prod-action-btn.delete:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+  transform: scale(1.06);
+}
+
+/* Table Footer Styling */
+#products-list-tfoot {
+  background: #f8fafc;
+  border-top: 2px solid #cbd5e1;
+}
+
+/* ==========================================================================
+   ADVANCED MOBILE & RESPONSIVE UX ENGINE (Max Width: 768px & 480px)
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  /* 1. Viewport & Layout Containment */
+  html, body {
+    overflow-x: hidden !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    position: relative;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .dashboard-wrapper {
+    overflow-x: hidden !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-height: 100vh;
+  }
+
+  .main-content {
+    width: 100% !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+    padding-bottom: 30px !important;
+  }
+
+  .content-view {
+    padding: 12px 10px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* 2. Sleek Mobile Top Header */
+  .content-header {
+    padding: 8px 12px !important;
+    min-height: 52px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .header-left {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+  }
+
+  .content-header h2 {
+    font-size: 15px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    margin: 0 !important;
+  }
+
+  .app-top-header-meta {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    flex-shrink: 0 !important;
+  }
+
+  #current-datetime {
+    display: none !important; /* Hide long timestamp to prevent mobile header overflow */
+  }
+
+  .stock-alert-pill,
+  .cloud-sync-pill,
+  .whatsapp-sync-pill {
+    padding: 4px 8px !important;
+    font-size: 10.5px !important;
+    gap: 4px !important;
+  }
+
+  /* 3. Products Page Mobile Optimization */
+  .products-kpi-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .prod-kpi-card {
+    padding: 10px 12px !important;
+    gap: 10px !important;
+    border-radius: 10px !important;
+  }
+
+  .kpi-icon-pill {
+    width: 38px !important;
+    height: 38px !important;
+    font-size: 16px !important;
+    border-radius: 8px !important;
+  }
+
+  .kpi-label {
+    font-size: 9px !important;
+    letter-spacing: 0.3px !important;
+  }
+
+  .kpi-value {
+    font-size: 15px !important;
+  }
+
+  .kpi-hint {
+    display: none !important; /* Conceal secondary hint to keep mobile cards neat */
+  }
+
+  .products-header-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 14px 12px !important;
+  }
+
+  .products-header-title {
+    width: 100% !important;
+  }
+
+  .products-header-title h3 {
+    font-size: 15px !important;
+  }
+
+  .products-header-sub {
+    font-size: 11px !important;
+    line-height: 1.4 !important;
+  }
+
+  .products-toolbar-controls {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .products-search-box {
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .products-search-box input {
+    width: 100% !important;
+    font-size: 13px !important;
+  }
+
+  .products-filter-wrapper {
+    width: 100% !important;
+  }
+
+  .products-filter-wrapper select {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    padding-left: 32px !important;
+  }
+
+  .export-btn,
+  .btn-add-product {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 10px !important;
+    font-size: 13px !important;
+  }
+
+  .products-table-responsive {
+    border-radius: 8px !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    margin: 0 !important;
+    width: 100% !important;
+    border: 1px solid #e2e8f0 !important;
+  }
+
+  .products-table {
+    min-width: 680px !important;
+    font-size: 12px !important;
+  }
+
+  .products-table th,
+  .products-table td {
+    padding: 10px 8px !important;
+  }
+
+  .prod-discount-input {
+    width: 42px !important;
+    font-size: 12px !important;
+  }
+
+  /* 4. GST Billing Form Mobile Layout */
+  .billing-page-container {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  .billing-card-form {
+    padding: 12px !important;
+    border-radius: 10px !important;
+  }
+
+  /* Two-column responsive item input grid instead of 10 tall vertical blocks */
+  .product-input-row {
+    display: grid !important;
+    grid-template-columns: repeat(6, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .product-input-row .flex-item-desc {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+  }
+
+  .product-input-row .flex-item-stock {
+    grid-column: span 3 !important;
+    width: 100% !important;
+  }
+
+  .product-input-row .flex-item-hsn {
+    grid-column: span 3 !important;
+    width: 100% !important;
+  }
+
+  .product-input-row .flex-item-qty {
+    grid-column: span 2 !important;
+    width: 100% !important;
+  }
+
+  .product-input-row .flex-item-unit {
+    grid-column: span 2 !important;
+    width: 100% !important;
+  }
+
+  .product-input-row .flex-item-pack {
+    grid-column: span 2 !important;
+    width: 100% !important;
+  }
+
+  .product-input-row .flex-item-discount {
+    grid-column: span 3 !important;
+    width: 100% !important;
+  }
+
+  .product-input-row .flex-item-rate {
+    grid-column: span 3 !important;
+    width: 100% !important;
+  }
+
+  .product-input-row .flex-item-netrate {
+    grid-column: 1 / -1 !important;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .product-input-row .btn-add-row {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    padding: 11px !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    margin-top: 4px !important;
+  }
+
+  .billing-entry-table {
+    min-width: 620px !important;
+  }
+
+  .summary-card {
+    position: static !important;
+    width: 100% !important;
+    border-radius: 10px !important;
+    margin-top: 10px !important;
+  }
+
+  .summary-actions {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .summary-actions button {
+    width: 100% !important;
+    padding: 12px !important;
+    font-size: 13.5px !important;
+    justify-content: center !important;
+  }
+
+  /* 5. Mobile Modals (Centered, accessible on touch, scrollable body) */
+  .modal-overlay {
+    padding: 12px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .modal-box {
+    width: 100% !important;
+    max-width: 96vw !important;
+    max-height: 90vh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    border-radius: 14px !important;
+    margin: auto !important;
+    overflow: hidden !important;
+  }
+
+  .modal-header {
+    flex-shrink: 0 !important;
+    padding: 14px 16px !important;
+  }
+
+  .modal-body {
+    flex: 1 1 auto !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding: 14px 16px !important;
+    max-height: calc(90vh - 120px) !important;
+  }
+
+  .modal-footer {
+    flex-shrink: 0 !important;
+    padding: 12px 16px !important;
+    display: flex !important;
+    gap: 8px !important;
+    flex-wrap: wrap !important;
+  }
+
+  .modal-footer button {
+    flex: 1 1 auto !important;
+    min-width: 100px !important;
+    padding: 10px !important;
+  }
+
+  /* 6. Invoice History Toolbar on Mobile */
+  #view-history .card-box-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+
+  #view-history .card-box-header > div {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  #view-history .search-box {
+    width: 100% !important;
+  }
+
+  #view-history .search-box input {
+    width: 100% !important;
+  }
+
+  #filter-history-status {
+    width: 100% !important;
+  }
+
+  #view-history .export-btn,
+  #view-history button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* 7. Parties Master View on Mobile */
+  .parties-lists-container {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  .parties-list-half {
+    width: 100% !important;
+  }
+
+  .party-action-bar {
+    flex-direction: column !important;
+    gap: 8px !important;
+    align-items: stretch !important;
+  }
+
+  .party-action-bar input,
+  .party-action-bar button {
+    width: 100% !important;
+  }
+
+  /* 8. Lock Screen Card on Mobile */
+  .login-card {
+    max-width: 92vw !important;
+    padding: 24px 18px !important;
+  }
+}
+
+/* Extra small devices (<= 480px, compact phones like iPhone SE) */
+@media (max-width: 480px) {
+  .content-header h2 {
+    font-size: 13.5px !important;
+  }
+
+  .app-top-header-meta .stock-alert-pill span,
+  .app-top-header-meta .whatsapp-sync-pill span:not(.wa-radar-dot) {
+    display: none !important;
+  }
+
+  .stock-alert-pill,
+  .whatsapp-sync-pill {
+    padding: 5px 8px !important;
+  }
+
+  .products-kpi-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+  }
+
+  .prod-kpi-card {
+    padding: 8px 10px !important;
+    gap: 8px !important;
+  }
+
+  .kpi-icon-pill {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 14px !important;
+  }
+
+  .kpi-value {
+    font-size: 13.5px !important;
+  }
+
+  .btn-stock-step {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  .prod-action-btn {
+    width: 32px !important;
+    height: 32px !important;
+  }
+
+  .product-input-row .flex-item-stock,
+  .product-input-row .flex-item-hsn,
+  .product-input-row .flex-item-discount,
+  .product-input-row .flex-item-rate {
+    grid-column: span 3 !important;
+  }
+
+  .product-input-row .flex-item-qty,
+  .product-input-row .flex-item-unit,
+  .product-input-row .flex-item-pack {
+    grid-column: span 2 !important;
+  }
+}
+
 

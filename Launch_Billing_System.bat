@@ -1,15 +1,15 @@
 @echo off
 title Aaryan Aqua Needs - GST Billing System Launcher
 cd /d "%~dp0"
-echo Starting Aaryan Aqua Needs GST Billing System...
+echo Starting Aaryan Aqua Needs GST Billing System & WhatsApp Server...
 
-:: Start local HTTP server in background if python is available, otherwise open file directly
-where python >nul 2>nul
-if %errorlevel% equ 0 (
-    powershell -Command "Start-Process python -ArgumentList '-m http.server 8000' -WindowStyle Hidden"
-    timeout /t 1 /nobreak >nul
-    start "" "http://localhost:8000"
-) else (
-    start "" "%~dp0index.html"
+:: Check if server is already running on port 8000
+netstat -ano | findstr :8000 >nul 2>&1
+if %errorlevel% neq 0 (
+    start /b node server.js >nul 2>&1
+    ping -n 3 127.0.0.1 >nul
 )
+
+:: Launch in App Mode / Browser
+start msedge --app="http://localhost:8000" || start chrome --app="http://localhost:8000" || start http://localhost:8000
 exit

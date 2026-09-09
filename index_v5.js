@@ -160,7 +160,10 @@ elements.sumCgstRow = elements.sumCgst ? elements.sumCgst.closest('.summary-row'
 elements.sumSgstRow = elements.sumSgst ? elements.sumSgst.closest('.summary-row') : null;
 elements.sumIgstRow = elements.sumIgst ? elements.sumIgst.closest('.summary-row') : null;
 
+window.lastSyncETag = null;
+
 function syncDatabaseToServer(type, data) {
+  window.lastSyncETag = null;
   let endpoint = "";
   if (type === "invoices") endpoint = "/api/invoices";
   else if (type === "products") endpoint = "/api/products";
@@ -184,6 +187,7 @@ function syncDatabaseToServer(type, data) {
 }
 
 function deleteProductFromServer(id) {
+  window.lastSyncETag = null;
   fetch("/api/products/delete", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -199,6 +203,7 @@ function deleteProductFromServer(id) {
 }
 
 function deletePartyFromServer(id) {
+  window.lastSyncETag = null;
   fetch("/api/parties/delete", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -348,6 +353,13 @@ document.addEventListener("DOMContentLoaded", () => {
   bindBillingFormInputs();
   setupKeyboardShortcuts();
 
+  // Initialize WhatsApp background bot real-time status monitor (SSE + Adaptive Fast Poll)
+  fetchWhatsAppBotStatus();
+  initWhatsAppEventSource();
+
+  // Initialize Real-Time Database Sync Stream (SSE) for 0ms sub-millisecond cloud updates
+  initDatabaseEventSource();
+
   // Helper to update top header cloud sync pill indicator with auto-revert safety
   let syncBadgeTimer = null;
   window.updateCloudSyncBadge = function(status) {
@@ -369,16 +381,206 @@ document.addEventListener("DOMContentLoaded", () => {
       }, 3000);
     } else if (status === "synced") {
       badge.className = "cloud-sync-pill synced";
-      textEl.textContent = "Cloud Synced";
+      textEl.textContent = "Google Drive Synced";
     } else if (status === "offline") {
       badge.className = "cloud-sync-pill offline";
       textEl.textContent = "Offline Mode";
     }
   };
 
+  // Manual Trigger for Google Drive & Live Sheets Sync
+  window.triggerManualGoogleDriveSync = async function(btnEl) {
+    let origHtml = "";
+    if (btnEl) {
+      origHtml = btnEl.innerHTML;
+      btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Syncing to Google Drive...`;
+      btnEl.disabled = true;
+    }
+
+    try {
+      updateCloudSyncBadge("syncing");
+      const res = await fetch("/api/google-drive/sync-now", { method: "POST" });
+      const data = await res.json();
+      if (data && data.ok) {
+        updateCloudSyncBadge("synced");
+        if (btnEl) {
+          btnEl.innerHTML = `<i class="fa-solid fa-check text-success"></i> Synced to Google Drive!`;
+          setTimeout(() => {
+            btnEl.innerHTML = origHtml;
+            btnEl.disabled = false;
+          }, 3000);
+        }
+        showFloatingToast(`☁️ All data synced to your Google Drive Master Spreadsheet!`);
+      } else {
+        throw new Error(data?.error || "Sync failed");
+      }
+    } catch (err) {
+      console.warn("Manual Google Drive sync error:", err);
+      updateCloudSyncBadge("offline");
+      if (btnEl) {
+        btnEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Sync Error`;
+        setTimeout(() => {
+          btnEl.innerHTML = origHtml;
+          btnEl.disabled = false;
+        }, 3000);
+      }
+      alert("Google Drive sync notice: " + err.message);
+    }
+  };
+
+  // Batch PDF Compiler & Google Drive Cloud Linker
+  window.syncAndGenerateAllDrivePdfs = async function(btnEl) {
+    loadAllDatabases();
+    if (!invoicesDb || invoicesDb.length === 0) {
+      alert("No invoices found to sync!");
+      return;
+    }
+
+    let origHtml = "";
+    if (btnEl) {
+      origHtml = btnEl.innerHTML;
+      btnEl.disabled = true;
+    }
+
+    const printWrapper = document.getElementById("print-invoice-wrapper");
+    if (!printWrapper) {
+      alert("Invoice print container not found.");
+      if (btnEl) btnEl.disabled = false;
+      return;
+    }
+
+    printWrapper.style.display = "block";
+    printWrapper.style.position = "absolute";
+    printWrapper.style.left = "-9999px";
+    printWrapper.style.top = "0";
+
+    const opt = {
+      margin:       [0, 0, 0, 0],
+      image:        { type: 'jpeg', quality: 0.95 },
+      html2canvas:  { scale: 1.35, useCORS: true, logging: false },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    let processedCount = 0;
+
+    for (let i = 0; i < invoicesDb.length; i++) {
+      const inv = invoicesDb[i];
+      if (btnEl) {
+        btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Processing PDF ${i + 1}/${invoicesDb.length} (Inv #${inv.invoiceNo})...`;
+      }
+
+      try {
+        populateA4PrintOverlay(inv.details || inv);
+        const element = printWrapper.querySelector('.tally-invoice-container') || printWrapper;
+
+        const origTallyHeight = element.style.height;
+        const origTallyMaxHeight = element.style.maxHeight;
+        const origTallyPadding = element.style.padding;
+        const origTallyOverflow = element.style.overflow;
+
+        element.style.height = "294mm";
+        element.style.maxHeight = "294mm";
+        element.style.padding = "6mm 8mm";
+        element.style.overflow = "hidden";
+
+        const blob = await html2pdf().from(element).set(opt).toPdf().get('pdf').then(pdf => {
+          const totalPages = pdf.internal.getNumberOfPages();
+          for (let p = totalPages; p > 1; p--) {
+            pdf.deletePage(p);
+          }
+          return pdf.output('blob');
+        });
+
+        element.style.height = origTallyHeight;
+        element.style.maxHeight = origTallyMaxHeight;
+        element.style.padding = origTallyPadding;
+        element.style.overflow = origTallyOverflow;
+
+        const reader = new FileReader();
+        const pdfBase64 = await new Promise((resolve) => {
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        });
+
+        const uploadRes = await fetch("/api/invoices/upload-pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: `Invoice_${inv.invoiceNo}.pdf`,
+            invoiceNo: inv.invoiceNo,
+            id: inv.id,
+            pdfBase64: pdfBase64
+          })
+        });
+
+        const uploadData = await uploadRes.json();
+        if (uploadData && uploadData.ok && uploadData.pdfUrl) {
+          inv.pdfUrl = uploadData.pdfUrl;
+          if (inv.details) inv.details.pdfUrl = uploadData.pdfUrl;
+          processedCount++;
+        }
+      } catch (err) {
+        console.warn(`Error generating PDF for invoice #${inv.invoiceNo}:`, err);
+      }
+    }
+
+    printWrapper.style.display = "";
+    printWrapper.style.position = "";
+    printWrapper.style.left = "";
+
+    localStorage.setItem("invoices", JSON.stringify(invoicesDb));
+    if (typeof renderHistoryTableRows === 'function') {
+      renderHistoryTableRows(invoicesDb);
+    }
+
+    if (btnEl) {
+      btnEl.innerHTML = `<i class="fa-solid fa-check text-success"></i> All ${processedCount} PDFs Linked!`;
+      setTimeout(() => {
+        btnEl.innerHTML = origHtml;
+        btnEl.disabled = false;
+      }, 3500);
+    }
+
+    alert(`🎉 Successfully compiled and uploaded ${processedCount} PDFs to Google Drive!\nColumn M in your Master Google Sheet is now fully updated with clickable hyperlinks.`);
+  };
+
   // Background Bidirectional Sync Function with concurrency protection & strict fetch timeout
   let isSyncing = false;
-  window.triggerDatabaseSync = function() {
+
+  // Real-time Database EventStream Listener (Server-Sent Events for 0ms Live Sync)
+  let dbEventSource = null;
+  function initDatabaseEventSource() {
+    if (!window.EventSource) return;
+    if (dbEventSource) {
+      try { dbEventSource.close(); } catch (e) {}
+    }
+
+    try {
+      dbEventSource = new EventSource('/api/sync/events');
+
+      dbEventSource.onmessage = function(e) {
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload && payload.type && payload.type !== 'connected') {
+            // Instant real-time database update pushed from server!
+            window.lastSyncETag = null; // Invalidate cached ETag to force pull fresh records
+            window.triggerDatabaseSync(true);
+          }
+        } catch (err) {
+          // Heartbeat or malformed frame ignored safely
+        }
+      };
+
+      dbEventSource.onerror = function() {
+        try { dbEventSource.close(); } catch (e) {}
+        setTimeout(initDatabaseEventSource, 3500);
+      };
+    } catch (err) {
+      console.warn("Database SSE stream initialization error:", err);
+    }
+  }
+
+  window.triggerDatabaseSync = function(forceReload = false) {
     if (isSyncing) return;
     isSyncing = true;
     updateCloudSyncBadge("syncing");
@@ -386,13 +588,26 @@ document.addEventListener("DOMContentLoaded", () => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    fetch("/api/sync", { signal: controller.signal })
+    const headers = {};
+    if (window.lastSyncETag && !forceReload) {
+      headers["If-None-Match"] = window.lastSyncETag;
+    }
+
+    fetch("/api/sync", { headers, signal: controller.signal })
       .then(res => {
         clearTimeout(timeoutId);
+        if (res.status === 304) {
+          // In sync! 0 bytes payload, 0ms parsing time
+          updateCloudSyncBadge("synced");
+          return null;
+        }
         if (!res.ok) throw new Error("HTTP sync error " + res.status);
+        const etag = res.headers.get("ETag");
+        if (etag) window.lastSyncETag = etag;
         return res.json();
       })
       .then(data => {
+        if (!data) return; // 304 Not Modified
         updateCloudSyncBadge("synced");
         if (data) {
           let changed = false;
@@ -674,8 +889,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // Run initial sync
   window.triggerDatabaseSync();
 
-  // Run periodic ultra-fast sync every 1.5 seconds (1500ms near-instant real-time sync)
-  setInterval(window.triggerDatabaseSync, 1500);
+  // Run periodic sync (1.5s on localhost, 10s on cloud/Netlify to conserve bandwidth)
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const syncIntervalMs = isLocalhost ? 1500 : 10000;
+  setInterval(window.triggerDatabaseSync, syncIntervalMs);
 
   // Sync automatically when window/tab is focused or returned to
   window.addEventListener("focus", () => {
@@ -1069,6 +1286,9 @@ window.closeMobileSidebar = function() {
 
 window.switchTab = function(tabName) {
   if (isLocked) return;
+  if (typeof window.closeMobileSidebar === 'function') {
+    window.closeMobileSidebar();
+  }
 
   elements.navItems.forEach(btn => {
     if (btn.getAttribute("data-tab") === tabName) {
@@ -1366,6 +1586,16 @@ function bindBillingFormInputs() {
     });
   });
 
+  window.calculateBillingItemNetVal = function() {
+    const rate = parseFloat(elements.billItemRate ? elements.billItemRate.value : 0) || 0;
+    const discount = parseFloat(elements.billItemDiscount ? elements.billItemDiscount.value : 0) || 0;
+    const netVal = Math.max(0, rate - (rate * discount / 100));
+    const netValEl = document.getElementById("bill-item-net-val");
+    if (netValEl) {
+      netValEl.value = rate > 0 ? `₹ ${formatCurrency(netVal)}` : "₹ 0.00";
+    }
+  };
+
   elements.billItemSelect.addEventListener("change", (e) => {
     const prodId = e.target.value;
     if (!prodId) {
@@ -1377,6 +1607,7 @@ function bindBillingFormInputs() {
       elements.billItemGstRate.value = "0";
       elements.billItemDiscount.value = "0";
       if (elements.billItemStockQty) elements.billItemStockQty.value = "—";
+      calculateBillingItemNetVal();
       return;
     }
     const prod = productsDb.find(p => p.id === prodId);
@@ -1391,8 +1622,16 @@ function bindBillingFormInputs() {
       if (elements.billItemStockQty) {
         elements.billItemStockQty.value = prod.stock !== undefined ? prod.stock : 0;
       }
+      calculateBillingItemNetVal();
     }
   });
+
+  if (elements.billItemDiscount) {
+    elements.billItemDiscount.addEventListener("input", calculateBillingItemNetVal);
+  }
+  if (elements.billItemRate) {
+    elements.billItemRate.addEventListener("input", calculateBillingItemNetVal);
+  }
 
   // Parties select
   elements.quickSelectReceiver.addEventListener("change", (e) => {
@@ -1597,6 +1836,7 @@ window.addBillingItemRow = function() {
   elements.billItemGstRate.value = "0";
   elements.billItemDiscount.value = "0";
   elements.billItemRate.value = "0";
+  calculateBillingItemNetVal();
 
   calculateSummaryAndTable();
 };
@@ -1808,6 +2048,14 @@ window.generateAndPrintInvoice = function() {
     return;
   }
 
+  // Ensure current phone from input is captured
+  if (elements.billBuyerPhone && elements.billBuyerPhone.value) {
+    currentInvoice.buyer.phone = elements.billBuyerPhone.value.trim();
+  }
+  if (currentInvoice.buyer?.name && currentInvoice.buyer?.phone) {
+    savePhoneToPartyDb(currentInvoice.buyer.name, currentInvoice.buyer.phone);
+  }
+
   const existingIdxForStock = invoicesDb.findIndex(inv => inv.id === currentInvoice.invoiceNo);
   const oldItemsForStock = existingIdxForStock > -1 ? invoicesDb[existingIdxForStock].details.items : [];
   if (!validateInvoiceStockAvailability(currentInvoice.items, oldItemsForStock)) {
@@ -1878,6 +2126,9 @@ window.generateAndPrintInvoice = function() {
   sendTelegramInvoiceNotification(invoiceRecord);
   populateA4PrintOverlay(invoiceRecord.details);
   uploadInvoicePdfToTelegram(invoiceRecord.details, true);
+  if (globalSettings.whatsappAutoSend !== false) {
+    autoDispatchInvoiceToWhatsApp(invoiceRecord.details);
+  }
 
   setTimeout(() => {
     document.body.classList.remove("printing-thermal");
@@ -1887,7 +2138,7 @@ window.generateAndPrintInvoice = function() {
   }, 100);
 };
 
-window.saveAndGenerateInvoiceOnly = function(btnEl) {
+window.saveAndGenerateInvoiceOnly = async function(btnEl) {
   if (!currentInvoice.invoiceNo) {
     alert("Please provide an Invoice Number!");
     return;
@@ -1899,6 +2150,11 @@ window.saveAndGenerateInvoiceOnly = function(btnEl) {
   if (currentInvoice.items.length === 0) {
     alert("Please add at least one line item!");
     return;
+  }
+
+  // Ensure current phone from input is captured
+  if (elements.billBuyerPhone && elements.billBuyerPhone.value) {
+    currentInvoice.buyer.phone = elements.billBuyerPhone.value.trim();
   }
 
   const existingIdxForStock = invoicesDb.findIndex(inv => inv.id === currentInvoice.invoiceNo);
@@ -1961,6 +2217,11 @@ window.saveAndGenerateInvoiceOnly = function(btnEl) {
     invoicesDb.push(invoiceRecord);
   }
 
+  // Auto-save phone to Party database for future billing
+  if (currentInvoice.buyer.name && currentInvoice.buyer.phone) {
+    savePhoneToPartyDb(currentInvoice.buyer.name, currentInvoice.buyer.phone);
+  }
+
   try {
     localStorage.setItem("invoices", JSON.stringify(invoicesDb));
     syncDatabaseToServer("invoices", invoiceRecord);
@@ -1968,14 +2229,65 @@ window.saveAndGenerateInvoiceOnly = function(btnEl) {
   } catch (err) {
     console.warn("Unable to persist invoices:", err);
   }
-  
+
+  let origBtnHtml = "";
+  if (btnEl && btnEl.tagName) {
+    origBtnHtml = btnEl.innerHTML;
+    btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Generating PDF & Dispatching...`;
+    btnEl.disabled = true;
+  }
+
+  // Live rotating state on top header pill
+  updateWhatsAppBotPillUI({
+    ...whatsappBotStatus,
+    isDispatching: true,
+    dispatchingDetails: { filename: `Invoice #${invoiceRecord.invoiceNo}`, phone: currentInvoice.buyer.phone }
+  });
+
+  // 1. Generate PDF once cleanly and store to disk & cloud
+  let precomputedBase64 = null;
+  try {
+    const pdfRes = await generateInvoicePdfBlob(invoiceRecord.details);
+    precomputedBase64 = pdfRes.pdfBase64;
+  } catch (e) {
+    console.warn("PDF compile warning:", e);
+  }
+
+  // 2. Telegram Notifications in background
   sendTelegramInvoiceNotification(invoiceRecord);
-  uploadInvoicePdfToTelegram(invoiceRecord.details, true);
+  if (precomputedBase64) {
+    uploadInvoicePdfToTelegram(invoiceRecord.details, true, precomputedBase64);
+  }
 
-  alert(`✅ Invoice #${invoiceRecord.invoiceNo} generated & saved to history successfully!`);
+  // 3. Direct WhatsApp dispatch to the customer's phone number
+  const rawPhone = getCustomerPhoneNumber(invoiceRecord.details);
+  let sentViaWa = false;
+  if (rawPhone && rawPhone.toString().replace(/\D/g, '').length >= 10) {
+    sentViaWa = await autoDispatchInvoiceToWhatsApp(invoiceRecord.details, precomputedBase64);
+  }
 
-  resetBillingForm();
-  switchTab("history");
+  // Restore status pill after dispatch
+  updateWhatsAppBotPillUI(whatsappBotStatus);
+
+  if (btnEl && btnEl.tagName) {
+    btnEl.innerHTML = `<i class="fa-solid fa-check text-success"></i> Saved & Sent!`;
+  }
+
+  if (sentViaWa) {
+    showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} generated & sent directly to +${formatWhatsAppPhone(rawPhone)} via WhatsApp!`);
+  } else if (!rawPhone || rawPhone.toString().replace(/\D/g, '').length < 10) {
+    showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} saved to history! (No phone number entered)`);
+  }
+
+  setTimeout(() => {
+    if (btnEl && btnEl.tagName) {
+      btnEl.innerHTML = origBtnHtml;
+      btnEl.disabled = false;
+    }
+    resetBillingForm();
+    switchTab("history");
+    loadInvoicesHistoryTable();
+  }, 1000);
 };
 
 window.generateAndPrintThermal = function(btnEl) {
@@ -1992,6 +2304,14 @@ window.generateAndPrintThermal = function(btnEl) {
     return;
   }
 
+  // Ensure current phone from input is captured
+  if (elements.billBuyerPhone && elements.billBuyerPhone.value) {
+    currentInvoice.buyer.phone = elements.billBuyerPhone.value.trim();
+  }
+  if (currentInvoice.buyer?.name && currentInvoice.buyer?.phone) {
+    savePhoneToPartyDb(currentInvoice.buyer.name, currentInvoice.buyer.phone);
+  }
+
   const existingIdxForStock = invoicesDb.findIndex(inv => inv.id === currentInvoice.invoiceNo);
   const oldItemsForStock = existingIdxForStock > -1 ? invoicesDb[existingIdxForStock].details.items : [];
   if (!validateInvoiceStockAvailability(currentInvoice.items, oldItemsForStock)) {
@@ -2061,6 +2381,9 @@ window.generateAndPrintThermal = function(btnEl) {
   }
   sendTelegramInvoiceNotification(invoiceRecord);
   uploadInvoicePdfToTelegram(invoiceRecord.details, true);
+  if (globalSettings.whatsappAutoSend !== false) {
+    autoDispatchInvoiceToWhatsApp(invoiceRecord.details);
+  }
 
   // Trigger POS Thermal Print dialog
   populateThermalPrintOverlay(invoiceRecord.details);
@@ -2571,6 +2894,76 @@ async function sendPartyTelegramReport(party, isNew = true) {
   sendTelegramTextMessage(text);
 }
 
+// --- WEB AUDIO API SUCCESS CHIME ---
+function playSuccessChime() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+    
+    // Pleasant dual-tone bell chime (587.33Hz [D5] -> 880Hz [A5])
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(587.33, now);
+    osc.frequency.exponentialRampToValueAtTime(880, now + 0.12);
+    gain.gain.setValueAtTime(0.18, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.38);
+  } catch (e) {
+    // Silently ignore if audio context is blocked
+  }
+}
+
+// --- FLOATING TOAST NOTIFICATION SYSTEM ---
+function showFloatingToast(message, type = "success") {
+  let toastContainer = document.getElementById("app-floating-toast-container");
+  if (!toastContainer) {
+    toastContainer = document.createElement("div");
+    toastContainer.id = "app-floating-toast-container";
+    toastContainer.style.cssText = "position: fixed; bottom: 24px; right: 24px; z-index: 999999; display: flex; flex-direction: column-reverse; gap: 10px; pointer-events: none;";
+    document.body.appendChild(toastContainer);
+  }
+
+  const toast = document.createElement("div");
+  toast.className = `floating-toast toast-${type}`;
+  toast.style.cssText = `
+    background: ${type === 'success' ? '#065f46' : type === 'warning' ? '#92400e' : '#1e293b'};
+    color: #ffffff;
+    padding: 12px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.25);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-left: 4px solid ${type === 'success' ? '#10b981' : type === 'warning' ? '#f59e0b' : '#38bdf8'};
+    opacity: 0;
+    transform: translateY(15px);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: auto;
+    max-width: 380px;
+  `;
+  toast.innerHTML = `<i class="fa-brands fa-whatsapp" style="font-size: 16px; color: #25d366;"></i> <span>${message}</span>`;
+  toastContainer.appendChild(toast);
+
+  requestAnimationFrame(() => {
+    toast.style.opacity = "1";
+    toast.style.transform = "translateY(0)";
+  });
+
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateY(15px)";
+    setTimeout(() => toast.remove(), 350);
+  }, 4500);
+}
+
 function savePhoneToPartyDb(customerName, phone) {
   if (!customerName || !phone || !partiesDb) return;
   const nameLower = customerName.trim().toLowerCase();
@@ -2622,13 +3015,672 @@ function getCustomerPhoneNumber(details) {
   return phone;
 }
 
-window.shareInvoicePdfNative = async function(details, btnEl = null) {
+// --- WHATSAPP BOT STATE & CONTROLLER ---
+let whatsappBotStatus = { status: 'DISCONNECTED', isReady: false, qrCodeDataUrl: null, clientInfo: null };
+let whatsappPollInterval = null;
+let whatsappEventSource = null;
+let whatsappAdaptiveTimer = null;
+
+function initWhatsAppEventSource() {
+  if (typeof EventSource === "undefined") {
+    setupAdaptiveWhatsAppPolling();
+    return;
+  }
+
+  try {
+    if (whatsappEventSource) {
+      whatsappEventSource.close();
+      whatsappEventSource = null;
+    }
+
+    whatsappEventSource = new EventSource('/api/whatsapp/events');
+
+    whatsappEventSource.onmessage = function(event) {
+      if (!event.data) return;
+      try {
+        const data = JSON.parse(event.data);
+        if (data && data.status) {
+          whatsappBotStatus = data;
+          updateWhatsAppBotPillUI(whatsappBotStatus);
+          updateWhatsAppBotModalUI(whatsappBotStatus);
+        }
+      } catch (e) {}
+    };
+
+    whatsappEventSource.onerror = function() {
+      if (whatsappEventSource) {
+        try { whatsappEventSource.close(); } catch (e) {}
+        whatsappEventSource = null;
+      }
+      setupAdaptiveWhatsAppPolling();
+    };
+  } catch (e) {
+    setupAdaptiveWhatsAppPolling();
+  }
+}
+
+function setupAdaptiveWhatsAppPolling() {
+  if (whatsappAdaptiveTimer) clearTimeout(whatsappAdaptiveTimer);
+
+  const poll = async () => {
+    await fetchWhatsAppBotStatus();
+    const isBusy = whatsappBotStatus && (
+      whatsappBotStatus.status === 'INITIALIZING' ||
+      whatsappBotStatus.status === 'AUTHENTICATING' ||
+      whatsappBotStatus.isDispatching
+    );
+    const nextInterval = isBusy ? 1200 : 6000;
+    whatsappAdaptiveTimer = setTimeout(poll, nextInterval);
+  };
+
+  whatsappAdaptiveTimer = setTimeout(poll, 1200);
+}
+
+async function fetchWhatsAppBotStatus() {
+  try {
+    const res = await fetch('/api/whatsapp/status');
+    const data = await res.json();
+    whatsappBotStatus = data || { status: 'DISCONNECTED', isReady: false };
+    updateWhatsAppBotPillUI(whatsappBotStatus);
+    updateWhatsAppBotModalUI(whatsappBotStatus);
+  } catch (err) {
+    whatsappBotStatus = { status: 'DISCONNECTED', isReady: false };
+    updateWhatsAppBotPillUI(whatsappBotStatus);
+  }
+}
+
+function updateWhatsAppBotPillUI(data) {
+  const pill = document.getElementById("live-whatsapp-pill");
+  const statusText = document.getElementById("wa-bot-status-text");
+  const statusIcon = document.getElementById("wa-bot-status-icon");
+  const radarDot = document.getElementById("wa-radar-indicator");
+  if (!pill || !statusText) return;
+
+  pill.classList.remove("connected", "connecting", "authenticating", "initializing", "dispatching", "waiting-qr", "disconnected");
+
+  // 1. DISPATCHING STATE (Live Animated Rotating Icon)
+  if (data && data.isDispatching) {
+    pill.classList.add("dispatching");
+    if (radarDot) radarDot.style.display = "none";
+    if (statusIcon) {
+      statusIcon.className = "fa-solid fa-arrows-rotate fa-spin";
+      statusIcon.style.display = "inline-block";
+    }
+    const invLabel = data.dispatchingDetails?.filename ? data.dispatchingDetails.filename.replace('.pdf', '') : 'Invoice';
+    statusText.textContent = `Dispatching ${invLabel}...`;
+    pill.title = `Sending WhatsApp document in background to ${data.dispatchingDetails?.phone || 'customer'}...`;
+    return;
+  }
+
+  // 2. CONNECTED STATE (Emerald Theme, Radar Wave Pulse, Brand Icon)
+  if (data && data.status === "CONNECTED") {
+    pill.classList.add("connected");
+    if (radarDot) radarDot.style.display = "inline-block";
+    if (statusIcon) {
+      statusIcon.className = "fa-brands fa-whatsapp";
+      statusIcon.style.display = "inline-block";
+      statusIcon.style.color = "#16a34a";
+    }
+    const phoneDisplay = data.clientInfo?.phone ? `+${data.clientInfo.phone}` : "Active";
+    statusText.textContent = `Bot: ${phoneDisplay}`;
+    pill.title = `WhatsApp Background Bot Connected (${data.clientInfo?.pushname || ''} ${phoneDisplay}) - Direct automated dispatch active`;
+    return;
+  }
+
+  // 3. CONNECTING / AUTHENTICATING / INITIALIZING (Amber Theme, Rotating Dual-Ring Spinner)
+  if (data && (data.status === "INITIALIZING" || data.status === "AUTHENTICATING")) {
+    pill.classList.add(data.status.toLowerCase());
+    if (radarDot) radarDot.style.display = "none";
+    if (statusIcon) {
+      statusIcon.className = "fa-solid fa-circle-notch fa-spin";
+      statusIcon.style.display = "inline-block";
+    }
+    if (data.status === "AUTHENTICATING") {
+      const pct = data.loadingPercent ? ` (${data.loadingPercent}%)` : "";
+      statusText.textContent = `Authenticating${pct}...`;
+      pill.title = `WhatsApp session authenticating${pct} - High-speed connection in progress`;
+    } else {
+      statusText.textContent = "Connecting Bot...";
+      pill.title = "Starting local WhatsApp background bot engine...";
+    }
+    return;
+  }
+
+  // 4. WAITING FOR QR SCAN OR PAIRING CODE
+  if (data && (data.status === "QR_READY" || data.status === "CODE_READY")) {
+    pill.classList.add("waiting-qr");
+    if (radarDot) radarDot.style.display = "none";
+    if (statusIcon) {
+      statusIcon.className = data.status === "CODE_READY" ? "fa-solid fa-key" : "fa-solid fa-qrcode";
+      statusIcon.style.display = "inline-block";
+      statusIcon.style.color = "#d97706";
+    }
+    statusText.textContent = data.status === "CODE_READY" ? "Enter WA Code" : "Scan WA QR";
+    pill.title = "WhatsApp Bot pairing required - Click to view QR or enter pairing code";
+    return;
+  }
+
+  // 5. DISCONNECTED / OFFLINE
+  pill.classList.add("disconnected");
+  if (radarDot) radarDot.style.display = "none";
+  if (statusIcon) {
+    statusIcon.className = "fa-brands fa-whatsapp";
+    statusIcon.style.display = "inline-block";
+    statusIcon.style.color = "#64748b";
+  }
+  statusText.textContent = "WhatsApp Bot";
+  pill.title = "WhatsApp Bot Offline - Click to connect or use 1-Click Instant Share";
+}
+
+function updateWhatsAppBotModalUI(data) {
+  const modal = document.getElementById("whatsapp-bot-modal");
+  if (!modal) return;
+
+  const statusCard = document.getElementById("wa-modal-status-card");
+  const statusTitle = document.getElementById("wa-modal-status-title");
+  const statusDesc = document.getElementById("wa-modal-status-desc");
+  const qrSection = document.getElementById("wa-qr-section");
+  const connectedSection = document.getElementById("wa-connected-section");
+  const qrLoading = document.getElementById("wa-qr-loading");
+  const qrImage = document.getElementById("wa-qr-image");
+  const deviceName = document.getElementById("wa-device-name");
+  const devicePhone = document.getElementById("wa-device-phone");
+
+  if (!statusCard) return;
+  statusCard.classList.remove("wa-status-connected", "wa-status-waiting", "wa-status-disconnected");
+
+  if (data.status === "CONNECTED") {
+    statusCard.classList.add("wa-status-connected");
+    if (statusTitle) statusTitle.textContent = "WhatsApp Background Bot Active";
+    if (statusDesc) statusDesc.textContent = "Your phone is linked. Bills & PDF documents will be delivered silently in background.";
+    if (qrSection) { qrSection.classList.add("hidden"); qrSection.style.display = "none"; }
+    if (connectedSection) { connectedSection.classList.remove("hidden"); connectedSection.style.display = "block"; }
+    if (deviceName) deviceName.textContent = data.clientInfo?.pushname || "Linked WhatsApp Account";
+    if (devicePhone) devicePhone.textContent = data.clientInfo?.phone ? `+${data.clientInfo.phone} (Active)` : "Connected";
+  } else if (data.status === "CODE_READY" && data.pairingCode) {
+    statusCard.classList.add("wa-status-waiting");
+    if (statusTitle) statusTitle.textContent = "Enter 8-Digit Pairing Code on Mobile";
+    if (statusDesc) statusDesc.textContent = "Open WhatsApp on your phone > Linked Devices > Link with phone number instead > enter the code below.";
+    if (qrSection) { qrSection.classList.remove("hidden"); qrSection.style.display = "block"; }
+    if (connectedSection) { connectedSection.classList.add("hidden"); connectedSection.style.display = "none"; }
+    switchWhatsAppPairTab('code');
+    const codeBox = document.getElementById("wa-code-display-box");
+    const codeText = document.getElementById("wa-code-text");
+    if (codeBox) codeBox.style.display = "block";
+    if (codeText) {
+      const c = data.pairingCode;
+      codeText.textContent = c.length === 8 ? `${c.slice(0, 4)} - ${c.slice(4)}` : c;
+    }
+  } else if (data.status === "QR_READY" && data.qrCodeDataUrl) {
+    statusCard.classList.add("wa-status-waiting");
+    if (statusTitle) statusTitle.textContent = "Waiting for WhatsApp QR Scan...";
+    if (statusDesc) statusDesc.textContent = "Open WhatsApp on your phone > Linked Devices > Point camera at QR code.";
+    if (qrSection) { qrSection.classList.remove("hidden"); qrSection.style.display = "block"; }
+    if (connectedSection) { connectedSection.classList.add("hidden"); connectedSection.style.display = "none"; }
+    if (qrLoading) qrLoading.style.display = "none";
+    if (qrImage) {
+      qrImage.src = data.qrCodeDataUrl;
+      qrImage.style.display = "block";
+    }
+  } else if (data.status === "INITIALIZING" || data.status === "AUTHENTICATING") {
+    statusCard.classList.add("wa-status-waiting");
+    if (statusTitle) statusTitle.textContent = data.status === "AUTHENTICATING" ? "Authenticating Session..." : "Starting WhatsApp Engine...";
+    if (statusDesc) statusDesc.textContent = "Please wait a moment while the local WhatsApp Web bridge initializes...";
+    if (qrSection) { qrSection.classList.remove("hidden"); qrSection.style.display = "block"; }
+    if (connectedSection) { connectedSection.classList.add("hidden"); connectedSection.style.display = "none"; }
+    if (qrLoading) qrLoading.style.display = "block";
+    if (qrImage) qrImage.style.display = "none";
+  } else {
+    statusCard.classList.add("wa-status-disconnected");
+    if (statusTitle) statusTitle.textContent = "WhatsApp Bot Disconnected";
+    if (statusDesc) statusDesc.textContent = "Scan QR code or use Phone Pairing Code below to link your device.";
+    if (qrSection) { qrSection.classList.remove("hidden"); qrSection.style.display = "block"; }
+    if (connectedSection) { connectedSection.classList.add("hidden"); connectedSection.style.display = "none"; }
+    if (qrLoading) qrLoading.style.display = "block";
+    if (qrImage) qrImage.style.display = "none";
+  }
+}
+
+window.switchWhatsAppPairTab = function(tab) {
+  const qrTabBtn = document.getElementById("wa-tab-btn-qr");
+  const codeTabBtn = document.getElementById("wa-tab-btn-code");
+  const historyTabBtn = document.getElementById("wa-tab-btn-history");
+
+  const qrSection = document.getElementById("wa-qr-section");
+  const connectedSection = document.getElementById("wa-connected-section");
+  const qrContent = document.getElementById("wa-tab-content-qr");
+  const codeContent = document.getElementById("wa-tab-content-code");
+  const historyContent = document.getElementById("wa-tab-content-history");
+
+  const setBtnStyle = (btn, active) => {
+    if (!btn) return;
+    if (active) {
+      btn.style.background = "#ffffff";
+      btn.style.color = "#0a4b5c";
+      btn.style.boxShadow = "0 1px 3px rgba(0,0,0,0.1)";
+    } else {
+      btn.style.background = "transparent";
+      btn.style.color = "#64748b";
+      btn.style.boxShadow = "none";
+    }
+  };
+
+  setBtnStyle(qrTabBtn, tab === 'qr');
+  setBtnStyle(codeTabBtn, tab === 'code');
+  setBtnStyle(historyTabBtn, tab === 'history');
+
+  if (tab === 'history') {
+    if (qrSection) qrSection.style.display = "none";
+    if (connectedSection) connectedSection.style.display = "none";
+    if (historyContent) historyContent.style.display = "block";
+    loadWhatsAppActivityLogs();
+  } else {
+    if (historyContent) historyContent.style.display = "none";
+    if (whatsappBotStatus && whatsappBotStatus.isReady) {
+      if (connectedSection) connectedSection.style.display = "block";
+      if (qrSection) qrSection.style.display = "none";
+    } else {
+      if (connectedSection) connectedSection.style.display = "none";
+      if (qrSection) qrSection.style.display = "block";
+      if (tab === 'code') {
+        if (qrContent) qrContent.style.display = "none";
+        if (codeContent) codeContent.style.display = "block";
+      } else {
+        if (qrContent) qrContent.style.display = "block";
+        if (codeContent) codeContent.style.display = "none";
+      }
+    }
+  }
+};
+
+window.loadWhatsAppActivityLogs = async function() {
+  const container = document.getElementById("wa-activity-logs-container");
+  if (!container) return;
+  try {
+    const res = await fetch('/api/whatsapp/activity');
+    const data = await res.json();
+    const logs = (data && data.logs) || [];
+    if (logs.length === 0) {
+      container.innerHTML = `
+        <div style="text-align: center; color: #94a3b8; padding: 24px 12px; font-size: 12px;">
+          <i class="fa-solid fa-paper-plane" style="font-size: 24px; color: #cbd5e1; margin-bottom: 8px; display: block;"></i>
+          No WhatsApp dispatches recorded yet.<br>Invoices & reminders sent will appear here automatically.
+        </div>
+      `;
+      return;
+    }
+
+    let html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
+    logs.forEach(log => {
+      const isPdf = log.type === 'INVOICE_PDF';
+      const timeStr = log.timestamp ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+      const dateStr = log.timestamp ? new Date(log.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+      const badgeBg = isPdf ? '#e0f2fe' : '#ecfdf5';
+      const badgeColor = isPdf ? '#0284c7' : '#059669';
+      const badgeIcon = isPdf ? 'fa-file-pdf' : 'fa-comment-dots';
+      const badgeText = isPdf ? 'PDF Invoice' : 'Text Reminder';
+      const detail = log.filename || log.preview || 'Delivered message';
+      const phoneClean = log.phone ? `+${log.phone}` : 'Customer';
+
+      html += `
+        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; font-size: 11.5px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 10px; overflow: hidden;">
+            <span style="background: ${badgeBg}; color: ${badgeColor}; padding: 3px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 700; white-space: nowrap; display: flex; align-items: center; gap: 4px;">
+              <i class="fa-solid ${badgeIcon}"></i> ${badgeText}
+            </span>
+            <div style="overflow: hidden;">
+              <div style="font-weight: 700; color: #1e293b; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">${phoneClean}</div>
+              <div style="font-size: 10.5px; color: #64748b; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">${detail}</div>
+            </div>
+          </div>
+          <div style="text-align: right; white-space: nowrap;">
+            <div style="font-weight: 700; color: #10b981; font-size: 11px;"><i class="fa-solid fa-circle-check"></i> Sent</div>
+            <div style="font-size: 10px; color: #94a3b8;">${dateStr} ${timeStr}</div>
+          </div>
+        </div>
+      `;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<div style="color: #ef4444; font-size: 11.5px; padding: 12px; text-align: center;">Error loading history: ${err.message}</div>`;
+  }
+};
+
+window.requestWhatsAppPairCode = async function() {
+  const phoneInput = document.getElementById("wa-pair-phone-input");
+  const codeBox = document.getElementById("wa-code-display-box");
+  const codeText = document.getElementById("wa-code-text");
+  const phone = phoneInput ? phoneInput.value.trim().replace(/\D/g, '') : "";
+
+  if (!phone || phone.length < 10) {
+    alert("Please enter a valid 10-digit mobile number.");
+    return;
+  }
+
+  if (codeBox) codeBox.style.display = "block";
+  if (codeText) codeText.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="font-size: 20px;"></i> Generating Code...';
+
+  try {
+    const res = await fetch('/api/whatsapp/pair-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone })
+    });
+    const data = await res.json();
+    if (data && data.ok && data.code) {
+      const c = data.code;
+      if (codeText) codeText.textContent = c.length === 8 ? `${c.slice(0, 4)} - ${c.slice(4)}` : c;
+    } else {
+      if (codeText) codeText.textContent = "Try again";
+      alert(data.error || "Failed to generate pairing code. Please try QR scan.");
+    }
+  } catch (err) {
+    if (codeText) codeText.textContent = "Error";
+    alert("Connection error: " + err.message);
+  }
+};
+
+window.openWhatsAppBotModal = function() {
+  const modal = document.getElementById("whatsapp-bot-modal");
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.style.display = "flex";
+    modal.style.visibility = "visible";
+    modal.style.opacity = "1";
+    modal.style.zIndex = "999999";
+  }
+  
+  const settings = globalSettings || {};
+  const autoSendToggle = document.getElementById("wa-auto-send-toggle");
+  if (autoSendToggle) autoSendToggle.checked = settings.whatsappAutoSend !== false;
+  
+  const fallbackToggle = document.getElementById("wa-fallback-1click-toggle");
+  if (fallbackToggle) fallbackToggle.checked = settings.whatsappFallback1Click !== false;
+
+  fetchWhatsAppBotStatus();
+  if (whatsappPollInterval) clearInterval(whatsappPollInterval);
+  whatsappPollInterval = setInterval(fetchWhatsAppBotStatus, 2000);
+
+  initiateWhatsAppConnect();
+};
+
+window.closeWhatsAppBotModal = function() {
+  const modal = document.getElementById("whatsapp-bot-modal");
+  if (modal) modal.classList.add("hidden");
+  if (whatsappPollInterval) {
+    clearInterval(whatsappPollInterval);
+    whatsappPollInterval = null;
+  }
+};
+
+window.initiateWhatsAppConnect = async function(forceClean = false) {
+  const qrLoading = document.getElementById("wa-qr-loading");
+  const qrImage = document.getElementById("wa-qr-image");
+  if (qrLoading) qrLoading.style.display = "block";
+  if (qrImage) qrImage.style.display = "none";
+
+  try {
+    const res = await fetch('/api/whatsapp/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ forceClean })
+    });
+    const data = await res.json();
+    if (data) {
+      whatsappBotStatus = data;
+      updateWhatsAppBotPillUI(whatsappBotStatus);
+      updateWhatsAppBotModalUI(whatsappBotStatus);
+    }
+  } catch (e) {
+    console.error("Connect error:", e);
+  }
+};
+
+window.disconnectWhatsAppBot = async function() {
+  if (!confirm("Are you sure you want to disconnect/unlink this WhatsApp device?")) return;
+  try {
+    const res = await fetch('/api/whatsapp/disconnect', { method: 'POST' });
+    const data = await res.json();
+    fetchWhatsAppBotStatus();
+  } catch (e) {
+    console.error("Disconnect error:", e);
+  }
+};
+
+window.sendWhatsAppTestMessage = async function() {
+  const phoneInput = document.getElementById("wa-test-phone");
+  const statusEl = document.getElementById("wa-test-status");
+  const phone = phoneInput ? phoneInput.value.trim() : "";
+  if (!phone || phone.replace(/\D/g, '').length < 10) {
+    if (statusEl) {
+      statusEl.style.color = "#ef4444";
+      statusEl.textContent = "❌ Please enter a valid 10-digit mobile number.";
+    }
+    return;
+  }
+
+  if (statusEl) {
+    statusEl.style.color = "#0891b2";
+    statusEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Sending test message to +91${phone}...`;
+  }
+
+  try {
+    const testMsg = `🔔 *WhatsApp Bot Test Message*\n🏛️ *${globalSettings.company?.name || 'AARYAN AQUA NEEDS'}*\n\n✅ Automation bridge is working properly! Invoices and reports will be delivered automatically.`;
+    const res = await fetch('/api/whatsapp/send-message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, text: testMsg })
+    });
+    const result = await res.json();
+    if (result && result.ok) {
+      if (statusEl) {
+        statusEl.style.color = "#10b981";
+        statusEl.textContent = `✅ Test message successfully delivered to +91${phone}!`;
+      }
+    } else {
+      if (statusEl) {
+        statusEl.style.color = "#ef4444";
+        statusEl.textContent = `❌ Send failed: ${result.error || 'Check WhatsApp connection'}`;
+      }
+    }
+  } catch (err) {
+    if (statusEl) {
+      statusEl.style.color = "#ef4444";
+      statusEl.textContent = `❌ Network error: ${err.message}`;
+    }
+  }
+};
+
+window.saveWhatsAppSettings = function() {
+  const autoSendToggle = document.getElementById("wa-auto-send-toggle");
+  const fallbackToggle = document.getElementById("wa-fallback-1click-toggle");
+  if (autoSendToggle) globalSettings.whatsappAutoSend = autoSendToggle.checked;
+  if (fallbackToggle) globalSettings.whatsappFallback1Click = fallbackToggle.checked;
+  localStorage.setItem("settings", JSON.stringify(globalSettings));
+};
+
+// --- FORMAT WHATSAPP INVOICE SUMMARY ---
+function formatInvoiceWhatsAppSummary(details) {
+  const total = parseFloat(details.total || 0);
+  const status = details.paymentStatus || 'Paid';
+  const paid = parseFloat(details.paidAmount !== undefined ? details.paidAmount : (status === 'Paid' ? total : 0));
+  const balance = Math.max(0, total - paid);
+  const realUpiId = (globalSettings.upiId || globalSettings.bank?.upi || "7386262139@upi").trim();
+
+  let text = `🏛️ *${globalSettings.company?.name || 'AARYAN AQUA NEEDS'}*\n`;
+  text += `-----------------------------------\n`;
+  text += `📄 *Tax Invoice #:* #${details.invoiceNo} (${details.invoiceType || 'Tax Invoice'})\n`;
+  text += `👤 *Customer:* ${details.buyer?.name || 'Customer'}\n`;
+  text += `📅 *Date:* ${details.invoiceDate || ''}\n`;
+  text += `💰 *Grand Total:* ₹ ${formatCurrency(total)}\n`;
+
+  if (balance <= 0 || status === 'Paid') {
+    text += `✅ *Payment Status:* FULLY PAID (₹ ${formatCurrency(total)})\n`;
+    text += `💳 *Payment Mode:* ${details.paymentMode || 'UPI / Cash'}\n`;
+    text += `-----------------------------------\n`;
+    text += `Thank you for your business! 🙏`;
+  } else {
+    text += `✅ *Amount Paid:* ₹ ${formatCurrency(paid)}\n`;
+    text += `🔴 *PENDING BALANCE DUE:* ₹ ${formatCurrency(balance)}\n`;
+    text += `-----------------------------------\n`;
+    text += `📲 *Pay Pending Balance via UPI:*\n`;
+    text += `UPI ID: *${realUpiId}*\n\n`;
+    text += `Kindly clear the pending balance at your earliest convenience. Thank you! 🙏`;
+  }
+  return text;
+}
+
+// --- GENERATE INVOICE PDF BLOB & UPLOAD IN BACKGROUND ---
+async function generateInvoicePdfBlob(details) {
+  populateA4PrintOverlay(details);
+  const printWrapper = document.getElementById("print-invoice-wrapper");
+  if (!printWrapper) throw new Error("Print layout wrapper missing");
+
+  printWrapper.style.display = "block";
+  document.body.classList.remove("printing-thermal");
+
+  const customerClean = (details.buyer?.name || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
+  const filename = `Invoice_${details.invoiceNo}_${customerClean}.pdf`;
+
+  const opt = {
+    margin: [3, 3, 3, 3],
+    filename: filename,
+    image: { type: 'jpeg', quality: 0.95 },
+    html2canvas: { scale: 1.35, useCORS: true, logging: false },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
+
+  const blob = await html2pdf().set(opt).from(printWrapper).outputPdf('blob');
+  printWrapper.style.display = "none";
+
+  const reader = new FileReader();
+  const pdfBase64 = await new Promise((resolve) => {
+    reader.onloadend = () => resolve(reader.result);
+    reader.readAsDataURL(blob);
+  });
+
+  // Automatically save to local disk & Google Drive backend in background
+  try {
+    fetch("/api/invoices/upload-pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename: filename,
+        invoiceNo: details.invoiceNo,
+        id: details.id,
+        pdfBase64: pdfBase64
+      })
+    }).then(r => r.json()).then(uploadRes => {
+      if (uploadRes && uploadRes.ok && uploadRes.pdfUrl) {
+        details.pdfUrl = uploadRes.pdfUrl;
+        const idx = invoicesDb.findIndex(i => i.id === details.id || i.invoiceNo === details.invoiceNo);
+        if (idx > -1) {
+          invoicesDb[idx].pdfUrl = uploadRes.pdfUrl;
+          if (invoicesDb[idx].details) invoicesDb[idx].details.pdfUrl = uploadRes.pdfUrl;
+          localStorage.setItem("invoices", JSON.stringify(invoicesDb));
+        }
+      }
+    }).catch(e => console.warn("Upload PDF background sync note:", e));
+  } catch (e) {}
+
+  return { blob, pdfBase64, filename };
+}
+
+// Automatic Silent WhatsApp Dispatch upon bill generation
+async function autoDispatchInvoiceToWhatsApp(details, precomputedBase64 = null) {
+  if (!details || !details.invoiceNo || !details.buyer?.name) return false;
+  let rawPhone = getCustomerPhoneNumber(details);
+  if (!rawPhone || rawPhone.toString().replace(/\D/g, '').length < 10) {
+    console.log("No valid phone number for auto WhatsApp dispatch");
+    return false;
+  }
+  const cleanPhone = formatWhatsAppPhone(rawPhone);
+
+  const text = formatInvoiceWhatsAppSummary(details);
+  const customerClean = (details.buyer.name || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
+  const filename = `Invoice_${details.invoiceNo}_${customerClean}.pdf`;
+
+  // Check live status if needed
+  if (!whatsappBotStatus || !whatsappBotStatus.isReady) {
+    try {
+      const liveRes = await fetch('/api/whatsapp/status').then(r => r.json()).catch(() => null);
+      if (liveRes && liveRes.isReady) {
+        whatsappBotStatus = liveRes;
+        updateWhatsAppBotPillUI(whatsappBotStatus);
+      }
+    } catch (e) {}
+  }
+
+  const useBot = whatsappBotStatus && whatsappBotStatus.isReady;
+
+  if (useBot) {
+    let pdfBase64 = precomputedBase64;
+    if (!pdfBase64) {
+      // Try fast-path first: check if file is on disk
+      try {
+        const fastRes = await fetch('/api/whatsapp/send-invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: cleanPhone, text, filename, fastPathOnly: true })
+        });
+        const fastData = await fastRes.json();
+        if (fastData && fastData.ok) {
+          playSuccessChime();
+          showFloatingToast(`📱 Invoice #${details.invoiceNo} sent directly to ${details.buyer?.name || 'Customer'} (+${cleanPhone}) via WhatsApp!`);
+          return true;
+        }
+      } catch (e) {}
+
+      // If not on disk, generate PDF blob
+      try {
+        const gen = await generateInvoicePdfBlob(details);
+        pdfBase64 = gen.pdfBase64;
+      } catch (err) {
+        console.warn("Could not generate PDF for auto dispatch:", err);
+      }
+    }
+
+    try {
+      const res = await fetch('/api/whatsapp/send-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: cleanPhone,
+          text,
+          filename,
+          pdfBase64
+        })
+      });
+      const data = await res.json();
+      if (data && data.ok) {
+        playSuccessChime();
+        console.log(`✅ Automated WhatsApp Invoice sent to +${cleanPhone}`);
+        showFloatingToast(`📱 Invoice #${details.invoiceNo} sent directly to ${details.buyer?.name || 'Customer'} (+${cleanPhone}) via WhatsApp!`);
+        return true;
+      }
+    } catch (err) {
+      console.warn("Auto WhatsApp dispatch notice:", err);
+    }
+  } else {
+    // If bot is offline, but phone is present, open 1-click WhatsApp fallback
+    if (globalSettings.whatsappFallback1Click !== false) {
+      const waUrl = launchWhatsAppWebOrApp(cleanPhone, text);
+      window.open(waUrl, "_blank");
+      showFloatingToast(`📱 WhatsApp Bot offline: Opened 1-Click WhatsApp for +${cleanPhone}`);
+      return true;
+    }
+  }
+  return false;
+}
+
+// Dual-Mode Native Share: Auto background bot when linked, instant 1-click WhatsApp fallback when offline
+window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click = false) {
   if (!details || !details.invoiceNo || !details.buyer?.name || !details.items || details.items.length === 0) {
     alert("Please fill invoice details and add items before sharing!");
     return;
   }
 
-  // 1. Get & Validate Customer Phone Number FIRST
   let rawPhone = getCustomerPhoneNumber(details);
   if (!rawPhone || rawPhone.toString().replace(/\D/g, '').length < 10) {
     const entered = prompt(`📱 Enter 10-digit WhatsApp mobile number for ${details.buyer?.name || 'Customer'}:`, rawPhone || "");
@@ -2643,26 +3695,95 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
   }
   const cleanPhone = formatWhatsAppPhone(rawPhone);
 
-  // 2. Open Window Synchronously on Click (bypasses browser popup blocker)
-  const waWin = window.open("about:blank", "_blank");
-  if (waWin) {
-    try {
-      waWin.document.write(`
-        <html>
-          <head><title>Opening WhatsApp...</title></head>
-          <body style="font-family: system-ui, sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; height:90vh; background:#f8fafc; color:#0a4b5c;">
-            <div style="font-size:28px; margin-bottom:12px;">⏳</div>
-            <h3 style="margin:0 0 8px 0;">Compiling PDF & Opening WhatsApp...</h3>
-            <p style="color:#64748b; font-size:13px; margin:0;">Targeting customer phone: +${cleanPhone}</p>
-          </body>
-        </html>
-      `);
-    } catch(e) {}
+  // Check live bot status before deciding dispatch route
+  try {
+    const liveStatusRes = await fetch('/api/whatsapp/status').then(r => r.json()).catch(() => null);
+    if (liveStatusRes) {
+      whatsappBotStatus = liveStatusRes;
+      updateWhatsAppBotPillUI(whatsappBotStatus);
+    }
+  } catch (e) {}
+
+  const useBackgroundBot = whatsappBotStatus && whatsappBotStatus.isReady && !force1Click;
+
+  if (!useBackgroundBot && !force1Click) {
+    // Open QR Code Pairing Modal so user can link phone once for 100% automated sending
+    openWhatsAppBotModal();
+    showFloatingToast("📲 Scan this QR code once with WhatsApp to send PDFs automatically without manual downloading or dragging!", 6000);
+    return;
+  }
+
+  let waWin = null;
+  if (!useBackgroundBot && force1Click) {
+    waWin = window.open("about:blank", "_blank");
   }
 
   let origHtml = "";
   if (btnEl && btnEl.tagName) {
     origHtml = btnEl.innerHTML;
+  }
+
+  const customerClean = (details.buyer?.name || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
+  const filename = `Invoice_${details.invoiceNo}_${customerClean}.pdf`;
+
+  const total = parseFloat(details.total || 0);
+  const status = details.paymentStatus || 'Paid';
+  const paid = parseFloat(details.paidAmount !== undefined ? details.paidAmount : (status === 'Paid' ? total : 0));
+  const balance = Math.max(0, total - paid);
+  const realUpiId = globalSettings.upiId || globalSettings.bank?.upi || "7386262139@upi";
+
+  let text = `🏛️ *${globalSettings.company?.name || 'AARYAN AQUA NEEDS'}*\n`;
+  text += `-----------------------------------\n`;
+  text += `📄 *Tax Invoice #:* #${details.invoiceNo} (${details.invoiceType || 'Tax Invoice'})\n`;
+  text += `👤 *Customer:* ${details.buyer?.name || 'Customer'}\n`;
+  text += `📅 *Date:* ${details.invoiceDate || ''}\n`;
+  text += `💰 *Grand Total:* ₹ ${formatCurrency(total)}\n`;
+
+  if (balance <= 0 || status === 'Paid') {
+    text += `✅ *Payment Status:* FULLY PAID (₹ ${formatCurrency(total)})\n`;
+    text += `💳 *Payment Mode:* ${details.paymentMode || 'UPI / Cash'}\n`;
+    text += `-----------------------------------\n`;
+    text += `Thank you for your business! 🙏`;
+  } else {
+    text += `✅ *Amount Paid:* ₹ ${formatCurrency(paid)}\n`;
+    text += `🔴 *PENDING BALANCE DUE:* ₹ ${formatCurrency(balance)}\n`;
+    text += `-----------------------------------\n`;
+    text += `📲 *Pay Pending Balance via UPI:*\n`;
+    text += `UPI ID: *${realUpiId}*\n\n`;
+    text += `Kindly clear the pending balance at your earliest convenience. Thank you! 🙏`;
+  }
+
+  // --- ULTRA-FAST PATH: If Bot is active, dispatch existing disk PDF in sub-second without DOM rendering ---
+  if (useBackgroundBot) {
+    if (btnEl && btnEl.tagName) {
+      btnEl.innerHTML = `<i class="fa-solid fa-paper-plane fa-spin"></i> Sending via Bot...`;
+      btnEl.disabled = true;
+    }
+    try {
+      const fastRes = await fetch('/api/whatsapp/send-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: cleanPhone, text, filename, fastPathOnly: true })
+      });
+      const fastData = await fastRes.json();
+      if (fastData && fastData.ok) {
+        playSuccessChime();
+        if (btnEl && btnEl.tagName) {
+          btnEl.innerHTML = `<i class="fa-solid fa-check text-success"></i> Sent!`;
+          setTimeout(() => {
+            btnEl.innerHTML = origHtml;
+            btnEl.disabled = false;
+          }, 2000);
+        }
+        showFloatingToast(`✅ Invoice #${details.invoiceNo} & PDF delivered instantly to +${cleanPhone} via WhatsApp Bot!`);
+        return;
+      }
+    } catch (fastErr) {
+      console.warn("Fast path notice:", fastErr);
+    }
+  }
+
+  if (btnEl && btnEl.tagName) {
     btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Preparing PDF...`;
     btnEl.disabled = true;
   }
@@ -2671,14 +3792,15 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
   const element = document.getElementById("print-invoice-wrapper");
   if (!element) {
     if (waWin && !waWin.closed) waWin.close();
+    if (btnEl && btnEl.tagName) {
+      btnEl.innerHTML = origHtml;
+      btnEl.disabled = false;
+    }
     return;
   }
 
   element.style.display = "block";
   document.body.classList.remove("printing-thermal");
-
-  const customerClean = (details.buyer.name || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
-  const filename = `Invoice_${details.invoiceNo}_${customerClean}.pdf`;
 
   const opt = {
     margin: [3, 3, 3, 3],
@@ -2692,70 +3814,81 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
     const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
     element.style.display = "none";
 
-    // Convert Blob to Base64
     const reader = new FileReader();
     const pdfBase64 = await new Promise((resolve) => {
       reader.onloadend = () => resolve(reader.result);
       reader.readAsDataURL(pdfBlob);
     });
 
-    // Upload PDF to server to get hosted public PDF link
-    let hostedPdfUrl = "";
+    if (useBackgroundBot) {
+      if (btnEl && btnEl.tagName) {
+        btnEl.innerHTML = `<i class="fa-solid fa-paper-plane fa-spin"></i> Sending via Bot...`;
+      }
+      const botRes = await fetch('/api/whatsapp/send-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: cleanPhone, text, filename, pdfBase64 })
+      });
+      const botData = await botRes.json();
+      if (botData && botData.ok) {
+        playSuccessChime();
+        if (btnEl && btnEl.tagName) {
+          btnEl.innerHTML = `<i class="fa-solid fa-check text-success"></i> Sent!`;
+          setTimeout(() => {
+            btnEl.innerHTML = origHtml;
+            btnEl.disabled = false;
+          }, 2500);
+        }
+        showFloatingToast(`✅ Invoice #${details.invoiceNo} & PDF sent automatically to +${cleanPhone} via WhatsApp Bot!`);
+        return;
+      }
+    }
+
+    // Try Native Web Share API with actual PDF File Document (Supported on Edge, Chrome, Windows & Android)
+    const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' });
+    if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+      if (waWin && !waWin.closed) waWin.close();
+      try {
+        if (btnEl && btnEl.tagName) {
+          btnEl.innerHTML = origHtml;
+          btnEl.disabled = false;
+        }
+        await navigator.share({
+          files: [pdfFile],
+          title: `Invoice #${details.invoiceNo}`,
+          text: text
+        });
+        showFloatingToast(`✅ Invoice #${details.invoiceNo} PDF sent via WhatsApp!`);
+        return;
+      } catch (shareErr) {
+        if (shareErr.name === 'AbortError') return; // User closed share window
+        console.warn("Native file share fallback:", shareErr);
+      }
+    }
+
+    // 1-Click Fallback: Upload PDF to Google Drive backend (never include localhost in customer message)
+    let drivePdfUrl = "";
     try {
       const uploadRes = await fetch("/api/invoices/upload-pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename, pdfBase64 })
+        body: JSON.stringify({ filename, invoiceNo: details.invoiceNo, id: details.id, pdfBase64 })
       });
       const uploadData = await uploadRes.json();
-      if (uploadData && uploadData.ok) {
-        hostedPdfUrl = uploadData.pdfUrl;
+      if (uploadData && uploadData.ok && uploadData.googleDriveUrl) {
+        drivePdfUrl = uploadData.googleDriveUrl;
       }
-    } catch (e) {
-      console.warn("PDF upload to server fallback:", e);
+    } catch (e) {}
+
+    let fullShareText = text;
+    // Only include Google Drive link if available; NEVER include localhost
+    if (drivePdfUrl && drivePdfUrl.startsWith('https://drive.google.com')) {
+      fullShareText += `\n\n📄 *Official PDF Invoice (Google Drive):*\n${drivePdfUrl}`;
     }
 
-    if (btnEl && btnEl.tagName) {
-      btnEl.innerHTML = origHtml;
-      btnEl.disabled = false;
-    }
+    const waUrl = launchWhatsAppWebOrApp(cleanPhone, fullShareText);
 
-    const total = parseFloat(details.total || 0);
-    const status = details.paymentStatus || 'Paid';
-    const paid = parseFloat(details.paidAmount !== undefined ? details.paidAmount : (status === 'Paid' ? total : 0));
-    const balance = Math.max(0, total - paid);
-    const realUpiId = globalSettings.upiId || globalSettings.bank?.upi || "7386262139@upi";
-
-    let text = `🏛️ *${globalSettings.company?.name || 'AARYAN AQUA NEEDS'}*\n`;
-    text += `-----------------------------------\n`;
-    text += `📄 *Tax Invoice #:* #${details.invoiceNo} (${details.invoiceType || 'Tax Invoice'})\n`;
-    text += `👤 *Customer:* ${details.buyer?.name || 'Customer'}\n`;
-    text += `📅 *Date:* ${details.invoiceDate || ''}\n`;
-    text += `💰 *Grand Total:* ₹ ${formatCurrency(total)}\n`;
-
-    if (balance <= 0 || status === 'Paid') {
-      text += `✅ *Payment Status:* FULLY PAID (₹ ${formatCurrency(total)})\n`;
-      text += `💳 *Payment Mode:* ${details.paymentMode || 'UPI / Cash'}\n`;
-      text += `-----------------------------------\n`;
-      if (hostedPdfUrl) {
-        text += `📄 *View / Download Official PDF Invoice:*\n${hostedPdfUrl}\n\n`;
-      }
-      text += `Thank you for your business! 🙏`;
-    } else {
-      text += `✅ *Amount Paid:* ₹ ${formatCurrency(paid)}\n`;
-      text += `🔴 *PENDING BALANCE DUE:* ₹ ${formatCurrency(balance)}\n`;
-      text += `-----------------------------------\n`;
-      text += `📲 *Pay Pending Balance via UPI:*\n`;
-      text += `UPI ID: *${realUpiId}*\n\n`;
-      if (hostedPdfUrl) {
-        text += `📄 *View / Download Official PDF Invoice:*\n${hostedPdfUrl}\n\n`;
-      }
-      text += `Kindly clear the pending balance at your earliest convenience. Thank you! 🙏`;
-    }
-
-    const waUrl = launchWhatsAppWebOrApp(cleanPhone, text);
-
-    // Trigger local PDF file download for user
+    // Auto-download the PDF file so user can immediately drag & drop into chat
     try {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(pdfBlob);
@@ -2763,12 +3896,19 @@ window.shareInvoicePdfNative = async function(details, btnEl = null) {
       a.click();
     } catch(e) {}
 
-    // Redirect the pre-opened window directly to target WhatsApp mobile number
+    if (btnEl && btnEl.tagName) {
+      btnEl.innerHTML = origHtml;
+      btnEl.disabled = false;
+    }
+
     if (waWin && !waWin.closed) {
       waWin.location.href = waUrl;
     } else {
-      window.location.href = waUrl;
+      window.open(waUrl, '_blank');
     }
+
+    // Suggest linking the Background Bot for 100% automated PDF attachment
+    showFloatingToast(`📎 PDF downloaded! Drag it into WhatsApp, or link the WhatsApp Bot in the top bar to send PDFs automatically!`, 6000);
 
   } catch (err) {
     console.error("PDF share generation error:", err);
@@ -2804,8 +3944,12 @@ window.closeWhatsappGuideModal = function() {
   if (modalEl) modalEl.classList.add("hidden");
 };
 
-window.shareCurrentInvoiceWhatsApp = function() {
-  shareInvoicePdfNative(currentInvoice);
+window.shareCurrentInvoiceWhatsApp = function(btnEl = null) {
+  if (elements.billBuyerPhone && elements.billBuyerPhone.value) {
+    currentInvoice.buyer.phone = elements.billBuyerPhone.value.trim();
+  }
+  const button = btnEl || document.querySelector(".btn-share-whatsapp") || document.querySelector(".btn-whatsapp");
+  shareInvoicePdfNative(currentInvoice, button);
 };
 
 let currentBalanceQrInv = null;
@@ -2876,9 +4020,110 @@ window.closeBalanceQrModal = function() {
 
 window.shareBalanceQrWhatsApp = function() {
   if (!currentBalanceQrInv) return;
-  const { details } = currentBalanceQrInv;
+  const { inv } = currentBalanceQrInv;
   closeBalanceQrModal();
-  shareInvoicePdfNative(details);
+  sendWhatsAppPaymentReminder(inv.id);
+};
+
+window.sendWhatsAppPaymentReminder = async function(id, btnEl = null) {
+  const inv = invoicesDb.find(i => i.id === id);
+  if (!inv) return;
+  const details = inv.details || {};
+  const total = parseFloat(inv.total || 0);
+  const paid = parseFloat(details.paidAmount !== undefined ? details.paidAmount : (details.paymentStatus === 'Paid' ? total : 0));
+  const balance = Math.max(0, total - paid);
+
+  if (balance <= 0 && details.paymentStatus === 'Paid') {
+    alert(`Invoice #${inv.invoiceNo} is already fully paid! No balance reminder needed.`);
+    return;
+  }
+
+  let rawPhone = getCustomerPhoneNumber(details);
+  if (!rawPhone || rawPhone.toString().replace(/\D/g, '').length < 10) {
+    const entered = prompt(`📱 Enter 10-digit WhatsApp mobile number for ${details.buyer?.name || inv.customerName || 'Customer'}:`, rawPhone || "");
+    if (entered && entered.trim().replace(/\D/g, '').length >= 10) {
+      rawPhone = entered.trim();
+      if (details.buyer) details.buyer.phone = rawPhone;
+      savePhoneToPartyDb(details.buyer?.name || inv.customerName, rawPhone);
+    } else {
+      alert("WhatsApp reminder requires a valid 10-digit mobile number.");
+      return;
+    }
+  }
+  const cleanPhone = formatWhatsAppPhone(rawPhone);
+
+  const realUpiId = (globalSettings.upiId || globalSettings.bank?.upi || "7386262139@upi").trim();
+  const companyName = globalSettings.company?.name || "AARYAN AQUA NEEDS";
+  const upiName = encodeURIComponent(companyName.replace(/[^a-zA-Z0-9 ]/g, '').trim());
+  const cleanNote = `Bill${inv.invoiceNo || '1'}`.replace(/[^a-zA-Z0-9]/g, '');
+  const upiPayLink = `upi://pay?pa=${realUpiId}&pn=${upiName}&am=${balance.toFixed(2)}&cu=INR&tn=${cleanNote}`;
+
+  let reminderText = `🏛️ *${companyName}*\n`;
+  reminderText += `⚠️ *PAYMENT REMINDER*\n`;
+  reminderText += `-----------------------------------\n`;
+  reminderText += `📄 *Tax Invoice #:* #${inv.invoiceNo}\n`;
+  reminderText += `👤 *Customer:* ${inv.customerName || details.buyer?.name || 'Customer'}\n`;
+  reminderText += `📅 *Bill Date:* ${formatInputDateString(inv.invoiceDate)}\n`;
+  reminderText += `💰 *Total Bill Amount:* ₹ ${formatCurrency(total)}\n`;
+  reminderText += `✅ *Amount Paid:* ₹ ${formatCurrency(paid)}\n`;
+  reminderText += `🔴 *PENDING BALANCE DUE:* ₹ ${formatCurrency(balance)}\n`;
+  reminderText += `-----------------------------------\n`;
+  reminderText += `📲 *Pay Directly via UPI App (GPay / PhonePe / Paytm):*\n`;
+  reminderText += `${upiPayLink}\n\n`;
+  reminderText += `💳 Or send to UPI ID: *${realUpiId}*\n`;
+  reminderText += `-----------------------------------\n`;
+  reminderText += `Kindly settle the pending balance at your earliest convenience. Thank you! 🙏`;
+
+  let origHtml = "";
+  if (btnEl && btnEl.tagName) {
+    origHtml = btnEl.innerHTML;
+    btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i>`;
+    btnEl.disabled = true;
+  }
+
+  // Check live bot status
+  try {
+    const liveStatusRes = await fetch('/api/whatsapp/status').then(r => r.json()).catch(() => null);
+    if (liveStatusRes) {
+      whatsappBotStatus = liveStatusRes;
+      updateWhatsAppBotPillUI(whatsappBotStatus);
+    }
+  } catch (e) {}
+
+  const useBot = whatsappBotStatus && whatsappBotStatus.isReady;
+  if (useBot) {
+    try {
+      const res = await fetch('/api/whatsapp/send-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: cleanPhone, text: reminderText })
+      });
+      const data = await res.json();
+      if (data && data.ok) {
+        playSuccessChime();
+        if (btnEl && btnEl.tagName) {
+          btnEl.innerHTML = `<i class="fa-solid fa-check text-success"></i>`;
+          setTimeout(() => {
+            btnEl.innerHTML = origHtml;
+            btnEl.disabled = false;
+          }, 2000);
+        }
+        showFloatingToast(`🔔 Payment reminder (₹ ${formatCurrency(balance)}) sent directly to +${cleanPhone} via WhatsApp Bot!`);
+        return;
+      }
+    } catch (e) {
+      console.warn("Bot reminder notice:", e);
+    }
+  }
+
+  // Fallback to 1-Click WhatsApp
+  if (btnEl && btnEl.tagName) {
+    btnEl.innerHTML = origHtml;
+    btnEl.disabled = false;
+  }
+  const waUrl = launchWhatsAppWebOrApp(cleanPhone, reminderText);
+  window.open(waUrl, "_blank");
+  showFloatingToast(`🔔 Opening WhatsApp to send payment reminder to +${cleanPhone}...`);
 };
 
 window.shareInvoiceToWhatsApp = function(id, btnEl = null) {
@@ -3016,7 +4261,10 @@ function renderHistoryTableRows(records) {
 
     let balanceQrBtn = "";
     if (balance > 0 || status === 'Partial' || status === 'Unpaid') {
-      balanceQrBtn = `<button class="action-btn share" onclick="openBalanceQrModal('${inv.id}')" title="View Balance UPI QR Code (₹ ${formatCurrency(balance)})" style="background: rgba(6, 182, 212, 0.15); color: #06b6d4;"><i class="fa-solid fa-qrcode"></i></button>`;
+      balanceQrBtn = `
+        <button class="action-btn share" onclick="openBalanceQrModal('${inv.id}')" title="View Balance UPI QR Code (₹ ${formatCurrency(balance)})" style="background: rgba(6, 182, 212, 0.15); color: #06b6d4;"><i class="fa-solid fa-qrcode"></i></button>
+        <button class="action-btn share" onclick="sendWhatsAppPaymentReminder('${inv.id}', this)" title="Send 1-Click WhatsApp Payment Reminder (₹ ${formatCurrency(balance)})" style="background: rgba(245, 158, 11, 0.15); color: #d97706;"><i class="fa-solid fa-bell"></i></button>
+      `;
     }
 
     const tr = document.createElement("tr");
@@ -3151,6 +4399,31 @@ window.deleteSavedInvoice = function(id) {
 };
 
 // --- PRODUCTS DIALOG MODAL CONTROLLER ---
+window.calculateProductModalValues = function() {
+  const rateInput = document.getElementById("modal-prod-rate");
+  const discInput = document.getElementById("modal-prod-discount");
+  const stockInput = document.getElementById("modal-prod-stock");
+
+  const rate = parseFloat(rateInput?.value) || 0;
+  const disc = parseFloat(discInput?.value) || 0;
+  const stock = Math.max(0, parseInt(stockInput?.value, 10) || 0);
+
+  const discountAmount = (rate * disc) / 100;
+  const valAfterDisc = Math.max(0, rate - discountAmount);
+  const totalVal = stock * valAfterDisc;
+
+  const valAfterDiscEl = document.getElementById("modal-preview-val-after-disc");
+  const totalValEl = document.getElementById("modal-preview-total-val");
+
+  if (valAfterDiscEl) {
+    const discLabel = disc > 0 ? ` <span style="font-size: 11px; color: #64748b; font-weight: normal;">(-${disc}% = -₹ ${formatCurrency(discountAmount)})</span>` : '';
+    valAfterDiscEl.innerHTML = `₹ ${formatCurrency(valAfterDisc)}${discLabel}`;
+  }
+  if (totalValEl) {
+    totalValEl.textContent = `₹ ${formatCurrency(totalVal)}`;
+  }
+};
+
 window.openProductModal = function(id = "") {
   document.getElementById("modal-product-form").reset();
   document.getElementById("modal-prod-id").value = "";
@@ -3175,6 +4448,7 @@ window.openProductModal = function(id = "") {
     document.getElementById("product-modal-title").textContent = "Add New Product";
   }
 
+  calculateProductModalValues();
   document.getElementById("product-modal").classList.remove("hidden");
 };
 
@@ -3234,6 +4508,20 @@ window.adjustProductStock = function(id, delta) {
   sendStockTelegramReport(prod, actionText, current, prod.stock);
 };
 
+window.updateProductDiscountInline = function(id, newDiscount) {
+  const prod = productsDb.find(p => p.id === id);
+  if (!prod) return;
+  const parsedDisc = Math.max(0, Math.min(100, parseFloat(newDiscount) || 0));
+  prod.discount = parsedDisc;
+  prod.updatedAt = new Date().toISOString();
+  localStorage.setItem("products", JSON.stringify(productsDb));
+  syncDatabaseToServer("products", productsDb);
+  loadProductsDatabaseTable();
+  populateBillingSelectors();
+  if (window.triggerDatabaseSync) window.triggerDatabaseSync();
+  showFloatingToast(`🏷️ Discount for "${prod.description}" set to ${parsedDisc}%!`);
+};
+
 function loadProductsDatabaseTable() {
   loadAllDatabases();
   elements.productCount.textContent = productsDb.length;
@@ -3245,45 +4533,135 @@ function renderProductsTable(records) {
   if (records.length === 0) {
     elements.productsListBody.innerHTML = `
       <tr>
-        <td colspan="5" class="text-center text-muted">No products found.</td>
+        <td colspan="9" class="text-center text-muted" style="padding: 32px; font-weight: 500;">
+          <i class="fa-solid fa-box-open" style="font-size: 24px; color: #cbd5e1; display: block; margin-bottom: 8px;"></i>
+          No products found matching your filter criteria.
+        </td>
       </tr>
     `;
+    const totalCountFooter = document.getElementById("prod-total-count-footer");
+    const totalStockFooter = document.getElementById("prod-total-stock-footer");
+    const totalValFooter = document.getElementById("prod-total-val-footer");
+    if (totalCountFooter) totalCountFooter.textContent = `0 Items`;
+    if (totalStockFooter) totalStockFooter.textContent = `0 Units`;
+    if (totalValFooter) totalValFooter.textContent = `₹ 0.00`;
+
+    const kpiCount = document.getElementById("prod-kpi-count");
+    const kpiUnits = document.getElementById("prod-kpi-units");
+    const kpiVal = document.getElementById("prod-kpi-valuation");
+    const kpiAlerts = document.getElementById("prod-kpi-alerts");
+    const kpiAlertsSub = document.getElementById("prod-kpi-alerts-sub");
+    if (kpiCount) kpiCount.textContent = "0";
+    if (kpiUnits) kpiUnits.textContent = "0 Units";
+    if (kpiVal) kpiVal.textContent = "₹ 0.00";
+    if (kpiAlerts) kpiAlerts.textContent = "0 Alerts";
+    if (kpiAlertsSub) kpiAlertsSub.textContent = "All In Stock";
     return;
   }
 
+  let totalStockSum = 0;
+  let totalInventoryValueSum = 0;
+  let lowCount = 0;
+  let outCount = 0;
+
   records.forEach(p => {
     const tr = document.createElement("tr");
+    const rate = parseFloat(p.rate || 0);
+    const disc = parseFloat(p.discount || 0);
+    const valAfterDisc = Math.max(0, rate - (rate * disc / 100));
     const stockVal = p.stock !== undefined ? parseInt(p.stock, 10) : 0;
+    const totalVal = stockVal * valAfterDisc;
+
+    totalStockSum += stockVal;
+    totalInventoryValueSum += totalVal;
+
     let stockBadge = "";
-    
     if (stockVal === 0) {
-      stockBadge = `<span style="display: inline-block; background: rgba(239, 68, 68, 0.12); color: #f87171; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;"><i class="fa-solid fa-triangle-exclamation"></i> Out</span>`;
+      outCount++;
+      stockBadge = `<span style="display: inline-block; background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; padding: 2px 7px; border-radius: 12px; font-size: 10px; font-weight: 700;"><i class="fa-solid fa-triangle-exclamation"></i> Out</span>`;
     } else if (stockVal <= 10) {
-      stockBadge = `<span style="display: inline-block; background: rgba(245, 158, 11, 0.12); color: #fbbf24; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;"><i class="fa-solid fa-circle-exclamation"></i> Low</span>`;
+      lowCount++;
+      stockBadge = `<span style="display: inline-block; background: #fffbeb; color: #d97706; border: 1px solid #fde68a; padding: 2px 7px; border-radius: 12px; font-size: 10px; font-weight: 700;"><i class="fa-solid fa-circle-exclamation"></i> Low</span>`;
     } else {
-      stockBadge = `<span style="display: inline-block; background: rgba(16, 185, 129, 0.12); color: #34d399; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;"><i class="fa-solid fa-circle-check"></i> In Stock</span>`;
+      stockBadge = `<span style="display: inline-block; background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; padding: 2px 7px; border-radius: 12px; font-size: 10px; font-weight: 700;"><i class="fa-solid fa-circle-check"></i> In Stock</span>`;
     }
 
     tr.innerHTML = `
-      <td style="font-weight: 600;">${p.description}</td>
-      <td>${p.hsn || "—"}</td>
-      <td style="text-align: center; font-weight: 500; color: #475569;">${p.packSize || "—"}</td>
-      <td style="text-align: right; font-weight: 700; color: var(--primary-teal);">₹ ${formatCurrency(p.rate)}</td>
+      <td>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="width: 28px; height: 28px; border-radius: 6px; background: #f0fdfa; color: #0f766e; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;">
+            <i class="fa-solid fa-box"></i>
+          </div>
+          <div>
+            <div style="font-weight: 700; color: #0f172a; font-size: 13px;">${p.description}</div>
+            <div style="font-size: 11px; color: #64748b;">${p.unit || 'Bucket'}</div>
+          </div>
+        </div>
+      </td>
+      <td>
+        <span style="background: #f1f5f9; border: 1px solid #e2e8f0; padding: 2px 7px; border-radius: 5px; font-family: monospace; font-size: 11.5px; font-weight: 600; color: #475569;">${p.hsn || "—"}</span>
+      </td>
       <td style="text-align: center;">
-        <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
-          <button class="btn btn-secondary btn-xs" onclick="adjustProductStock('${p.id}', -1)" title="Decrease Stock" style="padding: 2px 8px; font-size: 11px; cursor: pointer; border-radius: 4px;">-</button>
-          <span style="font-weight: 700; min-width: 20px; text-align: center;">${stockVal}</span>
-          <button class="btn btn-secondary btn-xs" onclick="adjustProductStock('${p.id}', 1)" title="Increase Stock" style="padding: 2px 8px; font-size: 11px; cursor: pointer; border-radius: 4px;">+</button>
+        <span style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 2px 8px; font-size: 12px; font-weight: 600; color: #334155;">${p.packSize || "—"}</span>
+      </td>
+      <td style="text-align: right; font-weight: 600; color: #334155; font-size: 13px;">₹ ${formatCurrency(rate)}</td>
+      <td style="text-align: center;">
+        <div class="prod-discount-badge" title="Click to edit discount percentage">
+          <input type="number" step="0.1" min="0" max="100" value="${disc}" 
+            onchange="updateProductDiscountInline('${p.id}', this.value)" 
+            class="prod-discount-input">
+          <span class="prod-discount-pct">%</span>
+        </div>
+      </td>
+      <td style="text-align: right;">
+        <div style="display: flex; flex-direction: column; align-items: flex-end;">
+          <span style="font-weight: 800; color: #16a34a; font-size: 13.5px;">₹ ${formatCurrency(valAfterDisc)}</span>
+          ${disc > 0 ? `<span style="font-size: 10px; color: #059669; font-weight: 600;">(-${disc}%)</span>` : ''}
+        </div>
+      </td>
+      <td style="text-align: center;">
+        <div class="prod-stock-stepper">
+          <button class="btn-stock-step" onclick="adjustProductStock('${p.id}', -1)" title="Decrease Stock">−</button>
+          <span class="stock-qty-text">${stockVal}</span>
+          <button class="btn-stock-step" onclick="adjustProductStock('${p.id}', 1)" title="Increase Stock">+</button>
           ${stockBadge}
         </div>
       </td>
-      <td class="actions-cell">
-        <button class="action-btn edit" onclick="openProductModal('${p.id}')" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
-        <button class="action-btn delete" onclick="deleteProductRowDb('${p.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+      <td style="text-align: right; font-weight: 800; color: #0f172a; font-size: 14px;">₹ ${formatCurrency(totalVal)}</td>
+      <td style="text-align: center;">
+        <div class="prod-actions-row">
+          <button class="prod-action-btn edit" onclick="openProductModal('${p.id}')" title="Edit Product">
+            <i class="fa-solid fa-pen-to-square"></i>
+          </button>
+          <button class="prod-action-btn delete" onclick="deleteProductRowDb('${p.id}')" title="Delete Product">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </div>
       </td>
     `;
     elements.productsListBody.appendChild(tr);
   });
+
+  // Update Top KPI Summary Metrics Cards
+  const kpiCount = document.getElementById("prod-kpi-count");
+  const kpiUnits = document.getElementById("prod-kpi-units");
+  const kpiVal = document.getElementById("prod-kpi-valuation");
+  const kpiAlerts = document.getElementById("prod-kpi-alerts");
+  const kpiAlertsSub = document.getElementById("prod-kpi-alerts-sub");
+
+  if (kpiCount) kpiCount.textContent = records.length;
+  if (kpiUnits) kpiUnits.textContent = `${totalStockSum} Units`;
+  if (kpiVal) kpiVal.textContent = `₹ ${formatCurrency(totalInventoryValueSum)}`;
+  if (kpiAlerts) kpiAlerts.textContent = `${lowCount + outCount} Alerts`;
+  if (kpiAlertsSub) kpiAlertsSub.textContent = `${lowCount} Low / ${outCount} Out of Stock`;
+
+  // Update Table Footer
+  const totalCountFooter = document.getElementById("prod-total-count-footer");
+  const totalStockFooter = document.getElementById("prod-total-stock-footer");
+  const totalValFooter = document.getElementById("prod-total-val-footer");
+  if (totalCountFooter) totalCountFooter.textContent = `${records.length} Items`;
+  if (totalStockFooter) totalStockFooter.textContent = `${totalStockSum} Units`;
+  if (totalValFooter) totalValFooter.textContent = `₹ ${formatCurrency(totalInventoryValueSum)}`;
 }
 
 window.deleteProductRowDb = function(id) {
@@ -4116,7 +5494,7 @@ window.submitUnlockLogin = function(e) {
 };
 
 // --- UPLOAD INVOICE PDF TO TELEGRAM BOT API ---
-async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false) {
+async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false, precomputedBase64 = null) {
   loadAllDatabases();
   const token = globalSettings.telegram?.token || "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g";
   let chat = globalSettings.telegram?.chatId || "6877857251, 7906132548";
@@ -4132,66 +5510,47 @@ async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false) {
     return false;
   }
 
-  populateA4PrintOverlay(invoiceDetails);
-
-  const printWrapper = document.getElementById("print-invoice-wrapper");
-  if (!printWrapper) return false;
-  
-  printWrapper.style.display = "block";
-  printWrapper.style.position = "absolute";
-  printWrapper.style.left = "-9999px";
-  printWrapper.style.top = "0";
-
-  const opt = {
-    margin:       [0, 0, 0, 0],
-    filename:     `Invoice_${invoiceDetails.invoiceNo}.pdf`,
-    image:        { type: 'jpeg', quality: 0.98 },
-    html2canvas:  { scale: 2, useCORS: true, logging: false },
-    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-  };
-
-  try {
-    const element = printWrapper.querySelector('.tally-invoice-container') || printWrapper;
-    
-    const origTallyHeight = element.style.height;
-    const origTallyMaxHeight = element.style.maxHeight;
-    const origTallyPadding = element.style.padding;
-    const origTallyOverflow = element.style.overflow;
-
-    element.style.height = "294mm";
-    element.style.maxHeight = "294mm";
-    element.style.padding = "6mm 8mm";
-    element.style.overflow = "hidden";
-
-    const blob = await html2pdf().from(element).set(opt).toPdf().get('pdf').then(pdf => {
-      const totalPages = pdf.internal.getNumberOfPages();
-      for (let i = totalPages; i > 1; i--) {
-        pdf.deletePage(i);
-      }
-      return pdf.output('blob');
-    });
-    
-    element.style.height = origTallyHeight;
-    element.style.maxHeight = origTallyMaxHeight;
-    element.style.padding = origTallyPadding;
-    element.style.overflow = origTallyOverflow;
-
-    printWrapper.style.display = "";
-    printWrapper.style.position = "";
-    printWrapper.style.left = "";
-    
-    const chatIds = chat.split(/[\s,]+/).filter(id => id.trim() !== "");
-    if (chatIds.length === 0) {
-      if (!silent) alert("No valid Telegram Chat IDs found.");
+  let pdfBase64 = precomputedBase64;
+  if (!pdfBase64) {
+    try {
+      const gen = await generateInvoicePdfBlob(invoiceDetails);
+      pdfBase64 = gen.pdfBase64;
+    } catch (err) {
+      console.warn("Could not generate PDF for Telegram:", err);
       return false;
     }
+  }
 
-    // Convert Blob to Base64
-    const reader = new FileReader();
-    const pdfBase64 = await new Promise((resolve) => {
-      reader.onloadend = () => resolve(reader.result);
-      reader.readAsDataURL(blob);
-    });
+  const chatIds = chat.split(/[\s,]+/).filter(id => id.trim() !== "");
+  if (chatIds.length === 0) {
+    if (!silent) alert("No valid Telegram Chat IDs found.");
+    return false;
+  }
+
+    // Auto-upload and link PDF in Google Drive / Google Sheets backend
+    try {
+      fetch("/api/invoices/upload-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: `Invoice_${invoiceDetails.invoiceNo}.pdf`,
+          invoiceNo: invoiceDetails.invoiceNo,
+          id: invoiceDetails.id,
+          pdfBase64: pdfBase64
+        })
+      }).then(r => r.json()).then(uploadRes => {
+        if (uploadRes && uploadRes.ok && uploadRes.pdfUrl) {
+          console.log(`☁️ Invoice #${invoiceDetails.invoiceNo} PDF saved to Google Drive:`, uploadRes.pdfUrl);
+          invoiceDetails.pdfUrl = uploadRes.pdfUrl;
+          const idx = invoicesDb.findIndex(i => i.id === invoiceDetails.id || i.invoiceNo === invoiceDetails.invoiceNo);
+          if (idx > -1) {
+            invoicesDb[idx].pdfUrl = uploadRes.pdfUrl;
+            if (invoicesDb[idx].details) invoicesDb[idx].details.pdfUrl = uploadRes.pdfUrl;
+            localStorage.setItem("invoices", JSON.stringify(invoicesDb));
+          }
+        }
+      }).catch(e => console.warn("Background Drive upload note:", e));
+    } catch (e) {}
 
     let successCount = 0;
     let lastError = "";
@@ -4228,19 +5587,6 @@ async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false) {
       if (!silent) alert(`Telegram status: Shared to ${successCount}/${chatIds.length} chats. ${lastError ? 'Last Error: ' + lastError : ''}`);
       return false;
     }
-  } catch (err) {
-    const element = printWrapper.querySelector('.tally-invoice-container') || printWrapper;
-    element.style.height = origTallyHeight;
-    element.style.maxHeight = origTallyMaxHeight;
-    element.style.padding = origTallyPadding;
-    element.style.overflow = origTallyOverflow;
-
-    printWrapper.style.display = "";
-    printWrapper.style.position = "";
-    printWrapper.style.left = "";
-    if (!silent) alert(`Failed to compile or upload PDF: ${err.message}`);
-    return false;
-  }
 }
 
 window.shareInvoiceToTelegram = async function(id, buttonEl) {

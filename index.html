@@ -39,7 +39,7 @@
     }
   </script>
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=95">
+  <link rel="stylesheet" href="index.css?v=97">
   <script src="invoice_utils_v5.js?v=95"></script>
 </head>
 <body>
@@ -166,6 +166,11 @@
           <div id="live-cloud-sync-badge" class="cloud-sync-pill synced" title="Real-time Cloud Database Sync Status">
             <span class="sync-dot"></span>
             <span id="sync-status-text">Cloud Synced</span>
+          </div>
+          <div id="live-whatsapp-pill" class="whatsapp-sync-pill disconnected cursor-pointer" onclick="openWhatsAppBotModal()" title="WhatsApp Automation Bot (Click to Link & Configure)">
+            <span id="wa-radar-indicator" class="wa-radar-dot" style="display: none;"></span>
+            <i id="wa-bot-status-icon" class="fa-brands fa-whatsapp"></i>
+            <span id="wa-bot-status-text">WhatsApp Bot</span>
           </div>
           <span id="current-datetime">Wednesday, August 5, 2026</span>
         </div>
@@ -489,11 +494,15 @@
                 </div>
                 <div class="form-group flex-item-discount">
                   <label>DISC %</label>
-                  <input type="number" step="0.01" id="bill-item-discount" value="0">
+                  <input type="number" step="0.01" id="bill-item-discount" value="0" oninput="calculateBillingItemNetVal()">
                 </div>
                 <div class="form-group flex-item-rate">
-                  <label>RATE</label>
+                  <label>BASE RATE</label>
                   <input type="number" step="0.01" id="bill-item-rate" placeholder="0.00" readonly style="background-color: #f1f5f9; cursor: not-allowed;">
+                </div>
+                <div class="form-group flex-item-netrate" style="min-width: 120px;">
+                  <label style="color: #059669; font-weight: 700;">VAL AFTER DISC</label>
+                  <input type="text" id="bill-item-net-val" placeholder="₹ 0.00" readonly style="background-color: #f0fdf4; color: #15803d; font-weight: 800; text-align: right; border: 1.5px solid #86efac; cursor: default;" title="Unit price after applying discount">
                 </div>
                 <button type="button" class="btn btn-primary btn-add-row" onclick="addBillingItemRow()">
                   <i class="fa-solid fa-plus"></i> Add
@@ -708,43 +717,122 @@
 
       <!-- VIEW: PRODUCTS -->
       <section id="view-products" class="content-view hidden">
-        <div class="card-box">
-          <div class="card-box-header">
-            <h3>Products database (<span id="product-count">0</span>)</h3>
-            <div class="header-right-meta flex-row gap-10">
-              <div class="search-box">
-                <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="search-products-input" placeholder="Search product...">
+        <!-- 1. Advanced Top KPI Summary Metrics Cards -->
+        <div class="products-kpi-grid">
+          <div class="prod-kpi-card">
+            <div class="kpi-icon-pill bg-blue-light text-blue">
+              <i class="fa-solid fa-boxes-stacked"></i>
+            </div>
+            <div class="kpi-data">
+              <span class="kpi-label">TOTAL PRODUCTS</span>
+              <h3 class="kpi-value" id="prod-kpi-count">0</h3>
+              <span class="kpi-hint">Master Catalog Items</span>
+            </div>
+          </div>
+
+          <div class="prod-kpi-card">
+            <div class="kpi-icon-pill bg-teal-light text-teal">
+              <i class="fa-solid fa-cubes"></i>
+            </div>
+            <div class="kpi-data">
+              <span class="kpi-label">PHYSICAL STOCK</span>
+              <h3 class="kpi-value" id="prod-kpi-units">0 Units</h3>
+              <span class="kpi-hint">Total Warehouse Units</span>
+            </div>
+          </div>
+
+          <div class="prod-kpi-card">
+            <div class="kpi-icon-pill bg-emerald-light text-emerald">
+              <i class="fa-solid fa-sack-dollar"></i>
+            </div>
+            <div class="kpi-data">
+              <span class="kpi-label">TOTAL INVENTORY VALUE</span>
+              <h3 class="kpi-value text-emerald" id="prod-kpi-valuation">₹ 0.00</h3>
+              <span class="kpi-hint">Net Worth (After Discount)</span>
+            </div>
+          </div>
+
+          <div class="prod-kpi-card">
+            <div class="kpi-icon-pill bg-amber-light text-amber">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <div class="kpi-data">
+              <span class="kpi-label">STOCK ALERTS</span>
+              <h3 class="kpi-value" id="prod-kpi-alerts">0 Alerts</h3>
+              <span class="kpi-hint" id="prod-kpi-alerts-sub">0 Low / 0 Out</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Master Products Card & Toolbar -->
+        <div class="card-box products-main-card">
+          <div class="products-header-bar">
+            <div class="products-header-title">
+              <div class="title-with-badge">
+                <i class="fa-solid fa-box-archive text-teal" style="font-size: 20px;"></i>
+                <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a;">Products &amp; Inventory Master</h3>
+                <span class="products-count-badge" id="product-count">0</span>
               </div>
-              <select id="filter-stock-status" onchange="filterProductsByStockStatus()" style="background: var(--editor-input-bg); border: 1px solid var(--editor-border); color: #fff; padding: 8px 12px; border-radius: 6px; font-size: 13px; outline: none; cursor: pointer;">
-                <option value="all">All Stock Statuses</option>
-                <option value="instock">In Stock (> 10)</option>
-                <option value="low">Low Stock (1 - 10)</option>
-                <option value="out">Out of Stock (0)</option>
-              </select>
-              <button class="btn btn-secondary btn-sm" onclick="exportProductsToCSV()" style="display: inline-flex; align-items: center; gap: 6px;">
+              <p class="products-header-sub">Manage master pricing, promotional discount %, real-time physical stock &amp; inventory valuation</p>
+            </div>
+
+            <div class="products-toolbar-controls">
+              <!-- Search Box -->
+              <div class="products-search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="search-products-input" placeholder="Search by name or HSN..." autocomplete="off">
+              </div>
+
+              <!-- Stock Filter Dropdown -->
+              <div class="products-filter-wrapper">
+                <i class="fa-solid fa-filter filter-icon"></i>
+                <select id="filter-stock-status" onchange="filterProductsByStockStatus()">
+                  <option value="all">All Stock Statuses</option>
+                  <option value="instock">In Stock (&gt; 10)</option>
+                  <option value="low">Low Stock (1 - 10)</option>
+                  <option value="out">Out of Stock (0)</option>
+                </select>
+              </div>
+
+              <!-- Actions -->
+              <button class="btn btn-secondary btn-sm export-btn" onclick="exportProductsToCSV()">
                 <i class="fa-solid fa-file-csv text-emerald"></i> Export CSV
               </button>
-              <button class="btn btn-primary" onclick="openProductModal()">
+
+              <button class="btn btn-primary btn-add-product" onclick="openProductModal()">
                 <i class="fa-solid fa-plus"></i> Add Product
               </button>
             </div>
           </div>
-          <div class="table-responsive">
-            <table class="dashboard-table">
+
+          <!-- 3. Responsive Table -->
+          <div class="table-responsive products-table-responsive">
+            <table class="dashboard-table products-table">
               <thead>
                 <tr>
-                  <th>NAME</th>
-                  <th>HSN</th>
-                  <th style="text-align: center;">PACK SIZE</th>
-                  <th style="text-align: right;">PRICE (RATE)</th>
-                  <th style="text-align: center;">STOCK</th>
-                  <th style="text-align: center;">ACTIONS</th>
+                  <th style="width: 25%;">PRODUCT NAME</th>
+                  <th style="width: 9%;">HSN</th>
+                  <th style="width: 8%; text-align: center;">PACK SIZE</th>
+                  <th style="width: 10%; text-align: right;">PRICE (RATE)</th>
+                  <th style="width: 11%; text-align: center;">DISCOUNT (%)</th>
+                  <th style="width: 12%; text-align: right;">PRICE AFTER DISC.</th>
+                  <th style="width: 12%; text-align: center;">STOCK UNITS</th>
+                  <th style="width: 10%; text-align: right;">TOTAL VALUE</th>
+                  <th style="width: 5%; text-align: center;">ACTIONS</th>
                 </tr>
               </thead>
               <tbody id="products-list-body">
                 <!-- Dynamically populated -->
               </tbody>
+              <tfoot id="products-list-tfoot">
+                <tr>
+                  <td colspan="4" style="text-align: right; font-weight: 700; color: #475569; padding: 14px 16px;">Total Warehouse Inventory:</td>
+                  <td colspan="2" style="text-align: center; font-weight: 800; color: #0284c7; padding: 14px 16px;" id="prod-total-count-footer">0 Items</td>
+                  <td style="text-align: center; font-weight: 800; color: #0f766e; padding: 14px 16px;" id="prod-total-stock-footer">0 Units</td>
+                  <td style="text-align: right; font-weight: 800; color: #0f172a; font-size: 14px; padding: 14px 16px;" id="prod-total-val-footer">₹ 0.00</td>
+                  <td></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
@@ -996,6 +1084,41 @@
           </div>
           
           <div id="advanced-settings-content" class="hidden" style="margin-top: 20px;">
+            
+            <!-- Google Drive Cloud Backend & Live Sheets Card -->
+            <div class="card-box col-12 margin-bottom-15" style="border: 1px solid #10b981; background: rgba(16, 185, 129, 0.04); border-radius: 12px;">
+              <div class="card-box-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="color: #065f46; margin: 0; display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-brands fa-google-drive" style="color: #10b981;"></i> Google Drive Cloud Backend &amp; Live Master Sheets
+                </h3>
+                <span style="background: #10b981; color: white; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;">
+                  <i class="fa-solid fa-circle-check"></i> Connected &amp; Active
+                </span>
+              </div>
+              <div style="padding: 15px 0 5px 0;">
+                <p style="font-size: 12.5px; color: #475569; margin-bottom: 12px;">
+                  All bills, stock levels, and customer ledgers are automatically synced to your <strong>Google Drive</strong> (<code>Aaryan_Aqua_Billing_Data</code>) and mirrored live in your Master Google Sheet.
+                </p>
+                
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;">
+                  <a href="https://docs.google.com/spreadsheets/d/1BZnCqi9DPhJxhwUpux1HRfo_PDVn2QLDNDheR0Kf73Q/edit" target="_blank" class="btn btn-sm btn-primary" style="background: #0f766e; border-color: #0f766e; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-size: 12px;">
+                    <i class="fa-solid fa-table-cells"></i> Open Live Google Spreadsheet
+                  </a>
+                  <button type="button" class="btn btn-sm btn-secondary" onclick="triggerManualGoogleDriveSync(this)" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px;">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Sync All Data to Google Drive Now
+                  </button>
+                  <button type="button" class="btn btn-sm btn-secondary" onclick="syncAndGenerateAllDrivePdfs(this)" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; background: #0284c7; border-color: #0284c7; color: white;">
+                    <i class="fa-solid fa-file-pdf"></i> Generate &amp; Link All Invoice PDFs in Google Sheet
+                  </button>
+                </div>
+
+                <div class="form-group col-12" style="margin: 0;">
+                  <label for="set-google-script-url" style="font-size: 11.5px; color: #64748b;">Google Apps Script Web App Endpoint URL</label>
+                  <input type="text" id="set-google-script-url" value="https://script.google.com/macros/s/AKfycbwkegJvhM42cPIROIKg5Dlx6py8OnS5NXuIJeyf1Zb3V3Oc_2jyXPS_aDN7uW0t874d/exec" readonly style="font-size: 11.5px; background: #f8fafc; color: #334155;">
+                </div>
+              </div>
+            </div>
+
             <div class="dashboard-split-layout">
               <!-- Left: Telegram Integration -->
               <div class="card-box flex-50">
@@ -1123,16 +1246,29 @@
         </div>
         <div class="form-group">
           <label for="modal-prod-rate">Rate (₹)</label>
-          <input type="number" step="0.01" id="modal-prod-rate" required placeholder="3599.00">
+          <input type="number" step="0.01" id="modal-prod-rate" required placeholder="3599.00" oninput="calculateProductModalValues()">
         </div>
         <div class="form-group">
           <label for="modal-prod-discount">Default Discount (%)</label>
-          <input type="number" step="0.01" id="modal-prod-discount" value="0">
+          <input type="number" step="0.01" id="modal-prod-discount" value="0" oninput="calculateProductModalValues()">
         </div>
         <div class="form-group col-12">
           <label for="modal-prod-stock">Current Stock Quantity</label>
-          <input type="number" id="modal-prod-stock" value="0" min="0" required placeholder="e.g. 50">
+          <input type="number" id="modal-prod-stock" value="0" min="0" required placeholder="e.g. 50" oninput="calculateProductModalValues()">
         </div>
+
+        <!-- Live Discount & Product Valuation Summary Card -->
+        <div class="col-12" style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; padding: 12px 16px; margin-top: 4px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 12.5px;">
+            <span style="color: #475569;"><i class="fa-solid fa-tag text-emerald"></i> Product Value After Discount:</span>
+            <strong id="modal-preview-val-after-disc" style="color: #15803d; font-size: 14px;">₹ 0.00</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; border-top: 1px dashed #bbf7d0; padding-top: 6px;">
+            <span style="color: #475569;"><i class="fa-solid fa-calculator text-teal"></i> Total Value of Product (Stock × Net Price):</span>
+            <strong id="modal-preview-total-val" style="color: #0f172a; font-size: 15px; font-weight: 800;">₹ 0.00</strong>
+          </div>
+        </div>
+
         <div class="form-group col-12 flex-row gap-10 margin-top-20 justify-end">
           <button type="button" class="btn btn-secondary" onclick="closeProductModal()">Cancel</button>
           <button type="submit" class="btn btn-primary">Save Product</button>
@@ -1607,9 +1743,12 @@
         <p>Thank you for your business!</p>
         <p>Aaryan Aqua Needs - Repalle</p>
       </div>
+    </div>
+  </div>
+
   <!-- BALANCE UPI QR MODAL -->
   <div id="balance-qr-modal" class="modal-overlay hidden">
-    <div class="modal-card text-center" style="max-width: 380px;">
+    <div class="modal-box text-center" style="max-width: 380px; background: #ffffff;">
       <div class="modal-header" style="justify-content: center; position: relative;">
         <h3 style="margin: 0; color: #0a4b5c; font-size: 16px;"><i class="fa-solid fa-qrcode text-teal"></i> Balance Payment QR</h3>
         <button class="modal-close-btn" onclick="closeBalanceQrModal()" style="position: absolute; right: 12px; top: 12px;">&times;</button>
@@ -1657,6 +1796,172 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=95"></script>
+  <!-- WHATSAPP BOT & AUTOMATION MODAL -->
+  <div id="whatsapp-bot-modal" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 999999; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center;">
+    <div class="modal-box" style="max-width: 520px; width: 92%; border-radius: 16px; overflow: hidden; background: #ffffff; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);">
+      <div class="modal-header" style="background: linear-gradient(135deg, #075e54 0%, #128c7e 100%); color: white; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 38px; height: 38px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px;">
+            <i class="fa-brands fa-whatsapp"></i>
+          </div>
+          <div>
+            <h3 style="margin: 0; color: #ffffff; font-size: 16px; font-weight: 700;">WhatsApp Automation Center</h3>
+            <span style="font-size: 11.5px; color: rgba(255,255,255,0.85);">100% Free Background Bot &amp; Instant Share</span>
+          </div>
+        </div>
+        <button class="modal-close-btn" onclick="closeWhatsAppBotModal()" style="color: white; background: none; border: none; font-size: 26px; cursor: pointer;">&times;</button>
+      </div>
+      
+      <div class="modal-body" style="padding: 20px; max-height: 75vh; overflow-y: auto;">
+        
+        <!-- STATUS BANNER -->
+        <div id="wa-modal-status-card" class="wa-status-card wa-status-disconnected" style="margin-bottom: 16px;">
+          <div class="wa-status-indicator" style="display: flex; align-items: center; gap: 8px;">
+            <span class="wa-pulse-dot" id="wa-status-dot"></span>
+            <strong id="wa-modal-status-title" style="font-size: 13.5px;">WhatsApp Bot Disconnected</strong>
+          </div>
+          <p id="wa-modal-status-desc" style="margin: 4px 0 0 0; font-size: 12px; color: #64748b;">
+            Scan QR code once to enable automated background PDF sending.
+          </p>
+        </div>
+
+        <!-- TAB SWITCHER -->
+        <div style="display: flex; gap: 8px; margin-bottom: 14px; background: #f1f5f9; padding: 4px; border-radius: 8px;">
+          <button id="wa-tab-btn-qr" type="button" class="btn btn-sm" onclick="switchWhatsAppPairTab('qr')" style="flex: 1; font-weight: 700; font-size: 12px; background: #ffffff; color: #0a4b5c; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: none; border-radius: 6px; padding: 8px 10px;">
+            <i class="fa-solid fa-qrcode"></i> 1. Scan QR
+          </button>
+          <button id="wa-tab-btn-code" type="button" class="btn btn-sm" onclick="switchWhatsAppPairTab('code')" style="flex: 1; font-weight: 600; font-size: 12px; background: transparent; color: #64748b; border: none; border-radius: 6px; padding: 8px 10px;">
+            <i class="fa-solid fa-key"></i> 2. Phone Code
+          </button>
+          <button id="wa-tab-btn-history" type="button" class="btn btn-sm" onclick="switchWhatsAppPairTab('history')" style="flex: 1; font-weight: 600; font-size: 12px; background: transparent; color: #64748b; border: none; border-radius: 6px; padding: 8px 10px;">
+            <i class="fa-solid fa-clock-rotate-left"></i> 3. History
+          </button>
+        </div>
+
+        <!-- PAIRING QR / CODE SECTION (VISIBLE WHEN WAITING / INITIALIZING) -->
+        <div id="wa-qr-section" class="wa-section-box">
+          <!-- TAB 1: QR CODE VIEW -->
+          <div id="wa-tab-content-qr">
+            <div style="text-align: center; margin-bottom: 12px;">
+              <h4 style="margin: 0 0 4px 0; color: #0a4b5c; font-size: 13.5px;"><i class="fa-solid fa-camera"></i> Point Camera at QR Code</h4>
+              <span style="font-size: 11.5px; color: #64748b;">WhatsApp &gt; Linked Devices &gt; Link a Device</span>
+            </div>
+
+            <div id="wa-qr-container" style="display: flex; justify-content: center; align-items: center; min-height: 220px; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 14px; margin-bottom: 12px; position: relative;">
+              <div id="wa-qr-loading" style="text-align: center; color: #64748b;">
+                <i class="fa-solid fa-spinner fa-spin fa-2x" style="margin-bottom: 8px; color: #0891b2;"></i>
+                <p style="margin: 0; font-size: 13px; font-weight: 500;">Starting WhatsApp Web Engine...<br><span style="font-size: 11px; color: #94a3b8;">Click below to load or refresh QR</span></p>
+              </div>
+              <img id="wa-qr-image" src="" alt="WhatsApp QR Code" style="display: none; width: 220px; height: 220px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); background: white; padding: 6px;">
+            </div>
+
+            <div style="display: flex; justify-content: center; gap: 8px;">
+              <button class="btn btn-sm btn-primary" onclick="initiateWhatsAppConnect(true)" style="background: #25d366; border-color: #25d366; color: white; padding: 8px 16px; font-weight: 600;">
+                <i class="fa-solid fa-rotate"></i> Refresh QR Code
+              </button>
+            </div>
+          </div>
+
+          <!-- TAB 2: PHONE PAIRING CODE VIEW -->
+          <div id="wa-tab-content-code" style="display: none;">
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px; margin-bottom: 12px; font-size: 12px; color: #166534;">
+              <strong>Alternative Guaranteed Pairing:</strong> If camera scan fails, generate an 8-character code and type it into WhatsApp on your phone!
+            </div>
+
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; font-size: 11.5px; font-weight: 700; color: #334155; margin-bottom: 6px;">YOUR WHATSAPP PHONE NUMBER</label>
+              <div style="display: flex; gap: 8px;">
+                <span style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px; font-size: 13px; font-weight: 700; color: #475569;">+91</span>
+                <input type="tel" id="wa-pair-phone-input" placeholder="Enter 10-digit mobile number" maxlength="10" style="flex: 1; padding: 8px 12px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                <button type="button" class="btn btn-primary" onclick="requestWhatsAppPairCode()" style="background: #0891b2; border-color: #0891b2; color: white; font-weight: 600; font-size: 12.5px; padding: 8px 14px;">
+                  <i class="fa-solid fa-key"></i> Get Code
+                </button>
+              </div>
+            </div>
+
+            <div id="wa-code-display-box" style="display: none; text-align: center; background: #f8fafc; border: 2px dashed #0891b2; border-radius: 12px; padding: 16px; margin-bottom: 12px;">
+              <span style="font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Your 8-Digit WhatsApp Linking Code</span>
+              <div id="wa-code-text" style="font-size: 28px; font-family: monospace; font-weight: 800; color: #0a4b5c; letter-spacing: 4px; margin: 8px 0;">---- ----</div>
+              <p style="font-size: 11.5px; color: #475569; margin: 0;">
+                👉 Open WhatsApp &gt; <strong>Linked Devices</strong> &gt; <strong>Link a Device</strong> &gt; Tap <strong>"Link with phone number instead"</strong> at bottom &gt; Type code above!
+              </p>
+            </div>
+          </div>
+
+          <!-- HELPFUL LINK LIMIT NOTICE -->
+          <div style="margin-top: 14px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 10px 12px; font-size: 11px; color: #92400e; display: flex; align-items: flex-start; gap: 8px;">
+            <i class="fa-solid fa-circle-info" style="font-size: 14px; margin-top: 1px; color: #d97706;"></i>
+            <span><strong>Tip:</strong> WhatsApp allows a maximum of 4 active linked devices. If you see <em>"Couldn't link device"</em> on your phone, open WhatsApp &gt; <strong>Linked Devices</strong>, tap any old inactive device, and tap <strong>Log out</strong>, then try again.</span>
+          </div>
+        </div>
+
+        <!-- CONNECTED DEVICE SECTION (VISIBLE WHEN CONNECTED) -->
+        <div id="wa-connected-section" class="wa-section-box hidden">
+          <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 10px; padding: 14px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="width: 40px; height: 40px; background: #10b981; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px;">
+                <i class="fa-solid fa-check"></i>
+              </div>
+              <div>
+                <h4 style="margin: 0; color: #065f46; font-size: 14px;" id="wa-device-name">Linked WhatsApp Bot</h4>
+                <p style="margin: 2px 0 0 0; font-size: 12px; color: #047857;" id="wa-device-phone">+91 Connected</p>
+              </div>
+            </div>
+            <button class="btn btn-sm btn-rose" onclick="disconnectWhatsAppBot()" title="Log out linked phone" style="padding: 6px 12px; font-size: 12px;">
+              <i class="fa-solid fa-right-from-bracket"></i> Unlink
+            </button>
+          </div>
+
+          <!-- TEST MESSAGE TOOL -->
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 12px;">
+            <h5 style="margin: 0 0 8px 0; font-size: 12.5px; color: #334155;"><i class="fa-solid fa-paper-plane text-teal"></i> Test Background Sending</h5>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="wa-test-phone" placeholder="Enter 10-digit mobile number" style="flex: 1; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <button class="btn btn-sm btn-primary" onclick="sendWhatsAppTestMessage()" style="font-size: 12px;">
+                <i class="fa-solid fa-paper-plane"></i> Send Test
+              </button>
+            </div>
+            <p id="wa-test-status" style="margin: 6px 0 0 0; font-size: 11px; color: #64748b;"></p>
+          </div>
+        </div>
+
+        <!-- TAB 3: DISPATCH ACTIVITY HISTORY VIEW -->
+        <div id="wa-tab-content-history" style="display: none; margin-bottom: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <span style="font-size: 12.5px; font-weight: 700; color: #0a4b5c;"><i class="fa-solid fa-list-check text-teal"></i> WhatsApp Dispatch Activity Logs</span>
+            <button class="btn btn-xs btn-secondary" onclick="loadWhatsAppActivityLogs()" style="padding: 4px 10px; font-size: 11px;">
+              <i class="fa-solid fa-rotate"></i> Refresh
+            </button>
+          </div>
+          <div id="wa-activity-logs-container" style="max-height: 240px; overflow-y: auto; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px;">
+            <div style="text-align: center; color: #94a3b8; padding: 20px; font-size: 12px;">Loading activity history...</div>
+          </div>
+        </div>
+
+        <!-- AUTOMATION PREFERENCES -->
+        <div style="border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 14px;">
+          <h5 style="margin: 0 0 10px 0; font-size: 13px; color: #0a4b5c;"><i class="fa-solid fa-sliders"></i> WhatsApp Automation Settings</h5>
+          
+          <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 12.5px; cursor: pointer; margin-bottom: 10px;">
+            <input type="checkbox" id="wa-auto-send-toggle" checked onchange="saveWhatsAppSettings()" style="margin-top: 2px;">
+            <span><strong>Automatic Background Dispatch:</strong> Silently send PDF invoice + summary to customer upon saving bill when Bot is connected.</span>
+          </label>
+
+          <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 12.5px; cursor: pointer;">
+            <input type="checkbox" id="wa-fallback-1click-toggle" checked onchange="saveWhatsAppSettings()" style="margin-top: 2px;">
+            <span><strong>Enable 1-Click Fallback:</strong> If bot is offline or not paired, open 1-Click WhatsApp Web/App with pre-filled summary and PDF link.</span>
+          </label>
+        </div>
+
+      </div>
+      
+      <div class="modal-footer" style="padding: 12px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 11px; color: #64748b;"><i class="fa-solid fa-shield-halved text-teal"></i> 100% Free &amp; Secure (Local PC Engine)</span>
+        <button class="btn btn-secondary btn-sm" onclick="closeWhatsAppBotModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="index_v5.js?v=123"></script>
 </body>
 </html>
