@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
 const path = require('path');
@@ -54,7 +55,7 @@ function formatPhone(phone) {
 }
 
 async function initClient(options = {}) {
-  const { forceClean = false, pairPhone = null } = options;
+  const { forceClean = false, pairPhone = null, retryCount = 0 } = options;
   if (status === 'CONNECTED' && !forceClean) return getStatus();
   if (isInitializing) return getStatus();
 
@@ -73,6 +74,9 @@ async function initClient(options = {}) {
       } catch (e) {}
     }
 
+    const lockFile = path.join(authPath, 'session', 'SingletonLock');
+    try { if (fs.existsSync(lockFile)) fs.unlinkSync(lockFile); } catch (e) {}
+
     if (client) {
       try { await client.destroy(); } catch (e) {}
       client = null;
@@ -80,6 +84,10 @@ async function initClient(options = {}) {
 
     const clientConfig = {
       authStrategy: new LocalAuth({ dataPath: authPath }),
+      webVersionCache: {
+        type: 'remote',
+        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
+      },
       puppeteer: {
         headless: true,
         args: [
@@ -165,10 +173,14 @@ async function initClient(options = {}) {
 
     await client.initialize();
   } catch (err) {
-    console.error('Client init error:', err);
+    console.error('Client init error:', err.message);
     status = 'DISCONNECTED';
     isInitializing = false;
     errorMessage = err.message;
+    if (retryCount < 3) {
+      console.log(`🔄 Retrying WhatsApp engine initialization in 3 seconds (attempt ${retryCount + 1}/3)...`);
+      setTimeout(() => initClient({ ...options, retryCount: retryCount + 1 }), 3000);
+    }
   }
 
   return getStatus();
