@@ -2599,12 +2599,18 @@ window.saveCurrentInvoiceRecord = async function(actionType = 'save_only', btnEl
     } else if (actionType === 'share_whatsapp') {
       showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} saved! Opening WhatsApp...`);
       shareInvoicePdfNative(invoiceRecord.details, btnEl);
-      resetBillingForm();
-      switchTab("history");
-      loadInvoicesHistoryTable();
+      if (typeof openInvoiceSuccessModal === 'function') {
+        openInvoiceSuccessModal(invoiceRecord);
+      } else {
+        resetBillingForm();
+        switchTab("history");
+        loadInvoicesHistoryTable();
+      }
     } else {
-      // save_only: Show clear visual confirmation and quick actions modal
-      showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} successfully created & saved to Google Sheets!`);
+      // save_only ("Generate & Save Invoice"):
+      // Automatically send to that customer's WhatsApp & show success actions modal
+      showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} saved! Sending to WhatsApp...`);
+      shareInvoicePdfNative(invoiceRecord.details, btnEl);
       if (typeof openInvoiceSuccessModal === 'function') {
         openInvoiceSuccessModal(invoiceRecord);
       } else {
