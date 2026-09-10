@@ -2,13 +2,6 @@
 
 [build]
   publish = "."
-  functions = "netlify/functions"
-
-# Route all API calls to Netlify Serverless API Function
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/api/:splat"
-  status = 200
 
 # Client-side SPA routing fallback to index.html
 [[redirects]]

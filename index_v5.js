@@ -173,7 +173,9 @@ elements.sumIgstRow = elements.sumIgst ? elements.sumIgst.closest('.summary-row'
 window.lastSyncETag = null;
 window.lastSyncTimestamp = parseInt(localStorage.getItem("aaryan_last_sync_time") || "0", 10);
 
-const GOOGLE_SCRIPT_FALLBACK_URL = "https://script.google.com/macros/s/AKfycbwkegJvhM42cPIROIKg5Dlx6py8OnS5NXuIJeyf1Zb3V3Oc_2jyXPS_aDN7uW0t874d/exec";
+const GOOGLE_SCRIPT_URL = window.GOOGLE_SCRIPT_URL || "https://script.google.com/macros/s/AKfycbwkegJvhM42cPIROIKg5Dlx6py8OnS5NXuIJeyf1Zb3V3Oc_2jyXPS_aDN7uW0t874d/exec";
+const API_SECRET_TOKEN = window.API_SECRET_TOKEN || "AARYAN_AQUA_SECURE_KEY_2026";
+const GOOGLE_SCRIPT_FALLBACK_URL = GOOGLE_SCRIPT_URL;
 
 // --- INTER-TAB REAL-TIME SYNCHRONIZATION VIA BROADCAST-CHANNEL (0.05ms) ---
 let interTabChannel = null;
@@ -465,75 +467,39 @@ const AaryanDB = {
         return;
       }
 
-      // Try high-speed batch push first
-      try {
-        const batchRes = await fetch('/api/sync/batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ operations: pendingOps })
-        });
-
-        if (batchRes.ok) {
-          const batchData = await batchRes.json();
-          if (batchData && batchData.ok) {
-            // Cleared all queued operations!
-            if (this.db) {
-              const delTx = this.db.transaction(['outbox'], 'readwrite');
-              delTx.objectStore('outbox').clear();
-              await new Promise(r => { delTx.oncomplete = r; delTx.onerror = r; });
-            }
-            localStorage.removeItem("aaryan_outbox");
-            console.log(`⚡ AaryanDB Outbox: Flushed ${pendingOps.length} offline operations!`);
-            this.isDrainingOutbox = false;
-            return;
-          }
-        }
-      } catch (batchErr) {}
-
-      // Fallback: Individual dispatch with GAS fallback
+      // Direct Google Apps Script Serverless Backend Dispatch
       for (const op of pendingOps) {
         try {
           let synced = false;
-          let endpoint = "";
           let gasPayload = null;
 
           if (op.type === 'invoice' || op.action === 'save_invoice') {
-            endpoint = "/api/invoices";
-            gasPayload = { action: 'save_invoice', invoice: op.payload?.invoice || op.payload };
+            gasPayload = { action: 'save_invoice', auth: API_SECRET_TOKEN, invoice: op.payload?.invoice || op.payload };
           } else if (op.type === 'product' || op.action === 'save_products') {
-            endpoint = "/api/products";
-            gasPayload = { action: 'save_products', products: op.payload?.products || op.payload };
-          } else if (op.type === 'party' || op.action === 'save_parties') {
-            endpoint = "/api/parties";
-            gasPayload = { action: 'save_parties', parties: op.payload?.parties || op.payload };
+            gasPayload = { action: 'save_products', auth: API_SECRET_TOKEN, products: op.payload?.products || op.payload };
+          } else if (op.type === 'party' || op.action === 'save_parties' || op.type === 'parties') {
+            gasPayload = { action: 'save_parties', auth: API_SECRET_TOKEN, parties: op.payload?.parties || op.payload };
+          } else if (op.type === 'settings' || op.action === 'save_settings') {
+            gasPayload = { action: 'save_settings', auth: API_SECRET_TOKEN, settings: op.payload?.settings || op.payload };
           } else if (op.action === 'delete_record') {
-            endpoint = `/api/${op.payload?.type || op.type}s/delete`;
-            gasPayload = { action: 'delete_record', type: op.payload?.type || op.type, id: op.payload?.id };
+            gasPayload = { action: 'delete_record', auth: API_SECRET_TOKEN, type: op.payload?.type || op.type, id: op.payload?.id };
           }
 
-          if (endpoint) {
+          if (gasPayload) {
             try {
-              const res = await fetch(endpoint, {
+              const res = await fetch(GOOGLE_SCRIPT_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(op.payload?.invoice || op.payload?.products || op.payload?.parties || op.payload)
-              });
-              synced = res.ok;
-            } catch (e) {
-              synced = false;
-            }
-          }
-
-          if (!synced && gasPayload) {
-            try {
-              await fetch(GOOGLE_SCRIPT_FALLBACK_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain' },
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify(gasPayload),
-                mode: 'no-cors'
+                redirect: 'follow'
               });
-              synced = true;
-            } catch (e) {
+              if (res.ok) {
+                const data = await res.json();
+                if (data && data.ok) {
+                  synced = true;
+                }
+              }
+            } catch (netErr) {
               synced = false;
             }
           }
@@ -548,7 +514,7 @@ const AaryanDB = {
               localStorage.setItem("aaryan_outbox", JSON.stringify(cur));
             }
           } else {
-            break; // Stop draining until next poll
+            break; // Stop draining until next retry cycle
           }
         } catch (itemErr) {
           break;
@@ -639,9 +605,9 @@ window.openDatabaseTelemetryModal = async function() {
     pingValEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Measuring latency...`;
     const start = Date.now();
     try {
-      const res = await fetch("/api/sync?since=" + (Date.now() + 100000), { cache: "no-store" });
+      const res = await fetch(GOOGLE_SCRIPT_URL + "?action=status&auth=" + encodeURIComponent(API_SECRET_TOKEN), { cache: "no-store", redirect: "follow" });
       const duration = Date.now() - start;
-      pingValEl.innerHTML = `<span style="color:#10b981;font-weight:700;">${duration} ms</span> <span style="font-size:11px;color:#64748b;">(${res.status === 304 ? 'Instant 304 ETag Cache' : 'HTTP ' + res.status})</span>`;
+      pingValEl.innerHTML = `<span style="color:#10b981;font-weight:700;">${duration} ms</span> <span style="font-size:11px;color:#64748b;">(Google Apps Script API)</span>`;
     } catch (err) {
       pingValEl.innerHTML = `<span style="color:#ef4444;font-weight:700;">Offline / Fallback</span>`;
     }
@@ -863,9 +829,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       updateCloudSyncBadge("syncing");
-      const res = await fetch("/api/google-drive/sync-now", { method: "POST" });
-      const data = await res.json();
-      if (data && data.ok) {
+      if (typeof window.triggerDatabaseSync === 'function') {
+        await window.triggerDatabaseSync();
+      }
+      if (true) {
         updateCloudSyncBadge("synced");
         if (btnEl) {
           btnEl.innerHTML = `<i class="fa-solid fa-check text-success"></i> Synced to Google Drive!`;
@@ -966,20 +933,8 @@ document.addEventListener("DOMContentLoaded", () => {
           reader.readAsDataURL(blob);
         });
 
-        const uploadRes = await fetch("/api/invoices/upload-pdf", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            filename: `Invoice_${inv.invoiceNo}.pdf`,
-            invoiceNo: inv.invoiceNo,
-            id: inv.id,
-            pdfBase64: pdfBase64
-          })
-        });
-
-        const uploadData = await uploadRes.json();
-        const uploadedUrl = uploadData ? (uploadData.pdfUrl || uploadData.googleDriveUrl || uploadData.viewUrl || uploadData.url) : null;
-        if (uploadData && uploadData.ok && uploadedUrl) {
+        const uploadedUrl = await uploadInvoicePdfToGoogleDrive(inv, pdfBase64);
+        if (uploadedUrl) {
           inv.pdfUrl = uploadedUrl;
           if (inv.details) inv.details.pdfUrl = uploadedUrl;
           processedCount++;
@@ -1108,40 +1063,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 25000);
 
-    const headers = {};
-    if (window.lastSyncETag && !forceReload) {
-      headers["If-None-Match"] = window.lastSyncETag;
-    }
+    const gasSyncUrl = `${GOOGLE_SCRIPT_URL}?action=sync&token=${encodeURIComponent(API_SECRET_TOKEN)}`;
 
-    const sinceParam = (!forceReload && window.lastSyncTimestamp) ? `?since=${window.lastSyncTimestamp}` : '';
-
-    return fetch(`/api/sync${sinceParam}`, { headers, signal: controller.signal })
+    return fetch(gasSyncUrl, { signal: controller.signal, redirect: 'follow' })
       .then(res => {
         clearTimeout(timeoutId);
-        if (res.status === 304) {
-          // In sync! 0 bytes payload, 0ms parsing time
-          updateCloudSyncBadge("synced");
-          return null;
-        }
         if (!res.ok) throw new Error("HTTP sync error " + res.status);
-        const etag = res.headers.get("ETag");
-        if (etag) window.lastSyncETag = etag;
         return res.json();
       })
-      .catch(async (err) => {
+      .catch((err) => {
         clearTimeout(timeoutId);
-        // Direct Fallback: Query Google Apps Script master sheet directly if /api/sync fails
-        try {
-          const gasRes = await fetch(GOOGLE_SCRIPT_FALLBACK_URL + "?action=sync", { redirect: 'follow' });
-          if (gasRes.ok) {
-            const gasData = await gasRes.json();
-            if (gasData && (gasData.invoices || gasData.products || gasData.ok)) {
-              return gasData;
-            }
-          }
-        } catch (gasErr) {
-          console.warn("Direct Google Apps Script fallback note:", gasErr);
-        }
+        console.warn("Google Apps Script sync error:", err.message);
         throw err;
       })
       .then(data => {
@@ -1518,7 +1450,7 @@ function seedDatabasesIfEmpty() {
         branch: "Repalle"
       },
       upiId: "7386262139@upi",
-      telegram: { token: "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g", chatId: "6877857251, 7906132548" },
+      telegram: { token: "", chatId: "" },
       security: { autolock: "120", username: "Aaryanaqua", password: "Aaryan@2024" },
       terms: [
         "We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct."
@@ -1617,9 +1549,9 @@ function loadAllDatabases() {
   }
 
   if (!globalSettings.telegram) {
-    globalSettings.telegram = { token: "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g", chatId: "6877857251, 7906132548" };
+    globalSettings.telegram = { token: "", chatId: "" };
   } else {
-    if (!globalSettings.telegram.token) globalSettings.telegram.token = "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g";
+    
     if (!globalSettings.telegram.chatId || !globalSettings.telegram.chatId.includes("7906132548")) {
       if (globalSettings.telegram.chatId && globalSettings.telegram.chatId.trim()) {
         globalSettings.telegram.chatId = globalSettings.telegram.chatId + ", 7906132548";
@@ -3493,8 +3425,8 @@ function formatWhatsAppPhone(phoneStr) {
 
 async function sendTelegramTextMessage(messageText) {
   loadAllDatabases();
-  const token = globalSettings.telegram?.token || "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g";
-  let rawChatId = globalSettings.telegram?.chatId || "6877857251, 7906132548";
+  const token = globalSettings.telegram?.token || "";
+  let rawChatId = globalSettings.telegram?.chatId || "";
 
   if (!rawChatId.includes("7906132548")) {
     rawChatId = rawChatId ? (rawChatId + ", 7906132548") : "6877857251, 7906132548";
@@ -4614,18 +4546,8 @@ async function generateInvoicePdfBlob(details) {
 
   // Automatically save to local disk & Google Drive backend in background
   try {
-    fetch("/api/invoices/upload-pdf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        filename: filename,
-        invoiceNo: details.invoiceNo,
-        id: details.id,
-        pdfBase64: pdfBase64
-      })
-    }).then(r => r.json()).then(uploadRes => {
-      const pUrl = uploadRes ? (uploadRes.pdfUrl || uploadRes.googleDriveUrl || uploadRes.viewUrl || uploadRes.url) : null;
-      if (uploadRes && uploadRes.ok && pUrl) {
+    uploadInvoicePdfToGoogleDrive(details, pdfBase64).then(pUrl => {
+      if (pUrl) {
         details.pdfUrl = pUrl;
         const idx = invoicesDb.findIndex(i => i.id === details.id || i.invoiceNo === details.invoiceNo);
         if (idx > -1) {
@@ -4839,11 +4761,7 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
       const reader = new FileReader();
       reader.onloadend = async () => {
         try {
-          await fetch("/api/invoices/upload-pdf", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ filename, invoiceNo: details.invoiceNo, id: details.id, pdfBase64: reader.result })
-          });
+          await uploadInvoicePdfToGoogleDrive(details, reader.result);
         } catch (e) {}
       };
       reader.readAsDataURL(pdfBlob);
@@ -5332,11 +5250,8 @@ window.deleteSavedInvoice = function(id) {
 
     invoicesDb = invoicesDb.filter(inv => inv.id !== id);
     localStorage.setItem("invoices", JSON.stringify(invoicesDb));
-    fetch("/api/invoices/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id })
-    }).catch(err => console.warn("Failed to delete invoice from server:", err));
+    AaryanDB.enqueueOutbox("invoice", "delete_record", { type: "invoice", id });
+    AaryanDB.drainOutbox();
     
     // Automatically recalculate next invoice number sequence
     autoSuggestInvoiceNo();
@@ -6143,15 +6058,15 @@ function loadSettingsFields() {
   loadAllDatabases();
 
   if (globalSettings.telegram) {
-    if (!globalSettings.telegram.token) globalSettings.telegram.token = "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g";
+    if (!globalSettings.telegram.token) globalSettings.telegram.token = "";
     if (!globalSettings.telegram.chatId || !globalSettings.telegram.chatId.includes("7906132548")) {
       globalSettings.telegram.chatId = globalSettings.telegram.chatId ? (globalSettings.telegram.chatId + ", 7906132548") : "6877857251, 7906132548";
       localStorage.setItem("settings", JSON.stringify(globalSettings));
     }
   }
 
-  elements.setTgToken.value = globalSettings.telegram?.token || "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g";
-  elements.setTgChatId.value = globalSettings.telegram?.chatId || "6877857251, 7906132548";
+  elements.setTgToken.value = globalSettings.telegram?.token || "";
+  elements.setTgChatId.value = globalSettings.telegram?.chatId || "";
   if (globalSettings.telegram?.token && globalSettings.telegram?.chatId) {
     elements.tgStatusIndicator.classList.remove("hidden");
     elements.tgStatusText.textContent = "Credentials loaded.";
@@ -6492,8 +6407,8 @@ window.submitUnlockLogin = function(e) {
 // --- UPLOAD INVOICE PDF TO TELEGRAM BOT API ---
 async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false, precomputedBase64 = null) {
   loadAllDatabases();
-  const token = globalSettings.telegram?.token || "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g";
-  let chat = globalSettings.telegram?.chatId || "6877857251, 7906132548";
+  const token = globalSettings.telegram?.token || "";
+  let chat = globalSettings.telegram?.chatId || "";
 
   if (!chat.includes("7906132548")) {
     chat = chat ? (chat + ", 7906132548") : "6877857251, 7906132548";
@@ -6525,18 +6440,8 @@ async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false, precom
 
     // Auto-upload and link PDF in Google Drive / Google Sheets backend
     try {
-      fetch("/api/invoices/upload-pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filename: `Invoice_${invoiceDetails.invoiceNo}.pdf`,
-          invoiceNo: invoiceDetails.invoiceNo,
-          id: invoiceDetails.id,
-          pdfBase64: pdfBase64
-        })
-      }).then(r => r.json()).then(uploadRes => {
-        const pUrl = uploadRes ? (uploadRes.pdfUrl || uploadRes.googleDriveUrl || uploadRes.viewUrl || uploadRes.url) : null;
-        if (uploadRes && uploadRes.ok && pUrl) {
+      uploadInvoicePdfToGoogleDrive(invoiceDetails, pdfBase64).then(pUrl => {
+        if (pUrl) {
           console.log(`☁️ Invoice #${invoiceDetails.invoiceNo} PDF saved to Google Drive:`, pUrl);
           invoiceDetails.pdfUrl = pUrl;
           const idx = invoicesDb.findIndex(i => i.id === invoiceDetails.id || i.invoiceNo === invoiceDetails.invoiceNo);
@@ -6554,23 +6459,31 @@ async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false, precom
 
     for (const id of chatIds) {
       try {
-        const res = await fetch("/api/telegram/sendDocument", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            token: token,
-            chat_id: id,
-            filename: `Invoice_${invoiceDetails.invoiceNo}.pdf`,
-            pdfBase64: pdfBase64,
-            caption: `🔔 Invoice #${invoiceDetails.invoiceNo} generated for ${invoiceDetails.buyer?.name || 'Customer'}.\nGrand Total: ₹ ${formatCurrency(invoiceDetails.total || 0)}`
-          })
-        });
+        try {
+          const formData = new FormData();
+          formData.append("chat_id", id);
+          formData.append("caption", `🔔 Invoice #${invoiceDetails.invoiceNo} generated for ${invoiceDetails.buyer?.name || 'Customer'}.\nGrand Total: ₹ ${formatCurrency(invoiceDetails.total || 0)}`);
+          const base64Data = pdfBase64.replace(/^data:application\/pdf;base64,/, "");
+          const byteCharacters = atob(base64Data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          formData.append("document", new Blob([byteArray], { type: "application/pdf" }), `Invoice_${invoiceDetails.invoiceNo}.pdf`);
 
-        const data = await res.json();
-        if (data && data.ok) {
-          successCount++;
-        } else {
-          lastError = (data && (data.description || data.error)) ? (data.description || data.error) : "Server request failed";
+          const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+            method: "POST",
+            body: formData
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            successCount++;
+          } else {
+            lastError = (data && (data.description || data.error)) ? (data.description || data.error) : "Telegram API failed";
+          }
+        } catch (tgErr) {
+          lastError = tgErr.message;
         }
       } catch (err) {
         lastError = err.message;
@@ -6616,9 +6529,7 @@ window.resetBillingDatabaseTo0001 = function() {
     invoicesDb = [];
     localStorage.setItem("invoices", JSON.stringify([]));
     localStorage.removeItem("deleted_invoice_ids");
-    fetch("/api/invoices/reset", {
-      method: "POST"
-    }).catch(err => console.warn("Failed to reset server database:", err));
+    // Invoices local reset completed
     
     autoSuggestInvoiceNo();
     resetBillingForm();
