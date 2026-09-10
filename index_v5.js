@@ -383,30 +383,6 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  // One-time cache clear, service worker unregistration, and local storage reset to force start sequence from 0001
-  if (localStorage.getItem("sw_cleared_v32_force_clear_invoices") !== "true") {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(registrations => {
-        for (let registration of registrations) {
-          registration.unregister();
-        }
-      });
-    }
-    if ('caches' in window) {
-      caches.keys().then(names => {
-        for (let name of names) {
-          caches.delete(name);
-        }
-      });
-    }
-    localStorage.setItem("invoices", JSON.stringify([]));
-    localStorage.setItem("sw_cleared_v32_force_clear_invoices", "true");
-    setTimeout(() => {
-      window.location.reload();
-    }, 150);
-    return;
-  }
-
   seedDatabasesIfEmpty();
   loadAllDatabases();
   setupRouting();
@@ -643,7 +619,7 @@ document.addEventListener("DOMContentLoaded", () => {
     updateCloudSyncBadge("syncing");
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
 
     const headers = {};
     if (window.lastSyncETag && !forceReload) {
@@ -961,11 +937,11 @@ document.addEventListener("DOMContentLoaded", () => {
       })
       .catch(err => {
         if (err.name === 'AbortError') {
-          console.warn("Sync request timed out (5s)");
+          console.warn("Sync request timed out (25s)");
           updateCloudSyncBadge("synced");
         } else {
           updateCloudSyncBadge("offline");
-          console.warn("Background sync connection failed (offline mode):", err);
+          console.warn("Background sync connection notice:", err);
         }
       })
       .finally(() => {
@@ -976,9 +952,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // Run initial sync
   window.triggerDatabaseSync();
 
-  // Run periodic sync (1.5s on localhost, 10s on cloud/Netlify to conserve bandwidth)
+  // Run periodic sync (1.5s on localhost, 15s on cloud/Netlify to conserve bandwidth)
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  const syncIntervalMs = isLocalhost ? 1500 : 10000;
+  const syncIntervalMs = isLocalhost ? 1500 : 15000;
   setInterval(window.triggerDatabaseSync, syncIntervalMs);
 
   // Sync automatically when window/tab is focused or returned to
