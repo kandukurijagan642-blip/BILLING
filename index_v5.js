@@ -523,9 +523,10 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         const uploadData = await uploadRes.json();
-        if (uploadData && uploadData.ok && uploadData.pdfUrl) {
-          inv.pdfUrl = uploadData.pdfUrl;
-          if (inv.details) inv.details.pdfUrl = uploadData.pdfUrl;
+        const uploadedUrl = uploadData ? (uploadData.pdfUrl || uploadData.googleDriveUrl || uploadData.viewUrl || uploadData.url) : null;
+        if (uploadData && uploadData.ok && uploadedUrl) {
+          inv.pdfUrl = uploadedUrl;
+          if (inv.details) inv.details.pdfUrl = uploadedUrl;
           processedCount++;
         }
       } catch (err) {
@@ -3249,14 +3250,43 @@ function showFloatingToast(message, type = "success") {
   }, 4500);
 }
 
+function savePartiesDb() {
+  try {
+    localStorage.setItem("parties", JSON.stringify(partiesDb));
+    if (typeof syncDatabaseToServer === 'function') {
+      syncDatabaseToServer("parties", partiesDb);
+    }
+    if (typeof loadPartiesDatabaseLists === 'function') {
+      loadPartiesDatabaseLists();
+    }
+    if (typeof populateBillingSelectors === 'function') {
+      populateBillingSelectors();
+    }
+  } catch (err) {
+    console.warn("savePartiesDb warning:", err);
+  }
+}
+window.savePartiesDb = savePartiesDb;
+
 function savePhoneToPartyDb(customerName, phone) {
-  if (!customerName || !phone || !partiesDb) return;
-  const nameLower = customerName.trim().toLowerCase();
-  const party = partiesDb.find(p => p.name && p.name.trim().toLowerCase() === nameLower);
-  if (party) {
-    party.phone = phone;
-    savePartiesDb();
-    sendPartyTelegramReport(party, false);
+  try {
+    if (!customerName || !phone || !Array.isArray(partiesDb)) return;
+    const nameLower = customerName.trim().toLowerCase();
+    const party = partiesDb.find(p => p && p.name && p.name.trim().toLowerCase() === nameLower);
+    if (party) {
+      party.phone = phone.trim();
+      party.updatedAt = new Date().toISOString();
+      savePartiesDb();
+      try {
+        if (typeof sendPartyTelegramReport === 'function') {
+          sendPartyTelegramReport(party, false);
+        }
+      } catch (e) {
+        console.warn("Telegram party report note:", e);
+      }
+    }
+  } catch (err) {
+    console.warn("savePhoneToPartyDb safe catch:", err);
   }
 }
 
@@ -4100,12 +4130,13 @@ async function generateInvoicePdfBlob(details) {
         pdfBase64: pdfBase64
       })
     }).then(r => r.json()).then(uploadRes => {
-      if (uploadRes && uploadRes.ok && uploadRes.pdfUrl) {
-        details.pdfUrl = uploadRes.pdfUrl;
+      const pUrl = uploadRes ? (uploadRes.pdfUrl || uploadRes.googleDriveUrl || uploadRes.viewUrl || uploadRes.url) : null;
+      if (uploadRes && uploadRes.ok && pUrl) {
+        details.pdfUrl = pUrl;
         const idx = invoicesDb.findIndex(i => i.id === details.id || i.invoiceNo === details.invoiceNo);
         if (idx > -1) {
-          invoicesDb[idx].pdfUrl = uploadRes.pdfUrl;
-          if (invoicesDb[idx].details) invoicesDb[idx].details.pdfUrl = uploadRes.pdfUrl;
+          invoicesDb[idx].pdfUrl = pUrl;
+          if (invoicesDb[idx].details) invoicesDb[idx].details.pdfUrl = pUrl;
           localStorage.setItem("invoices", JSON.stringify(invoicesDb));
         }
       }
@@ -4399,8 +4430,9 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
         body: JSON.stringify({ filename, invoiceNo: details.invoiceNo, id: details.id, pdfBase64 })
       });
       const uploadData = await uploadRes.json();
-      if (uploadData && uploadData.ok && uploadData.googleDriveUrl) {
-        drivePdfUrl = uploadData.googleDriveUrl;
+      const pDriveUrl = uploadData ? (uploadData.googleDriveUrl || uploadData.pdfUrl || uploadData.viewUrl || uploadData.url) : "";
+      if (uploadData && uploadData.ok && pDriveUrl) {
+        drivePdfUrl = pDriveUrl;
       }
     } catch (e) {}
 
@@ -6132,13 +6164,14 @@ async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false, precom
           pdfBase64: pdfBase64
         })
       }).then(r => r.json()).then(uploadRes => {
-        if (uploadRes && uploadRes.ok && uploadRes.pdfUrl) {
-          console.log(`☁️ Invoice #${invoiceDetails.invoiceNo} PDF saved to Google Drive:`, uploadRes.pdfUrl);
-          invoiceDetails.pdfUrl = uploadRes.pdfUrl;
+        const pUrl = uploadRes ? (uploadRes.pdfUrl || uploadRes.googleDriveUrl || uploadRes.viewUrl || uploadRes.url) : null;
+        if (uploadRes && uploadRes.ok && pUrl) {
+          console.log(`☁️ Invoice #${invoiceDetails.invoiceNo} PDF saved to Google Drive:`, pUrl);
+          invoiceDetails.pdfUrl = pUrl;
           const idx = invoicesDb.findIndex(i => i.id === invoiceDetails.id || i.invoiceNo === invoiceDetails.invoiceNo);
           if (idx > -1) {
-            invoicesDb[idx].pdfUrl = uploadRes.pdfUrl;
-            if (invoicesDb[idx].details) invoicesDb[idx].details.pdfUrl = uploadRes.pdfUrl;
+            invoicesDb[idx].pdfUrl = pUrl;
+            if (invoicesDb[idx].details) invoicesDb[idx].details.pdfUrl = pUrl;
             localStorage.setItem("invoices", JSON.stringify(invoicesDb));
           }
         }

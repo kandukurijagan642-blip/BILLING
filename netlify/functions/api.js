@@ -20,7 +20,7 @@ exports.handler = async (event, context) => {
   try {
     // 1. GET /sync (Pulls data from Google Apps Script)
     if (path === '/sync' && event.httpMethod === 'GET') {
-      const res = await fetch(`${SCRIPT_URL}?action=sync`);
+      const res = await fetch(`${SCRIPT_URL}?action=sync`, { redirect: 'follow' });
       const data = await res.json();
       return {
         statusCode: 200,
@@ -29,7 +29,7 @@ exports.handler = async (event, context) => {
           invoices: data.invoices || [],
           products: data.products || [],
           parties: data.parties || [],
-          globalSettings: data.settings || null,
+          globalSettings: data.globalSettings || data.settings || null,
           deletedInvoiceIds: [],
           deletedProductIds: [],
           deletedPartyIds: [],
@@ -79,6 +79,25 @@ exports.handler = async (event, context) => {
     // 4. POST Mutations
     if (event.httpMethod === 'POST') {
       const body = event.body ? JSON.parse(event.body) : {};
+
+      if (path === '/google-drive/sync-now') {
+        const res = await fetch(`${SCRIPT_URL}?action=sync`, { redirect: 'follow' });
+        const data = await res.json();
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({
+            ok: true,
+            message: 'All data synchronized with Google Drive & Google Sheets Master Database!',
+            invoicesCount: (data.invoices || []).length,
+            productsCount: (data.products || []).length,
+            partiesCount: (data.parties || []).length,
+            spreadsheetUrl: SPREADSHEET_URL,
+            timestamp: new Date().toISOString()
+          })
+        };
+      }
+
       let gasPayload = null;
 
       if (path === '/invoices') {
@@ -103,17 +122,20 @@ exports.handler = async (event, context) => {
           invoiceId: body.id,
           pdfBase64: body.pdfBase64
         };
-      } else if (path === '/google-drive/sync-now') {
-        gasPayload = { action: 'sync' };
       }
 
       if (gasPayload) {
         const gasRes = await fetch(SCRIPT_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(gasPayload)
+          body: JSON.stringify(gasPayload),
+          redirect: 'follow'
         });
         const gasData = await gasRes.json().catch(() => ({ ok: true }));
+        if (gasData && gasData.ok) {
+          if (gasData.viewUrl && !gasData.pdfUrl) gasData.pdfUrl = gasData.viewUrl;
+          if (gasData.viewUrl && !gasData.googleDriveUrl) gasData.googleDriveUrl = gasData.viewUrl;
+        }
         return {
           statusCode: 200,
           headers,

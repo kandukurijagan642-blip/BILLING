@@ -457,6 +457,8 @@ function handleUploadPdf(data) {
       filename: filename,
       url: viewUrl,
       viewUrl: viewUrl,
+      pdfUrl: viewUrl,
+      googleDriveUrl: viewUrl,
       downloadUrl: directDownloadUrl,
       invoiceNo: invNo
     };
@@ -475,12 +477,17 @@ function doGet(e) {
   var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : "status";
   
   if (action === "sync" || action === "pull") {
+    var invs = readJsonData("invoices.json", []);
+    var prods = readJsonData("products.json", []);
+    var parts = readJsonData("parties.json", []);
+    var sets = readJsonData("settings.json", {});
     return ContentService.createTextOutput(JSON.stringify({
       ok: true,
-      invoices: readJsonData("invoices.json", []),
-      products: readJsonData("products.json", []),
-      parties: readJsonData("parties.json", []),
-      settings: readJsonData("settings.json", {})
+      invoices: invs,
+      products: prods,
+      parties: parts,
+      settings: sets,
+      globalSettings: sets
     })).setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -511,6 +518,15 @@ function doPost(e) {
     var responseObj = { ok: true, action: action };
 
     switch (action) {
+      case "sync":
+      case "pull":
+        responseObj.invoices = readJsonData("invoices.json", []);
+        responseObj.products = readJsonData("products.json", []);
+        responseObj.parties = readJsonData("parties.json", []);
+        responseObj.settings = readJsonData("settings.json", {});
+        responseObj.globalSettings = readJsonData("settings.json", {});
+        break;
+
       case "save_invoice":
         var inv = data.invoice;
         if (inv) {
@@ -572,8 +588,42 @@ function doPost(e) {
         var delId = data.id;
         if (recType === "invoice") {
           var currInvs = readJsonData("invoices.json", []);
+          var deletedInv = null;
+          for (var i = 0; i < currInvs.length; i++) {
+            if (currInvs[i].id === delId || currInvs[i].invoiceNo === delId) {
+              deletedInv = currInvs[i];
+              break;
+            }
+          }
           currInvs = currInvs.filter(function(x) { return x.id !== delId && x.invoiceNo !== delId; });
           saveJsonData("invoices.json", currInvs);
+
+          // Mirror deletion to Google Sheet "Invoices"
+          var invSheet = ss.getSheetByName("Invoices");
+          if (invSheet && invSheet.getLastRow() >= 2) {
+            var idVals = invSheet.getRange(2, 1, invSheet.getLastRow() - 1, 1).getValues();
+            var targetNo = deletedInv ? String(deletedInv.invoiceNo || deletedInv.id).trim() : String(delId).trim();
+            for (var r = idVals.length - 1; r >= 0; r--) {
+              var rowVal = String(idVals[r][0]).trim();
+              if (rowVal === targetNo || rowVal === String(delId).trim()) {
+                invSheet.deleteRow(r + 2);
+                break;
+              }
+            }
+          }
+          responseObj.deletedId = delId;
+        } else if (recType === "product") {
+          var currProds = readJsonData("products.json", []);
+          currProds = currProds.filter(function(x) { return x.id !== delId; });
+          saveJsonData("products.json", currProds);
+          mirrorProductsToGoogleSheet(currProds, ss);
+          responseObj.deletedId = delId;
+        } else if (recType === "party") {
+          var currParties = readJsonData("parties.json", []);
+          currParties = currParties.filter(function(x) { return x.id !== delId; });
+          saveJsonData("parties.json", currParties);
+          mirrorPartiesToGoogleSheet(currParties, ss);
+          responseObj.deletedId = delId;
         }
         break;
 
