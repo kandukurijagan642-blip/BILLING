@@ -119,13 +119,29 @@ exports.handler = async (event, context) => {
   const path = rawPath.replace(/^(\/\.netlify\/functions\/api|\/api)/, '').replace(/\/$/, '') || '/sync';
 
   try {
-    // 1. GET /sync (Sub-20ms In-Memory Response + Stale-While-Revalidate)
+    // 0. Handle SSE endpoint in Serverless Lambda cleanly (Notify client to use Smart Adaptive Polling)
+    if (path === '/sync/events') {
+      return {
+        statusCode: 204,
+        headers: {
+          ...headers,
+          'X-SSE-Disabled': 'true',
+          'X-Transport-Mode': 'serverless-adaptive-poll'
+        },
+        body: ''
+      };
+    }
+
+    // 1. GET /sync (Sub-20ms In-Memory Delta Response + Stale-While-Revalidate)
     if (path === '/sync' && event.httpMethod === 'GET') {
       const ifNoneMatch = event.headers['if-none-match'] || event.headers['If-None-Match'];
       const currentEtag = `W/"sync-${cacheTimestamp}"`;
 
-      // Return 304 if client cache matches
-      if (ifNoneMatch && cachedSyncData && ifNoneMatch === currentEtag) {
+      const qParams = event.queryStringParameters || {};
+      const since = parseInt(qParams.since, 10);
+
+      // Return 304 if client cache matches ETag or if since >= cacheTimestamp
+      if ((ifNoneMatch && cachedSyncData && ifNoneMatch === currentEtag) || (!isNaN(since) && since >= cacheTimestamp)) {
         return {
           statusCode: 304,
           headers: {
@@ -141,6 +157,46 @@ exports.handler = async (event, context) => {
         if (Date.now() - cacheTimestamp > CACHE_TTL_MS && !isRefreshing) {
           refreshCacheFromGas().catch(() => {});
         }
+
+        // Delta Synchronization Check
+        if (!isNaN(since) && since > 0 && since < cacheTimestamp) {
+          const changedInvoices = (cachedSyncData.invoices || []).filter(i => {
+            const t = new Date(i.updatedAt || i.updated_at || i.createdAt || i.created_at || i.date || 0).getTime();
+            return t > since;
+          });
+          const changedProducts = (cachedSyncData.products || []).filter(p => {
+            const t = new Date(p.updatedAt || p.updated_at || 0).getTime();
+            return t > since;
+          });
+          const changedParties = (cachedSyncData.parties || []).filter(p => {
+            const t = new Date(p.updatedAt || p.updated_at || 0).getTime();
+            return t > since;
+          });
+
+          return {
+            statusCode: 200,
+            headers: {
+              ...headers,
+              'ETag': currentEtag,
+              'Cache-Control': 'public, max-age=5, stale-while-revalidate=60'
+            },
+            body: JSON.stringify({
+              ok: true,
+              delta: true,
+              invoices: changedInvoices,
+              products: changedProducts,
+              parties: changedParties,
+              globalSettings: cachedSyncData.globalSettings,
+              deletedInvoiceIds: cachedSyncData.deletedInvoiceIds || [],
+              deletedProductIds: cachedSyncData.deletedProductIds || [],
+              deletedPartyIds: cachedSyncData.deletedPartyIds || [],
+              serverTime: Date.now(),
+              cacheTimestamp: cacheTimestamp,
+              storage: cachedSyncData.storage
+            })
+          };
+        }
+
         return {
           statusCode: 200,
           headers: {
@@ -148,7 +204,12 @@ exports.handler = async (event, context) => {
             'ETag': currentEtag,
             'Cache-Control': 'public, max-age=5, stale-while-revalidate=60'
           },
-          body: JSON.stringify(cachedSyncData)
+          body: JSON.stringify({
+            ...cachedSyncData,
+            delta: false,
+            serverTime: Date.now(),
+            cacheTimestamp: cacheTimestamp
+          })
         };
       }
 
@@ -162,13 +223,18 @@ exports.handler = async (event, context) => {
           'ETag': freshEtag,
           'Cache-Control': 'public, max-age=5, stale-while-revalidate=60'
         },
-        body: JSON.stringify(freshData || {
-          ok: true,
-          invoices: [],
-          products: [],
-          parties: [],
-          globalSettings: null,
-          storage: { connected: true, provider: 'Google Drive & Google Sheets Master Database' }
+        body: JSON.stringify({
+          ...(freshData || {
+            ok: true,
+            invoices: [],
+            products: [],
+            parties: [],
+            globalSettings: null,
+            storage: { connected: true, provider: 'Google Drive & Google Sheets Master Database' }
+          }),
+          delta: false,
+          serverTime: Date.now(),
+          cacheTimestamp: cacheTimestamp
         })
       };
     }
@@ -226,9 +292,90 @@ exports.handler = async (event, context) => {
         };
       }
 
+      // Batch outbox sync handler for serverless cloud
+      if (path === '/sync/batch') {
+        const operations = body.operations || [];
+        const now = new Date().toISOString();
+        const results = [];
+
+        if (cachedSyncData) {
+          for (const op of operations) {
+            const type = op.type;
+            const action = op.action;
+            const payload = op.payload || {};
+
+            if (type === 'invoice' || action === 'save_invoice') {
+              const inv = payload.invoice || payload || op.invoice;
+              if (inv && (inv.id || inv.invoiceNo)) {
+                inv.updatedAt = inv.updatedAt || now;
+                if (!cachedSyncData.invoices) cachedSyncData.invoices = [];
+                const idx = cachedSyncData.invoices.findIndex(i => i && (i.id === inv.id || i.invoiceNo === inv.invoiceNo));
+                if (idx > -1) cachedSyncData.invoices[idx] = inv;
+                else cachedSyncData.invoices.push(inv);
+                results.push({ id: op.id || inv.id, ok: true });
+              }
+            } else if (type === 'product' || action === 'save_products') {
+              const prods = payload.products || payload || op.products;
+              if (Array.isArray(prods)) {
+                prods.forEach(p => { p.updatedAt = p.updatedAt || now; });
+                cachedSyncData.products = prods;
+                results.push({ id: op.id, ok: true });
+              }
+            } else if (type === 'party' || action === 'save_parties') {
+              const parties = payload.parties || payload || op.parties;
+              if (Array.isArray(parties)) {
+                parties.forEach(p => { p.updatedAt = p.updatedAt || now; });
+                cachedSyncData.parties = parties;
+                results.push({ id: op.id, ok: true });
+              }
+            } else if (action === 'delete_record') {
+              const recordType = payload.type || op.recordType;
+              const targetId = payload.id || op.targetId;
+              if (recordType === 'invoice') {
+                cachedSyncData.invoices = (cachedSyncData.invoices || []).filter(i => i && i.id !== targetId);
+              } else if (recordType === 'product') {
+                cachedSyncData.products = (cachedSyncData.products || []).filter(p => p && p.id !== targetId);
+              } else if (recordType === 'party') {
+                cachedSyncData.parties = (cachedSyncData.parties || []).filter(p => p && p.id !== targetId);
+              }
+              results.push({ id: op.id, ok: true });
+            }
+          }
+          cacheTimestamp = Date.now();
+        }
+
+        // Asynchronously forward operations to Google Apps Script
+        for (const op of operations) {
+          let gPayload = null;
+          if (op.type === 'invoice' || op.action === 'save_invoice') {
+            gPayload = { action: 'save_invoice', invoice: op.payload?.invoice || op.payload || op.invoice };
+          } else if (op.type === 'product' || op.action === 'save_products') {
+            gPayload = { action: 'save_products', products: op.payload?.products || op.payload || op.products };
+          } else if (op.type === 'party' || op.action === 'save_parties') {
+            gPayload = { action: 'save_parties', parties: op.payload?.parties || op.payload || op.parties };
+          } else if (op.action === 'delete_record') {
+            gPayload = { action: 'delete_record', type: op.payload?.type || op.recordType, id: op.payload?.id || op.targetId };
+          }
+          if (gPayload) {
+            fetchFromGas(SCRIPT_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(gPayload)
+            }).catch(() => {});
+          }
+        }
+
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({ ok: true, processed: results.length, results, serverTime: Date.now() })
+        };
+      }
+
       let gasPayload = null;
 
       if (path === '/invoices') {
+        body.updatedAt = body.updatedAt || new Date().toISOString();
         gasPayload = { action: 'save_invoice', invoice: body };
         if (cachedSyncData) {
           if (!cachedSyncData.invoices) cachedSyncData.invoices = [];
@@ -247,6 +394,9 @@ exports.handler = async (event, context) => {
           cacheTimestamp = Date.now();
         }
       } else if (path === '/products') {
+        if (Array.isArray(body)) {
+          body.forEach(p => { p.updatedAt = p.updatedAt || new Date().toISOString(); });
+        }
         gasPayload = { action: 'save_products', products: body };
         if (cachedSyncData) {
           cachedSyncData.products = body;

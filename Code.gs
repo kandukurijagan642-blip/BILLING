@@ -487,7 +487,9 @@ function doGet(e) {
       products: prods,
       parties: parts,
       settings: sets,
-      globalSettings: sets
+      globalSettings: sets,
+      serverTime: new Date().getTime(),
+      timestamp: new Date().toISOString()
     })).setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -496,6 +498,7 @@ function doGet(e) {
     ok: true,
     message: "🚀 Aaryan Aqua Google Drive Serverless Backend is ONLINE!",
     spreadsheetUrl: ss.getUrl(),
+    serverTime: new Date().getTime(),
     timestamp: new Date().toISOString()
   })).setMimeType(ContentService.MimeType.JSON);
 }
@@ -515,7 +518,12 @@ function doPost(e) {
     var action = data.action;
 
     var ss = getMasterSpreadsheet();
-    var responseObj = { ok: true, action: action };
+    var responseObj = { 
+      ok: true, 
+      action: action,
+      serverTime: new Date().getTime(),
+      timestamp: new Date().toISOString()
+    };
 
     switch (action) {
       case "sync":

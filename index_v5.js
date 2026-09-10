@@ -171,111 +171,318 @@ elements.sumSgstRow = elements.sumSgst ? elements.sumSgst.closest('.summary-row'
 elements.sumIgstRow = elements.sumIgst ? elements.sumIgst.closest('.summary-row') : null;
 
 window.lastSyncETag = null;
+window.lastSyncTimestamp = parseInt(localStorage.getItem("aaryan_last_sync_time") || "0", 10);
 
 const GOOGLE_SCRIPT_FALLBACK_URL = "https://script.google.com/macros/s/AKfycbwkegJvhM42cPIROIKg5Dlx6py8OnS5NXuIJeyf1Zb3V3Oc_2jyXPS_aDN7uW0t874d/exec";
 
-function syncDatabaseToServer(type, data) {
-  window.lastSyncETag = null;
-  let endpoint = "";
-  let gasAction = "";
-  if (type === "invoices") { endpoint = "/api/invoices"; gasAction = "save_invoice"; }
-  else if (type === "products") { endpoint = "/api/products"; gasAction = "save_products"; }
-  else if (type === "parties") { endpoint = "/api/parties"; gasAction = "save_parties"; }
-  else if (type === "settings") { endpoint = "/api/settings"; gasAction = "save_settings"; }
+// --- AARYAN-DB: ASYNCHRONOUS INDEXED-DB ENGINE + WRITE-AHEAD OUTBOX QUEUE ---
+const AaryanDB = {
+  dbName: 'aaryan_aqua_db_v2',
+  dbVersion: 1,
+  db: null,
+  isReady: false,
+  outboxTimer: null,
+  isDrainingOutbox: false,
 
-  if (!endpoint) return;
-
-  fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
-  })
-  .then(res => {
-    if (!res.ok) throw new Error("HTTP error " + res.status);
-    return res.json();
-  })
-  .then(resData => {
-    console.log(`✅ Synced ${type} successfully with server.`);
-  })
-  .catch(err => {
-    console.warn(`⚠️ Server push failed for ${type}. Attempting direct Google Sheets sync fallback...`, err);
-    if (gasAction) {
-      const gasPayload = { action: gasAction };
-      if (gasAction === "save_invoice") gasPayload.invoice = data;
-      else if (gasAction === "save_products") gasPayload.products = data;
-      else if (gasAction === "save_parties") gasPayload.parties = data;
-      else if (gasAction === "save_settings") gasPayload.settings = data;
+  async init() {
+    return new Promise((resolve) => {
+      if (!window.indexedDB) {
+        console.warn("IndexedDB not available, falling back to localStorage.");
+        this.isReady = true;
+        this.startOutboxWorker();
+        return resolve();
+      }
 
       try {
-        fetch(GOOGLE_SCRIPT_FALLBACK_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain" },
-          body: JSON.stringify(gasPayload),
-          mode: "no-cors"
-        })
-        .then(() => {
-          console.log(`✅ Synced ${type} directly to Google Sheets Master Database!`);
-        })
-        .catch(gasErr => {
-          console.warn(`⚠️ Offline: Synced ${type} locally. Server push pending.`, gasErr);
-        });
+        const req = indexedDB.open(this.dbName, this.dbVersion);
+        req.onupgradeneeded = (e) => {
+          const d = e.target.result;
+          if (!d.objectStoreNames.contains('invoices')) {
+            const invStore = d.createObjectStore('invoices', { keyPath: 'id' });
+            invStore.createIndex('invoiceNo', 'invoiceNo', { unique: false });
+            invStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+          }
+          if (!d.objectStoreNames.contains('products')) {
+            const prodStore = d.createObjectStore('products', { keyPath: 'id' });
+            prodStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+          }
+          if (!d.objectStoreNames.contains('parties')) {
+            const partStore = d.createObjectStore('parties', { keyPath: 'id' });
+            partStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+          }
+          if (!d.objectStoreNames.contains('settings')) {
+            d.createObjectStore('settings', { keyPath: 'key' });
+          }
+          if (!d.objectStoreNames.contains('outbox')) {
+            const outStore = d.createObjectStore('outbox', { keyPath: 'id' });
+            outStore.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+        };
+
+        req.onsuccess = async (e) => {
+          this.db = e.target.result;
+          this.isReady = true;
+          await this.migrateFromLocalStorage();
+          await this.loadAllToMemory();
+          this.startOutboxWorker();
+          resolve();
+        };
+
+        req.onerror = (e) => {
+          console.warn("IndexedDB init notice:", e.target?.error);
+          this.isReady = true;
+          this.startOutboxWorker();
+          resolve();
+        };
+      } catch (err) {
+        console.warn("IndexedDB constructor note:", err);
+        this.isReady = true;
+        this.startOutboxWorker();
+        resolve();
+      }
+    });
+  },
+
+  async migrateFromLocalStorage() {
+    if (!this.db) return;
+    try {
+      const migrated = localStorage.getItem("aaryandb_migrated_v2");
+      if (migrated === "true") return;
+
+      let localInvoices = [], localProducts = [], localParties = [], localSettings = {};
+      try { localInvoices = JSON.parse(localStorage.getItem("invoices") || "[]"); } catch (e) {}
+      try { localProducts = JSON.parse(localStorage.getItem("products") || "[]"); } catch (e) {}
+      try { localParties = JSON.parse(localStorage.getItem("parties") || "[]"); } catch (e) {}
+      try { localSettings = JSON.parse(localStorage.getItem("settings") || "{}"); } catch (e) {}
+
+      const tx = this.db.transaction(['invoices', 'products', 'parties', 'settings'], 'readwrite');
+      
+      const invStore = tx.objectStore('invoices');
+      localInvoices.forEach(inv => { if (inv && inv.id) invStore.put(inv); });
+
+      const prodStore = tx.objectStore('products');
+      localProducts.forEach(p => { if (p && p.id) prodStore.put(p); });
+
+      const partStore = tx.objectStore('parties');
+      localParties.forEach(pt => { if (pt && pt.id) partStore.put(pt); });
+
+      const setStore = tx.objectStore('settings');
+      if (localSettings && Object.keys(localSettings).length > 0) {
+        setStore.put({ key: 'globalSettings', data: localSettings });
+      }
+
+      await new Promise(res => { tx.oncomplete = res; tx.onerror = res; });
+      localStorage.setItem("aaryandb_migrated_v2", "true");
+      console.log("⚡ AaryanDB: Migrated database into IndexedDB successfully!");
+    } catch (e) {
+      console.warn("AaryanDB migration notice:", e.message);
+    }
+  },
+
+  async loadAllToMemory() {
+    if (!this.db) return;
+    try {
+      const tx = this.db.transaction(['invoices', 'products', 'parties', 'settings'], 'readonly');
+      
+      const invReq = tx.objectStore('invoices').getAll();
+      const prodReq = tx.objectStore('products').getAll();
+      const partReq = tx.objectStore('parties').getAll();
+      const setReq = tx.objectStore('settings').get('globalSettings');
+
+      await new Promise(res => { tx.oncomplete = res; tx.onerror = res; });
+
+      if (Array.isArray(invReq.result) && invReq.result.length > 0) {
+        invoicesDb = invReq.result;
+        invoicesDb.sort((a, b) => String(a.invoiceNo || "").localeCompare(String(b.invoiceNo || "")));
+      }
+      if (Array.isArray(prodReq.result) && prodReq.result.length > 0) {
+        productsDb = prodReq.result;
+      }
+      if (Array.isArray(partReq.result) && partReq.result.length > 0) {
+        partiesDb = partReq.result;
+      }
+      if (setReq.result && setReq.result.data) {
+        globalSettings = setReq.result.data;
+      }
+    } catch (e) {
+      console.warn("loadAllToMemory notice:", e);
+    }
+  },
+
+  // Write-Ahead Outbox Queue Manager
+  async enqueueOutbox(type, action, payload) {
+    const op = {
+      id: 'out_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
+      type,
+      action,
+      payload,
+      createdAt: Date.now(),
+      retries: 0
+    };
+
+    if (this.db) {
+      try {
+        const tx = this.db.transaction(['outbox'], 'readwrite');
+        tx.objectStore('outbox').put(op);
+      } catch (e) {}
+    } else {
+      try {
+        const outbox = JSON.parse(localStorage.getItem("aaryan_outbox") || "[]");
+        outbox.push(op);
+        localStorage.setItem("aaryan_outbox", JSON.stringify(outbox));
       } catch (e) {}
     }
-  });
+  },
+
+  startOutboxWorker() {
+    if (this.outboxTimer) clearInterval(this.outboxTimer);
+    // Drain outbox every 4 seconds or when device regains network
+    this.outboxTimer = setInterval(() => this.drainOutbox(), 4000);
+    window.addEventListener('online', () => this.drainOutbox());
+  },
+
+  async drainOutbox() {
+    if (this.isDrainingOutbox) return;
+    this.isDrainingOutbox = true;
+
+    try {
+      let pendingOps = [];
+      if (this.db) {
+        const tx = this.db.transaction(['outbox'], 'readonly');
+        const req = tx.objectStore('outbox').getAll();
+        await new Promise(r => { tx.oncomplete = r; tx.onerror = r; });
+        pendingOps = req.result || [];
+      } else {
+        pendingOps = JSON.parse(localStorage.getItem("aaryan_outbox") || "[]");
+      }
+
+      if (!pendingOps || pendingOps.length === 0) {
+        this.isDrainingOutbox = false;
+        return;
+      }
+
+      // Try high-speed batch push first
+      try {
+        const batchRes = await fetch('/api/sync/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ operations: pendingOps })
+        });
+
+        if (batchRes.ok) {
+          const batchData = await batchRes.json();
+          if (batchData && batchData.ok) {
+            // Cleared all queued operations!
+            if (this.db) {
+              const delTx = this.db.transaction(['outbox'], 'readwrite');
+              delTx.objectStore('outbox').clear();
+              await new Promise(r => { delTx.oncomplete = r; delTx.onerror = r; });
+            }
+            localStorage.removeItem("aaryan_outbox");
+            console.log(`⚡ AaryanDB Outbox: Flushed ${pendingOps.length} offline operations!`);
+            this.isDrainingOutbox = false;
+            return;
+          }
+        }
+      } catch (batchErr) {}
+
+      // Fallback: Individual dispatch with GAS fallback
+      for (const op of pendingOps) {
+        try {
+          let synced = false;
+          let endpoint = "";
+          let gasPayload = null;
+
+          if (op.type === 'invoice' || op.action === 'save_invoice') {
+            endpoint = "/api/invoices";
+            gasPayload = { action: 'save_invoice', invoice: op.payload?.invoice || op.payload };
+          } else if (op.type === 'product' || op.action === 'save_products') {
+            endpoint = "/api/products";
+            gasPayload = { action: 'save_products', products: op.payload?.products || op.payload };
+          } else if (op.type === 'party' || op.action === 'save_parties') {
+            endpoint = "/api/parties";
+            gasPayload = { action: 'save_parties', parties: op.payload?.parties || op.payload };
+          } else if (op.action === 'delete_record') {
+            endpoint = `/api/${op.payload?.type || op.type}s/delete`;
+            gasPayload = { action: 'delete_record', type: op.payload?.type || op.type, id: op.payload?.id };
+          }
+
+          if (endpoint) {
+            try {
+              const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(op.payload?.invoice || op.payload?.products || op.payload?.parties || op.payload)
+              });
+              synced = res.ok;
+            } catch (e) {
+              synced = false;
+            }
+          }
+
+          if (!synced && gasPayload) {
+            try {
+              await fetch(GOOGLE_SCRIPT_FALLBACK_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify(gasPayload),
+                mode: 'no-cors'
+              });
+              synced = true;
+            } catch (e) {
+              synced = false;
+            }
+          }
+
+          if (synced) {
+            if (this.db) {
+              const delTx = this.db.transaction(['outbox'], 'readwrite');
+              delTx.objectStore('outbox').delete(op.id);
+            } else {
+              let cur = JSON.parse(localStorage.getItem("aaryan_outbox") || "[]");
+              cur = cur.filter(x => x.id !== op.id);
+              localStorage.setItem("aaryan_outbox", JSON.stringify(cur));
+            }
+          } else {
+            break; // Stop draining until next poll
+          }
+        } catch (itemErr) {
+          break;
+        }
+      }
+    } catch (drainErr) {
+      console.warn("Outbox drain notice:", drainErr.message);
+    } finally {
+      this.isDrainingOutbox = false;
+    }
+  }
+};
+
+window.AaryanDB = AaryanDB;
+
+function syncDatabaseToServer(type, data) {
+  window.lastSyncETag = null;
+  let action = "";
+  if (type === "invoices") action = "save_invoice";
+  else if (type === "products") action = "save_products";
+  else if (type === "parties") action = "save_parties";
+  else if (type === "settings") action = "save_settings";
+
+  // Enqueue into persistent Outbox & drain immediately
+  AaryanDB.enqueueOutbox(type, action, data);
+  AaryanDB.drainOutbox();
 }
 
 function deleteProductFromServer(id) {
   window.lastSyncETag = null;
-  fetch("/api/products/delete", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id })
-  })
-  .then(res => {
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    return res.json();
-  })
-  .then(resData => {
-    console.log(`✅ Deleted product ${id} on server.`);
-  })
-  .catch(err => {
-    try {
-      fetch(GOOGLE_SCRIPT_FALLBACK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify({ action: "delete_record", type: "product", id }),
-        mode: "no-cors"
-      }).catch(() => {});
-    } catch(e) {}
-    console.warn(`⚠️ Offline: Product ${id} deletion pending server sync.`, err);
-  });
+  AaryanDB.enqueueOutbox("product", "delete_record", { type: "product", id });
+  AaryanDB.drainOutbox();
 }
 
 function deletePartyFromServer(id) {
   window.lastSyncETag = null;
-  fetch("/api/parties/delete", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id })
-  })
-  .then(res => {
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    return res.json();
-  })
-  .then(resData => {
-    console.log(`✅ Deleted party ${id} on server.`);
-  })
-  .catch(err => {
-    try {
-      fetch(GOOGLE_SCRIPT_FALLBACK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify({ action: "delete_record", type: "party", id }),
-        mode: "no-cors"
-      }).catch(() => {});
-    } catch(e) {}
-    console.warn(`⚠️ Offline: Party ${id} deletion pending server sync.`, err);
-  });
+  AaryanDB.enqueueOutbox("party", "delete_record", { type: "party", id });
+  AaryanDB.drainOutbox();
 }
 
 // Lock screen credentials state
@@ -385,6 +592,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   seedDatabasesIfEmpty();
   loadAllDatabases();
+  if (window.AaryanDB && typeof window.AaryanDB.init === 'function') {
+    window.AaryanDB.init().then(() => {
+      updateDashboardOverview();
+      calculateSummaryAndTable();
+      autoSuggestInvoiceNo();
+      loadProductsDatabaseTable();
+      loadPartiesDatabaseLists();
+      loadInvoicesHistoryTable();
+    });
+  }
   setupRouting();
   bindBillingFormInputs();
   setupKeyboardShortcuts();
@@ -581,9 +798,70 @@ document.addEventListener("DOMContentLoaded", () => {
     alert(`🎉 Successfully compiled and uploaded ${processedCount} PDFs to Google Drive!\nColumn M in your Master Google Sheet is now fully updated with clickable hyperlinks.`);
   };
 
-  // Real-time Database EventStream Listener (Server-Sent Events for 0ms Live Sync)
+  // Host awareness: Local Node.js server (localhost) vs Cloud Serverless (Netlify)
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+  // --- SMART ADAPTIVE POLLING ENGINE (ACTIVE: 4s, IDLE: 25s, HIDDEN: PAUSED) ---
+  let adaptivePollTimer = null;
+  let userLastActiveAt = Date.now();
+  let isUserActive = true;
+
+  function markUserActive() {
+    userLastActiveAt = Date.now();
+    if (!isUserActive) {
+      isUserActive = true;
+      scheduleNextAdaptivePoll(true);
+    }
+  }
+
+  function scheduleNextAdaptivePoll(immediate = false) {
+    if (adaptivePollTimer) clearTimeout(adaptivePollTimer);
+    if (document.hidden) return; // Completely pause polling when tab is hidden or minimized
+
+    const idleFor = Date.now() - userLastActiveAt;
+    isUserActive = idleFor < 25000;
+    const pollDelay = immediate ? 50 : (isUserActive ? 4000 : 25000);
+
+    adaptivePollTimer = setTimeout(async () => {
+      await window.triggerDatabaseSync();
+      scheduleNextAdaptivePoll();
+    }, pollDelay);
+  }
+
+  function initAdaptiveSmartPolling() {
+    ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach(evt => {
+      document.addEventListener(evt, markUserActive, { passive: true });
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        markUserActive();
+        scheduleNextAdaptivePoll(true);
+      }
+    });
+
+    window.addEventListener("focus", () => {
+      markUserActive();
+      scheduleNextAdaptivePoll(true);
+    });
+
+    scheduleNextAdaptivePoll();
+  }
+
+  // Real-time Database EventStream Listener (Server-Sent Events for Localhost, Smart Adaptive Polling for Cloud)
   function initDatabaseEventSource() {
-    if (!window.EventSource) return;
+    if (!isLocalhost) {
+      // In serverless cloud (Netlify), EventSource does not maintain persistent streams.
+      // Use Smart Adaptive Polling instead of looping failed connections.
+      initAdaptiveSmartPolling();
+      return;
+    }
+
+    if (!window.EventSource) {
+      initAdaptiveSmartPolling();
+      return;
+    }
+
     if (dbEventSource) {
       try { dbEventSource.close(); } catch (e) {}
     }
@@ -595,25 +873,23 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
           const payload = JSON.parse(e.data);
           if (payload && payload.type && payload.type !== 'connected') {
-            // Instant real-time database update pushed from server!
-            window.lastSyncETag = null; // Invalidate cached ETag to force pull fresh records
+            window.lastSyncETag = null;
             window.triggerDatabaseSync(true);
           }
-        } catch (err) {
-          // Heartbeat or malformed frame ignored safely
-        }
+        } catch (err) {}
       };
 
       dbEventSource.onerror = function() {
         try { dbEventSource.close(); } catch (e) {}
-        setTimeout(initDatabaseEventSource, 3500);
+        setTimeout(initDatabaseEventSource, 5000);
       };
     } catch (err) {
-      console.warn("Database SSE stream initialization error:", err);
+      console.warn("Database SSE stream notice:", err);
+      initAdaptiveSmartPolling();
     }
   }
 
-  window.triggerDatabaseSync = function(forceReload = false) {
+  window.triggerDatabaseSync = async function(forceReload = false) {
     if (isSyncing) return;
     isSyncing = true;
     updateCloudSyncBadge("syncing");
@@ -626,7 +902,9 @@ document.addEventListener("DOMContentLoaded", () => {
       headers["If-None-Match"] = window.lastSyncETag;
     }
 
-    fetch("/api/sync", { headers, signal: controller.signal })
+    const sinceParam = (!forceReload && window.lastSyncTimestamp) ? `?since=${window.lastSyncTimestamp}` : '';
+
+    return fetch(`/api/sync${sinceParam}`, { headers, signal: controller.signal })
       .then(res => {
         clearTimeout(timeoutId);
         if (res.status === 304) {
@@ -658,57 +936,65 @@ document.addEventListener("DOMContentLoaded", () => {
       .then(data => {
         if (!data) return; // 304 Not Modified
         updateCloudSyncBadge("synced");
-        if (data) {
-          let changed = false;
-          
-          // 1. Smart Sync Products (LWW Timestamp Conflict Resolution + Deleted Tracker)
-          const serverProducts = data.products || [];
-          let localProducts = [];
-          try {
-            localProducts = JSON.parse(localStorage.getItem("products")) || [];
-          } catch (e) { localProducts = []; }
 
-          // Merge deleted product IDs from server
-          const serverDeletedProdIds = data.deletedProductIds || [];
-          let deletedProdIds = [];
-          try {
-            deletedProdIds = JSON.parse(localStorage.getItem("deleted_product_ids")) || [];
-          } catch (e) { deletedProdIds = []; }
+        if (data.serverTime) {
+          window.lastSyncTimestamp = data.serverTime;
+          localStorage.setItem("aaryan_last_sync_time", String(data.serverTime));
+        }
 
-          const deletedProdSet = new Set(deletedProdIds);
-          let deletedProdChanged = false;
+        let changed = false;
 
-          serverDeletedProdIds.forEach(id => {
-            if (!deletedProdSet.has(id)) {
-              deletedProdIds.push(id);
-              deletedProdSet.add(id);
-              deletedProdChanged = true;
-            }
-          });
-
-          if (deletedProdChanged) {
-            localStorage.setItem("deleted_product_ids", JSON.stringify(deletedProdIds));
+        // --- CASE A: DELTA / INCREMENTAL UPDATE (< 1ms MERGE) ---
+        if (data.delta === true) {
+          if (Array.isArray(data.products) && data.products.length > 0) {
+            data.products.forEach(sp => {
+              const idx = productsDb.findIndex(p => p && p.id === sp.id);
+              if (idx > -1) productsDb[idx] = sp;
+              else productsDb.push(sp);
+            });
+            try { localStorage.setItem("products", JSON.stringify(productsDb)); } catch(e) {}
+            changed = true;
           }
 
-          // Push any offline deleted products to the server
-          const localDeletedProdsToPush = deletedProdIds.filter(id => !serverDeletedProdIds.includes(id));
-          localDeletedProdsToPush.forEach(id => {
-            deleteProductFromServer(id);
-          });
+          if (Array.isArray(data.parties) && data.parties.length > 0) {
+            data.parties.forEach(sp => {
+              const idx = partiesDb.findIndex(p => p && p.id === sp.id);
+              if (idx > -1) partiesDb[idx] = sp;
+              else partiesDb.push(sp);
+            });
+            try { localStorage.setItem("parties", JSON.stringify(partiesDb)); } catch(e) {}
+            changed = true;
+          }
 
-          // Filter out deleted products
-          const cleanedLocalProducts = localProducts.filter(p => p && p.id && !deletedProdSet.has(p.id));
-          const validServerProducts = serverProducts.filter(p => p && p.id && !deletedProdSet.has(p.id));
+          if (Array.isArray(data.invoices) && data.invoices.length > 0) {
+            data.invoices.forEach(inv => {
+              const idx = invoicesDb.findIndex(i => i && (i.id === inv.id || i.invoiceNo === inv.invoiceNo));
+              if (idx > -1) invoicesDb[idx] = inv;
+              else invoicesDb.push(inv);
+            });
+            invoicesDb.sort((a, b) => String(a.invoiceNo || "").localeCompare(String(b.invoiceNo || "")));
+            try { localStorage.setItem("invoices", JSON.stringify(invoicesDb)); } catch(e) {}
+            changed = true;
+          }
+
+          if (data.globalSettings && Object.keys(data.globalSettings).length > 0) {
+            globalSettings = data.globalSettings;
+            try { localStorage.setItem("settings", JSON.stringify(globalSettings)); } catch(e) {}
+            changed = true;
+          }
+        } 
+        // --- CASE B: FULL SYNCHRONIZATION & INITIAL HYDRATION ---
+        else if (data) {
+          // 1. Smart Sync Products (LWW Timestamp Conflict Resolution)
+          const serverProducts = data.products || [];
+          let localProducts = productsDb || [];
 
           const mergedProdMap = new Map();
           let needsPushProducts = false;
 
-          validServerProducts.forEach(sp => {
-            if (sp.id) mergedProdMap.set(sp.id, sp);
-          });
-
-          cleanedLocalProducts.forEach(lp => {
-            if (!lp.id) return;
+          serverProducts.forEach(sp => { if (sp && sp.id) mergedProdMap.set(sp.id, sp); });
+          localProducts.forEach(lp => {
+            if (!lp || !lp.id) return;
             const sp = mergedProdMap.get(lp.id);
             if (sp) {
               const localTime = new Date(lp.updatedAt || lp.updated_at || 0).getTime();
@@ -716,13 +1002,6 @@ document.addEventListener("DOMContentLoaded", () => {
               if (localTime > serverTime) {
                 mergedProdMap.set(lp.id, lp);
                 needsPushProducts = true;
-              } else if (localTime < serverTime) {
-                // Server version is newer, keep it
-              } else {
-                if (JSON.stringify(lp) !== JSON.stringify(sp)) {
-                  mergedProdMap.set(lp.id, lp);
-                  needsPushProducts = true;
-                }
               }
             } else {
               mergedProdMap.set(lp.id, lp);
@@ -731,73 +1010,26 @@ document.addEventListener("DOMContentLoaded", () => {
           });
 
           const mergedProducts = Array.from(mergedProdMap.values());
-          mergedProducts.forEach(p => {
-            const s = parseInt(p.stock, 10);
-            if (p.stock === undefined || p.stock === null || p.stock === "" || isNaN(s) || s <= 0) {
-              p.stock = 100;
-              needsPushProducts = true;
-            }
-          });
-
-          if (JSON.stringify(mergedProducts) !== JSON.stringify(localProducts)) {
-            localStorage.setItem("products", JSON.stringify(mergedProducts));
+          if (JSON.stringify(mergedProducts) !== JSON.stringify(productsDb)) {
             productsDb = mergedProducts;
+            try { localStorage.setItem("products", JSON.stringify(mergedProducts)); } catch(e) {}
             changed = true;
           }
 
           if (needsPushProducts) {
-            console.log(`Pushing newer/updated local products to cloud server...`);
             syncDatabaseToServer("products", mergedProducts);
           }
 
-          // 2. Smart Sync Parties (LWW Timestamp Conflict Resolution + Deleted Tracker)
+          // 2. Smart Sync Parties
           const serverParties = data.parties || [];
-          let localParties = [];
-          try {
-            localParties = JSON.parse(localStorage.getItem("parties")) || [];
-          } catch (e) { localParties = []; }
-
-          // Merge deleted party IDs from server
-          const serverDeletedPartyIds = data.deletedPartyIds || [];
-          let deletedPartyIds = [];
-          try {
-            deletedPartyIds = JSON.parse(localStorage.getItem("deleted_party_ids")) || [];
-          } catch (e) { deletedPartyIds = []; }
-
-          const deletedPartySet = new Set(deletedPartyIds);
-          let deletedPartyChanged = false;
-
-          serverDeletedPartyIds.forEach(id => {
-            if (!deletedPartySet.has(id)) {
-              deletedPartyIds.push(id);
-              deletedPartySet.add(id);
-              deletedPartyChanged = true;
-            }
-          });
-
-          if (deletedPartyChanged) {
-            localStorage.setItem("deleted_party_ids", JSON.stringify(deletedPartyIds));
-          }
-
-          // Push any offline deleted parties to the server
-          const localDeletedPartiesToPush = deletedPartyIds.filter(id => !serverDeletedPartyIds.includes(id));
-          localDeletedPartiesToPush.forEach(id => {
-            deletePartyFromServer(id);
-          });
-
-          // Filter out deleted parties
-          const cleanedLocalParties = localParties.filter(p => p && p.id && !deletedPartySet.has(p.id));
-          const validServerParties = serverParties.filter(p => p && p.id && !deletedPartySet.has(p.id));
+          let localParties = partiesDb || [];
 
           const mergedPartyMap = new Map();
           let needsPushParties = false;
 
-          validServerParties.forEach(sp => {
-            if (sp.id) mergedPartyMap.set(sp.id, sp);
-          });
-
-          cleanedLocalParties.forEach(lp => {
-            if (!lp.id) return;
+          serverParties.forEach(sp => { if (sp && sp.id) mergedPartyMap.set(sp.id, sp); });
+          localParties.forEach(lp => {
+            if (!lp || !lp.id) return;
             const sp = mergedPartyMap.get(lp.id);
             if (sp) {
               const localTime = new Date(lp.updatedAt || lp.updated_at || 0).getTime();
@@ -805,13 +1037,6 @@ document.addEventListener("DOMContentLoaded", () => {
               if (localTime > serverTime) {
                 mergedPartyMap.set(lp.id, lp);
                 needsPushParties = true;
-              } else if (localTime < serverTime) {
-                // Server version is newer, keep it
-              } else {
-                if (JSON.stringify(lp) !== JSON.stringify(sp)) {
-                  mergedPartyMap.set(lp.id, lp);
-                  needsPushParties = true;
-                }
               }
             } else {
               mergedPartyMap.set(lp.id, lp);
@@ -820,128 +1045,66 @@ document.addEventListener("DOMContentLoaded", () => {
           });
 
           const mergedParties = Array.from(mergedPartyMap.values());
-
-          if (JSON.stringify(mergedParties) !== JSON.stringify(localParties)) {
-            localStorage.setItem("parties", JSON.stringify(mergedParties));
+          if (JSON.stringify(mergedParties) !== JSON.stringify(partiesDb)) {
             partiesDb = mergedParties;
+            try { localStorage.setItem("parties", JSON.stringify(mergedParties)); } catch(e) {}
             changed = true;
           }
 
           if (needsPushParties) {
-            console.log(`Pushing newer/updated local parties to cloud server...`);
             syncDatabaseToServer("parties", mergedParties);
           }
-          
-          // 3. Smart Bidirectional Sync for Invoices
+
+          // 3. Smart Merge Invoices
           const serverInvoices = data.invoices || [];
-          let localInvoices = [];
-          try {
-            localInvoices = JSON.parse(localStorage.getItem("invoices")) || [];
-          } catch (e) { localInvoices = []; }
-          
-          // Merge deleted invoice IDs from server
-          const serverDeletedIds = data.deletedInvoiceIds || [];
-          let deletedIds = [];
-          try {
-            deletedIds = JSON.parse(localStorage.getItem("deleted_invoice_ids")) || [];
-          } catch (e) { deletedIds = []; }
-          
-          const deletedSet = new Set(deletedIds);
-          let deletedChanged = false;
-          
-          serverDeletedIds.forEach(id => {
-            if (!deletedSet.has(id)) {
-              deletedIds.push(id);
-              deletedSet.add(id);
-              deletedChanged = true;
-            }
-          });
-          
-          if (deletedChanged) {
-            localStorage.setItem("deleted_invoice_ids", JSON.stringify(deletedIds));
-          }
+          const serverIds = new Set(serverInvoices.map(inv => inv.id));
 
-          // Push any offline deleted invoices to the server
-          const localDeletedInvoiceIdsToPush = deletedIds.filter(id => !serverDeletedIds.includes(id));
-          localDeletedInvoiceIdsToPush.forEach(id => {
-            fetch("/api/invoices/delete", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ id })
-            }).catch(() => {});
-          });
-
-          // Filter out any deleted invoices
-          const cleanedLocal = localInvoices.filter(inv => inv && inv.id && !deletedSet.has(inv.id));
-          const validServer = serverInvoices.filter(inv => inv && inv.id && !deletedSet.has(inv.id));
-
-          const serverIds = new Set(validServer.map(inv => inv.id));
-
-          // Find local invoices not on server (need to push to cloud)
-          const toPush = cleanedLocal.filter(inv => !serverIds.has(inv.id));
-          if (toPush.length > 0) {
-            console.log(`Pushing ${toPush.length} offline invoices to server...`);
-            toPush.forEach(inv => {
-              syncDatabaseToServer("invoices", inv);
-            });
-          }
-
-          // Smart merge server invoices and local invoices
           const mergedInvoiceMap = new Map();
-          validServer.forEach(inv => mergedInvoiceMap.set(inv.id, inv));
-          cleanedLocal.forEach(inv => {
-            if (!mergedInvoiceMap.has(inv.id)) {
+          serverInvoices.forEach(inv => { if (inv && inv.id) mergedInvoiceMap.set(inv.id, inv); });
+          (invoicesDb || []).forEach(inv => {
+            if (inv && inv.id && !mergedInvoiceMap.has(inv.id)) {
               mergedInvoiceMap.set(inv.id, inv);
+              syncDatabaseToServer("invoices", inv);
             }
           });
 
           const mergedInvoices = Array.from(mergedInvoiceMap.values());
           mergedInvoices.sort((a, b) => String(a.invoiceNo || "").localeCompare(String(b.invoiceNo || "")));
 
-          if (JSON.stringify(mergedInvoices) !== JSON.stringify(localInvoices)) {
-            localStorage.setItem("invoices", JSON.stringify(mergedInvoices));
+          if (JSON.stringify(mergedInvoices) !== JSON.stringify(invoicesDb)) {
             invoicesDb = mergedInvoices;
+            try { localStorage.setItem("invoices", JSON.stringify(mergedInvoices)); } catch(e) {}
             changed = true;
           }
-          
+
           // 4. Sync Settings
           if (data.globalSettings && Object.keys(data.globalSettings).length > 0) {
-            const currentSettingsStr = localStorage.getItem("settings") || "{}";
-            if (currentSettingsStr !== JSON.stringify(data.globalSettings)) {
-              localStorage.setItem("settings", JSON.stringify(data.globalSettings));
+            const curStr = JSON.stringify(globalSettings || {});
+            const newStr = JSON.stringify(data.globalSettings);
+            if (curStr !== newStr) {
               globalSettings = data.globalSettings;
+              try { localStorage.setItem("settings", newStr); } catch(e) {}
               changed = true;
             }
           }
-          
-          if (changed) {
-            console.log("Database sync completed successfully! Auto-reloading all views...");
-            loadAllDatabases();
-            updateDashboardOverview();
-            calculateSummaryAndTable();
-            autoSuggestInvoiceNo();
-            
-            // Auto-reload active views instantly
-            loadProductsDatabaseTable();
-            loadPartiesDatabaseLists();
-            loadInvoicesHistoryTable();
+        }
 
-            // Refresh billing dropdowns with current selection preserved
-            const curProd = elements.billItemSelect ? elements.billItemSelect.value : "";
-            populateBillingSelectors();
-            if (curProd && elements.billItemSelect) {
-              elements.billItemSelect.value = curProd;
-            }
-          }
+        if (changed) {
+          console.log("⚡ Database synchronized! Updating active UI views...");
+          loadProductsDatabaseTable();
+          loadPartiesDatabaseLists();
+          loadInvoicesHistoryTable();
+          updateDashboardOverview();
+          calculateSummaryAndTable();
+          autoSuggestInvoiceNo();
         }
       })
       .catch(err => {
         if (err.name === 'AbortError') {
-          console.warn("Sync request timed out (25s)");
           updateCloudSyncBadge("synced");
         } else {
           updateCloudSyncBadge("offline");
-          console.warn("Background sync connection notice:", err);
+          console.warn("Sync notice:", err.message);
         }
       })
       .finally(() => {
@@ -949,13 +1112,13 @@ document.addEventListener("DOMContentLoaded", () => {
       });
   };
 
-  // Run initial sync
+  // Run initial database sync
   window.triggerDatabaseSync();
 
-  // Run periodic sync (1.5s on localhost, 15s on cloud/Netlify to conserve bandwidth)
-  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  const syncIntervalMs = isLocalhost ? 1500 : 15000;
-  setInterval(window.triggerDatabaseSync, syncIntervalMs);
+  // If on localhost, run periodic heartbeat sync; on cloud, Adaptive Smart Polling handles it
+  if (isLocalhost) {
+    setInterval(window.triggerDatabaseSync, 2500);
+  }
 
   // Sync automatically when window/tab is focused or returned to
   window.addEventListener("focus", () => {

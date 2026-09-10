@@ -323,18 +323,60 @@ async function syncWithGoogleStorage() {
 
 // --- REST API ENDPOINTS ---
 
-// 1. Unified Sync Endpoint with HTTP ETag / 304 Cache & In-Memory Response (< 1ms)
+// 1. Unified Sync Endpoint with HTTP ETag / 304 Cache & In-Memory Delta Response (< 1ms)
 app.get('/api/sync', (req, res) => {
   try {
     const etag = `W/"v${dbStore.version}-${dbStore.lastModified}"`;
     res.setHeader('ETag', etag);
     res.setHeader('Cache-Control', 'no-cache');
 
-    if (req.headers['if-none-match'] === etag) {
+    const since = parseInt(req.query.since, 10);
+
+    if (req.headers['if-none-match'] === etag || (!isNaN(since) && since >= dbStore.lastModified)) {
       return res.status(304).end();
     }
 
+    // Delta Synchronization: Return only modified entities since last checkpoint
+    if (!isNaN(since) && since > 0 && since < dbStore.lastModified) {
+      const changedInvoices = dbStore.invoices.filter(i => {
+        const t = new Date(i.updatedAt || i.updated_at || i.createdAt || i.created_at || i.date || 0).getTime();
+        return t > since;
+      });
+      const changedProducts = dbStore.products.filter(p => {
+        const t = new Date(p.updatedAt || p.updated_at || 0).getTime();
+        return t > since;
+      });
+      const changedParties = dbStore.parties.filter(p => {
+        const t = new Date(p.updatedAt || p.updated_at || 0).getTime();
+        return t > since;
+      });
+
+      return res.json({
+        ok: true,
+        delta: true,
+        invoices: changedInvoices,
+        products: changedProducts,
+        parties: changedParties,
+        globalSettings: dbStore.globalSettings,
+        deletedInvoiceIds: dbStore.deletedInvoiceIds,
+        deletedProductIds: dbStore.deletedProductIds,
+        deletedPartyIds: dbStore.deletedPartyIds,
+        version: dbStore.version,
+        lastModified: dbStore.lastModified,
+        serverTime: Date.now(),
+        storage: {
+          provider: 'Google Drive & Google Sheets',
+          connected: isGoogleStorageConnected,
+          spreadsheetUrl: GOOGLE_CLOUD_CONFIG.spreadsheetUrl,
+          driveFolder: GOOGLE_CLOUD_CONFIG.driveRootFolder,
+          lastSync: lastGoogleSyncTimestamp
+        }
+      });
+    }
+
     res.json({
+      ok: true,
+      delta: false,
       invoices: dbStore.invoices,
       products: dbStore.products,
       parties: dbStore.parties,
@@ -344,6 +386,7 @@ app.get('/api/sync', (req, res) => {
       deletedPartyIds: dbStore.deletedPartyIds,
       version: dbStore.version,
       lastModified: dbStore.lastModified,
+      serverTime: Date.now(),
       storage: {
         provider: 'Google Drive & Google Sheets',
         connected: isGoogleStorageConnected,
@@ -394,6 +437,80 @@ app.get('/api/sync/events', (req, res) => {
   });
 });
 
+// Batch Outbox Sync Endpoint (Atomic multi-operation processor for offline outbox drain)
+app.post('/api/sync/batch', async (req, res) => {
+  const { operations } = req.body || {};
+  if (!Array.isArray(operations) || operations.length === 0) {
+    return res.json({ ok: true, processed: 0, results: [] });
+  }
+
+  const results = [];
+  const now = new Date().toISOString();
+
+  for (const op of operations) {
+    try {
+      const type = op.type;
+      const action = op.action;
+      const payload = op.payload || {};
+
+      if (type === 'invoice' || action === 'save_invoice') {
+        const inv = payload.invoice || payload || op.invoice;
+        if (inv && (inv.id || inv.invoiceNo)) {
+          inv.updatedAt = inv.updatedAt || now;
+          const idx = dbStore.invoices.findIndex(i => i.id === inv.id || i.invoiceNo === inv.invoiceNo);
+          if (idx > -1) dbStore.invoices[idx] = inv;
+          else dbStore.invoices.push(inv);
+          enqueueGoogleSync({ action: 'save_invoice', invoice: inv });
+          results.push({ id: op.id || inv.id, ok: true });
+        }
+      } else if (type === 'product' || action === 'save_products') {
+        const prods = payload.products || payload || op.products;
+        if (Array.isArray(prods)) {
+          prods.forEach(p => { p.updatedAt = p.updatedAt || now; });
+          dbStore.products = prods;
+          enqueueGoogleSync({ action: 'save_products', products: prods });
+          results.push({ id: op.id, ok: true });
+        }
+      } else if (type === 'party' || action === 'save_parties') {
+        const parties = payload.parties || payload || op.parties;
+        if (Array.isArray(parties)) {
+          parties.forEach(p => { p.updatedAt = p.updatedAt || now; });
+          dbStore.parties = parties;
+          enqueueGoogleSync({ action: 'save_parties', parties });
+          results.push({ id: op.id, ok: true });
+        }
+      } else if (action === 'delete_record') {
+        const recordType = payload.type || op.recordType;
+        const targetId = payload.id || op.targetId;
+        if (recordType === 'invoice') {
+          dbStore.invoices = dbStore.invoices.filter(i => i.id !== targetId);
+          if (!dbStore.deletedInvoiceIds.includes(targetId)) dbStore.deletedInvoiceIds.push(targetId);
+          enqueueGoogleSync({ action: 'delete_record', type: 'invoice', id: targetId });
+        } else if (recordType === 'product') {
+          dbStore.products = dbStore.products.filter(p => p.id !== targetId);
+          if (!dbStore.deletedProductIds.includes(targetId)) dbStore.deletedProductIds.push(targetId);
+          enqueueGoogleSync({ action: 'delete_record', type: 'product', id: targetId });
+        } else if (recordType === 'party') {
+          dbStore.parties = dbStore.parties.filter(p => p.id !== targetId);
+          if (!dbStore.deletedPartyIds.includes(targetId)) dbStore.deletedPartyIds.push(targetId);
+          enqueueGoogleSync({ action: 'delete_record', type: 'party', id: targetId });
+        }
+        results.push({ id: op.id, ok: true });
+      }
+    } catch (opErr) {
+      console.warn("Batch op error:", opErr.message);
+      results.push({ id: op.id, ok: false, error: opErr.message });
+    }
+  }
+
+  markDatabaseUpdated('batch_sync', { count: results.length });
+  saveLocalJsonFileAsync('invoices.json', dbStore.invoices);
+  saveLocalJsonFileAsync('products.json', dbStore.products);
+  saveLocalJsonFileAsync('parties.json', dbStore.parties);
+
+  res.json({ ok: true, processed: results.length, results, serverTime: Date.now() });
+});
+
 // 2. Invoices REST API (Sub-Millisecond In-Memory Mutation + Async Google Cloud Sync)
 app.post('/api/invoices', (req, res) => {
   const invoiceRecord = req.body;
@@ -401,6 +518,7 @@ app.post('/api/invoices', (req, res) => {
     return res.status(400).json({ error: 'Invalid invoice payload' });
   }
   try {
+    invoiceRecord.updatedAt = invoiceRecord.updatedAt || new Date().toISOString();
     const idx = dbStore.invoices.findIndex(i => i.id === invoiceRecord.id);
     if (idx > -1) {
       dbStore.invoices[idx] = invoiceRecord;
