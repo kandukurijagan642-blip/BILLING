@@ -976,27 +976,64 @@ body {
 
 /* Textile insertion row styling */
 .product-input-row {
-  display: grid;
-  grid-template-columns: 2.2fr 0.8fr 1fr 0.8fr 1.1fr 1.1fr 1.3fr auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: flex-end;
 }
 
+.product-input-row .flex-item-desc {
+  flex: 2 1 260px;
+}
+
+.product-input-row .flex-item-stock {
+  flex: 0 1 70px;
+}
+
+.product-input-row .flex-item-hsn {
+  flex: 1 1 100px;
+}
+
+.product-input-row .flex-item-qty {
+  flex: 0 1 75px;
+}
+
+.product-input-row .flex-item-unit {
+  flex: 1 1 95px;
+}
+
+.product-input-row .flex-item-pack {
+  flex: 1 1 95px;
+}
+
+.product-input-row .flex-item-discount {
+  flex: 0 1 80px;
+}
+
+.product-input-row .flex-item-rate {
+  flex: 1 1 110px;
+}
+
+.product-input-row .flex-item-netrate {
+  flex: 1 1 130px;
+}
+
 .product-input-row select {
-  height: 32px;
+  height: 34px;
 }
 
 .product-input-row input {
-  height: 32px;
+  height: 34px;
 }
 
 .btn-add-row {
-  height: 32px;
-  padding: 0 16px;
+  height: 34px;
+  padding: 0 18px;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  white-space: nowrap;
 }
 
 /* Invoice tables */

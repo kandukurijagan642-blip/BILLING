@@ -74,6 +74,7 @@ const elements = {
   billConsigneeStateCode: document.getElementById('bill-consignee-state-code'),
 
   billItemSelect: document.getElementById('bill-item-select'),
+  billItemName: document.getElementById('bill-item-name'),
   billItemStockQty: document.getElementById('bill-item-stock-qty'),
   billItemHsn: document.getElementById('bill-item-hsn'),
   billItemQty: document.getElementById('bill-item-qty'),
@@ -1129,6 +1130,76 @@ function loadAllDatabases() {
     globalSettings = {};
   }
 
+  // Seed default product catalog if empty so billing is never blocked
+  if (!productsDb || productsDb.length === 0) {
+    productsDb = [
+      {
+        id: "prod-1",
+        description: "RALLIMIN ADV + 15 KGs",
+        hsn: "23099090",
+        packSize: "15 KG",
+        unit: "Bucket",
+        rate: 3600,
+        gstRate: 5,
+        discount: 42.5,
+        stock: 98,
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: "prod-2",
+        description: "AQUA PROBIOTIC FEED SUPPLEMENT 1KG",
+        hsn: "23099090",
+        packSize: "1 KG",
+        unit: "Can",
+        rate: 850,
+        gstRate: 5,
+        discount: 10,
+        stock: 100,
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: "prod-3",
+        description: "ZEOLITE POWDER 25KG BAG",
+        hsn: "28421000",
+        packSize: "25 KG",
+        unit: "Bag",
+        rate: 450,
+        gstRate: 12,
+        discount: 5,
+        stock: 105,
+        updatedAt: new Date().toISOString()
+      }
+    ];
+    try { localStorage.setItem("products", JSON.stringify(productsDb)); } catch (e) {}
+  }
+
+  // Seed default party accounts if empty
+  if (!partiesDb || partiesDb.length === 0) {
+    partiesDb = [
+      {
+        id: "party-1",
+        type: "receiver",
+        name: "Sree Venkateswara Aqua Farms",
+        address: "D.No 4-12, Main Road, Nizampatnam, Bapatla Dist, AP - 522314",
+        gstin: "37AABCS1429B1Z2",
+        phone: "9848012345",
+        state: "Andhra Pradesh",
+        stateCode: "37"
+      },
+      {
+        id: "party-2",
+        type: "consignee",
+        name: "Coastal Fisheries Syndicate",
+        address: "Plot 18, Harbor Road, Machilipatnam, Krishna Dist, AP - 521001",
+        gstin: "37AABCC9876C1Z8",
+        phone: "9848067890",
+        state: "Andhra Pradesh",
+        stateCode: "37"
+      }
+    ];
+    try { localStorage.setItem("parties", JSON.stringify(partiesDb)); } catch (e) {}
+  }
+
   if (!globalSettings.telegram) {
     globalSettings.telegram = { token: "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g", chatId: "6877857251, 7906132548" };
   } else {
@@ -1676,10 +1747,11 @@ function bindBillingFormInputs() {
   elements.billItemSelect.addEventListener("change", (e) => {
     const prodId = e.target.value;
     if (!prodId) {
+      if (elements.billItemName) elements.billItemName.value = "";
       elements.billItemHsn.value = "";
       elements.billItemRate.value = "0";
-      elements.billItemQty.value = "0";
-      elements.billItemUnit.value = "";
+      elements.billItemQty.value = "1";
+      elements.billItemUnit.value = "Bucket";
       if (elements.billItemPack) elements.billItemPack.value = "";
       elements.billItemGstRate.value = "0";
       elements.billItemDiscount.value = "0";
@@ -1687,21 +1759,51 @@ function bindBillingFormInputs() {
       calculateBillingItemNetVal();
       return;
     }
-    const prod = productsDb.find(p => p.id === prodId);
+    if (prodId === '__custom__') {
+      elements.billItemSelect.value = "";
+      if (elements.billItemName) {
+        elements.billItemName.value = "";
+        elements.billItemName.focus();
+      }
+      elements.billItemHsn.value = "";
+      elements.billItemRate.value = "0";
+      elements.billItemQty.value = "1";
+      elements.billItemUnit.value = "Bucket";
+      if (elements.billItemPack) elements.billItemPack.value = "";
+      elements.billItemGstRate.value = "0";
+      elements.billItemDiscount.value = "0";
+      if (elements.billItemStockQty) elements.billItemStockQty.value = "—";
+      calculateBillingItemNetVal();
+      return;
+    }
+    const prod = productsDb.find(p => p && (p.id === prodId || p.description === prodId));
     if (prod) {
+      if (elements.billItemName) elements.billItemName.value = prod.description;
       elements.billItemHsn.value = prod.hsn || "";
       elements.billItemRate.value = prod.rate || "0";
       elements.billItemQty.value = "1";
       elements.billItemUnit.value = prod.unit || "Bucket";
       if (elements.billItemPack) elements.billItemPack.value = prod.packSize || "";
-      elements.billItemGstRate.value = "0";
+      elements.billItemGstRate.value = prod.gstRate || "0";
       elements.billItemDiscount.value = prod.discount || "0";
       if (elements.billItemStockQty) {
-        elements.billItemStockQty.value = prod.stock !== undefined ? prod.stock : 0;
+        elements.billItemStockQty.value = prod.stock !== undefined ? prod.stock : "—";
       }
       calculateBillingItemNetVal();
     }
   });
+
+  if (elements.billItemName) {
+    elements.billItemName.addEventListener("input", (e) => {
+      const typed = e.target.value.trim().toLowerCase();
+      if (elements.billItemSelect && elements.billItemSelect.value) {
+        const curProd = productsDb.find(p => p && p.id === elements.billItemSelect.value);
+        if (curProd && curProd.description.toLowerCase() !== typed) {
+          elements.billItemSelect.value = "";
+        }
+      }
+    });
+  }
 
   if (elements.billItemDiscount) {
     elements.billItemDiscount.addEventListener("input", calculateBillingItemNetVal);
@@ -1769,7 +1871,7 @@ function populateBillingSelectors() {
     }
   });
 
-  elements.billItemSelect.innerHTML = `<option value="">-- Search product --</option>`;
+  elements.billItemSelect.innerHTML = `<option value="">-- Choose from Catalog --</option><option value="__custom__">➕ Type Custom Item...</option>`;
   productsDb.forEach(p => {
     const opt = document.createElement("option");
     opt.value = p.id;
@@ -1857,31 +1959,47 @@ window.addBillingItemRow = function() {
     if (!Array.isArray(currentInvoice.items)) currentInvoice.items = [];
 
     const prodId = elements.billItemSelect ? elements.billItemSelect.value : "";
-    let desc = "";
     let prod = productsDb.find(p => p && p.id === prodId);
-    if (!prod && prodId) {
+    if (!prod && prodId && prodId !== '__custom__') {
       prod = productsDb.find(p => p && p.description === prodId);
     }
-    if (prod) {
+
+    let desc = "";
+    if (elements.billItemName && elements.billItemName.value && elements.billItemName.value.trim()) {
+      desc = elements.billItemName.value.trim();
+    } else if (prod) {
       desc = prod.description;
-    } else {
+    } else if (prodId && prodId !== '__custom__') {
+      desc = prodId.trim();
+    }
+
+    if (!desc) {
       if (typeof showFloatingToast === 'function') {
-        showFloatingToast("⚠️ Please select a product first!", "warning");
+        showFloatingToast("⚠️ Please enter a product name or select from catalog!", "warning");
       } else {
-        alert("Please select a Product!");
+        alert("Please enter a product name or select one!");
+      }
+      if (elements.billItemName) {
+        elements.billItemName.focus();
+      } else if (elements.billItemSelect) {
+        elements.billItemSelect.focus();
       }
       return false;
     }
 
-    const hsn = elements.billItemHsn ? elements.billItemHsn.value.trim() : (prod.hsn || "");
-    const qty = parseInt(elements.billItemQty ? elements.billItemQty.value : "1", 10) || 0;
-    const unit = (elements.billItemUnit ? elements.billItemUnit.value.trim() : "") || (prod.unit || "Bucket");
-    const gstRate = parseFloat(elements.billItemGstRate ? elements.billItemGstRate.value : "0") || 0;
+    const hsn = (elements.billItemHsn ? elements.billItemHsn.value.trim() : "") || (prod ? (prod.hsn || "") : "");
+    const qtyVal = parseFloat(elements.billItemQty ? elements.billItemQty.value : "1");
+    const qty = (isNaN(qtyVal) || qtyVal <= 0) ? 1 : qtyVal;
+    const unit = (elements.billItemUnit ? elements.billItemUnit.value.trim() : "") || (prod ? (prod.unit || "Bucket") : "Bucket");
+    const gstRate = parseFloat(elements.billItemGstRate ? elements.billItemGstRate.value : "0") || (prod ? (parseFloat(prod.gstRate) || 0) : 0);
     const discount = parseFloat(elements.billItemDiscount ? elements.billItemDiscount.value : "0") || 0;
-    const rate = parseFloat(elements.billItemRate ? elements.billItemRate.value : "0") || 0;
+    
+    let rate = parseFloat(elements.billItemRate ? elements.billItemRate.value : "0");
+    if (isNaN(rate) || rate <= 0) {
+      rate = prod && prod.rate ? (parseFloat(prod.rate) || 1) : 1;
+    }
 
-    let safeQty = qty <= 0 ? 1 : qty;
-    let safeRate = rate <= 0 ? (prod && prod.rate ? (parseFloat(prod.rate) || 1) : 1) : rate;
+    const packVal = (elements.billItemPack ? elements.billItemPack.value.trim() : "") || (prod ? (prod.packSize || "—") : "—");
 
     // Non-blocking stock notice (never block sales or adding items!)
     if (prod && prod.stock !== undefined && prod.stock !== null && prod.stock !== "") {
@@ -1890,7 +2008,7 @@ window.addBillingItemRow = function() {
         const currentInCart = currentInvoice.items
           .filter(item => item.description === prod.description)
           .reduce((sum, item) => sum + item.quantity, 0);
-        const totalRequested = currentInCart + safeQty;
+        const totalRequested = currentInCart + qty;
         if (totalRequested > availableStock) {
           if (typeof showFloatingToast === 'function') {
             showFloatingToast(`⚠️ Stock Notice: ${prod.description} stock in system is ${availableStock}. Sale proceeding.`);
@@ -1899,30 +2017,56 @@ window.addBillingItemRow = function() {
       }
     }
 
-    const rawSubtotal = safeQty * safeRate;
+    const rawSubtotal = qty * rate;
     const amount = rawSubtotal * (1 - discount / 100);
 
-    const packVal = elements.billItemPack ? elements.billItemPack.value.trim() : "";
     const newItem = {
       id: Date.now().toString() + "_" + Math.floor(Math.random() * 1000),
       baleNo: (currentInvoice.items.length + 1).toString(),
       description: desc,
       hsn: hsn,
-      packSize: packVal || (prod ? (prod.packSize || "—") : "—"),
-      quantity: safeQty,
+      packSize: packVal,
+      quantity: qty,
       unit: unit,
-      rate: safeRate,
+      rate: rate,
       gstRate: gstRate,
       discount: discount,
       amount: amount
     };
 
     currentInvoice.items.push(newItem);
+
+    // Auto-register new custom item into productsDb and sync with Google Sheets
+    if (!productsDb.some(p => p && p.description && p.description.trim().toLowerCase() === desc.toLowerCase())) {
+      const newProd = {
+        id: "prod_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+        description: desc,
+        hsn: hsn,
+        packSize: packVal !== "—" ? packVal : "",
+        unit: unit,
+        rate: rate,
+        gstRate: gstRate,
+        discount: discount,
+        stock: 100,
+        updatedAt: new Date().toISOString()
+      };
+      productsDb.push(newProd);
+      try {
+        localStorage.setItem("products", JSON.stringify(productsDb));
+        if (typeof syncDatabaseToServer === 'function') {
+          syncDatabaseToServer("products", productsDb);
+        }
+        populateBillingSelectors();
+      } catch (e) {
+        console.warn("Auto-register product note:", e);
+      }
+    }
     
     if (elements.billItemSelect) elements.billItemSelect.value = "";
+    if (elements.billItemName) elements.billItemName.value = "";
     if (elements.billItemHsn) elements.billItemHsn.value = "";
-    if (elements.billItemQty) elements.billItemQty.value = "0";
-    if (elements.billItemUnit) elements.billItemUnit.value = "";
+    if (elements.billItemQty) elements.billItemQty.value = "1";
+    if (elements.billItemUnit) elements.billItemUnit.value = "Bucket";
     if (elements.billItemPack) elements.billItemPack.value = "";
     if (elements.billItemStockQty) elements.billItemStockQty.value = "—";
     if (elements.billItemGstRate) elements.billItemGstRate.value = "0";
@@ -2139,17 +2283,29 @@ function prepareInvoiceItemsBeforeSave() {
   if (!currentInvoice) currentInvoice = {};
   if (!Array.isArray(currentInvoice.items)) currentInvoice.items = [];
 
-  // 1. If items empty but a product is selected in dropdown, auto-add it!
-  if (currentInvoice.items.length === 0 && elements.billItemSelect && elements.billItemSelect.value) {
-    window.addBillingItemRow();
+  // 1. If items empty, check if user has filled anything into the item input row
+  if (currentInvoice.items.length === 0) {
+    const hasName = elements.billItemName && elements.billItemName.value && elements.billItemName.value.trim();
+    const hasSelect = elements.billItemSelect && elements.billItemSelect.value && elements.billItemSelect.value !== '__custom__';
+    const hasRate = elements.billItemRate && parseFloat(elements.billItemRate.value) > 0;
+    
+    if (hasName || hasSelect || hasRate) {
+      window.addBillingItemRow();
+    }
   }
 
   // 2. If still empty, check if dropdown has any product option available and auto-select
   if (currentInvoice.items.length === 0 && elements.billItemSelect && elements.billItemSelect.options && elements.billItemSelect.options.length > 1) {
-    elements.billItemSelect.selectedIndex = 1;
-    const changeEvt = new Event("change");
-    elements.billItemSelect.dispatchEvent(changeEvt);
-    window.addBillingItemRow();
+    for (let i = 1; i < elements.billItemSelect.options.length; i++) {
+      const optVal = elements.billItemSelect.options[i].value;
+      if (optVal && optVal !== '__custom__') {
+        elements.billItemSelect.selectedIndex = i;
+        const changeEvt = new Event("change");
+        elements.billItemSelect.dispatchEvent(changeEvt);
+        window.addBillingItemRow();
+        break;
+      }
+    }
   }
 
   // 3. If still empty and productsDb has products, create item from first product
@@ -2175,11 +2331,16 @@ function prepareInvoiceItemsBeforeSave() {
   // 4. If still empty, warn user with floating toast and focus
   if (currentInvoice.items.length === 0) {
     if (typeof showFloatingToast === 'function') {
-      showFloatingToast("⚠️ Please select or add a product to generate the invoice!", "warning");
+      showFloatingToast("⚠️ Please enter or select a product to generate the invoice!", "warning");
     } else {
-      alert("Please select a product and click Add first!");
+      alert("Please enter or select a product first!");
     }
-    if (elements.billItemSelect) {
+    if (elements.billItemName) {
+      try {
+        elements.billItemName.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        elements.billItemName.focus();
+      } catch (e) {}
+    } else if (elements.billItemSelect) {
       try {
         elements.billItemSelect.scrollIntoView({ behavior: 'smooth', block: 'center' });
         elements.billItemSelect.focus();
@@ -2191,163 +2352,13 @@ function prepareInvoiceItemsBeforeSave() {
   return true;
 }
 
-// --- GENERATE INVOICE CONTROLLER ---
-window.generateAndPrintInvoice = function(btnEl) {
-  if (isSavingInvoice) return;
+// --- UNIFIED INVOICE SAVE ENGINE ---
+window.saveCurrentInvoiceRecord = async function(actionType = 'save_only', btnEl = null) {
+  if (isSavingInvoice) return null;
   isSavingInvoice = true;
 
   let origHtml = "";
-  if (btnEl) {
-    origHtml = btnEl.innerHTML;
-    btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Saving...`;
-    btnEl.disabled = true;
-  }
-
-  try {
-    isLocked = false;
-    localStorage.setItem("app_locked", "false");
-    localStorage.setItem("last_active_time", Date.now());
-
-    if (typeof syncBillingInputsToCurrentInvoice === 'function') {
-      syncBillingInputsToCurrentInvoice();
-    }
-
-    // Ensure invoiceNo is resolved
-    if (!currentInvoice.invoiceNo && elements.billInvoiceNo && elements.billInvoiceNo.value) {
-      currentInvoice.invoiceNo = elements.billInvoiceNo.value.trim();
-    }
-    if (!currentInvoice.invoiceNo) {
-      autoSuggestInvoiceNo();
-    }
-
-    // Ensure buyer name is resolved (fallback to "Cash Customer" so it never blocks!)
-    if (!currentInvoice.buyer) currentInvoice.buyer = {};
-    if (!currentInvoice.buyer.name && elements.billBuyerName && elements.billBuyerName.value) {
-      currentInvoice.buyer.name = elements.billBuyerName.value.trim();
-    }
-    if (!currentInvoice.buyer.name) {
-      currentInvoice.buyer.name = "Cash Customer";
-      if (elements.billBuyerName) elements.billBuyerName.value = "Cash Customer";
-    }
-
-    // Ensure items are prepared
-    if (!prepareInvoiceItemsBeforeSave()) {
-      return;
-    }
-
-    // Ensure current phone from input is captured
-    if (elements.billBuyerPhone && elements.billBuyerPhone.value) {
-      currentInvoice.buyer.phone = elements.billBuyerPhone.value.trim();
-    }
-    if (currentInvoice.buyer?.name && currentInvoice.buyer?.phone) {
-      savePhoneToPartyDb(currentInvoice.buyer.name, currentInvoice.buyer.phone);
-    }
-
-    const sellerStateCode = globalSettings.company?.stateCode || "37";
-    const buyerStateCode = currentInvoice.buyer?.stateCode || "37";
-    const breakdown = InvoiceUtils.calculateInvoiceBreakdown(currentInvoice.items, sellerStateCode, buyerStateCode);
-    let taxableVal = breakdown.taxableVal;
-    let totalCgst = breakdown.totalCgst;
-    let totalSgst = breakdown.totalSgst;
-    let totalIgst = breakdown.totalIgst;
-    const grandTotal = breakdown.roundedGrandTotal;
-    const roundOff = breakdown.roundOff;
-
-    if (!validateInvoicePaymentExceeds(currentInvoice, grandTotal)) {
-      return;
-    }
-
-    currentInvoice.taxable = taxableVal;
-    currentInvoice.cgst = totalCgst;
-    currentInvoice.sgst = totalSgst;
-    currentInvoice.igst = totalIgst;
-    currentInvoice.roundOff = roundOff;
-    currentInvoice.total = grandTotal;
-
-    // Auto-resolve invoice number collision on new invoices
-    if (!currentInvoice.isEditing && invoicesDb.some(inv => inv && inv.invoiceNo === currentInvoice.invoiceNo)) {
-      currentInvoice.invoiceNo = InvoiceUtils.getNextInvoiceNumber(invoicesDb);
-      if (elements.billInvoiceNo) elements.billInvoiceNo.value = currentInvoice.invoiceNo;
-    }
-
-    const uniqueId = currentInvoice.id || "inv_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
-    currentInvoice.id = uniqueId;
-
-    const invoiceRecord = {
-      id: uniqueId,
-      invoiceNo: currentInvoice.invoiceNo,
-      invoiceDate: currentInvoice.invoiceDate,
-      customerName: currentInvoice.buyer?.name || "Cash Customer",
-      itemsCount: currentInvoice.items.length,
-      total: grandTotal,
-      details: JSON.parse(JSON.stringify(currentInvoice))
-    };
-
-    let existingIdx = -1;
-    const originalId = uniqueId;
-    if (originalId && invoicesDb.some(inv => inv && inv.id === originalId)) {
-      existingIdx = invoicesDb.findIndex(inv => inv && inv.id === originalId);
-    } else if (currentInvoice.isEditing) {
-      existingIdx = invoicesDb.findIndex(inv => inv && inv.invoiceNo === invoiceRecord.invoiceNo);
-    }
-
-    if (existingIdx > -1) {
-      reconcileProductInventoryStock(invoicesDb[existingIdx]?.details, currentInvoice);
-      invoicesDb[existingIdx] = invoiceRecord;
-    } else {
-      reconcileProductInventoryStock(null, currentInvoice);
-      invoicesDb.push(invoiceRecord);
-    }
-
-    try {
-      localStorage.setItem("invoices", JSON.stringify(invoicesDb));
-      syncDatabaseToServer("invoices", invoiceRecord);
-      if (typeof window.triggerDatabaseSync === 'function') window.triggerDatabaseSync();
-    } catch (err) {
-      console.warn("Unable to persist invoices:", err);
-    }
-
-    // Non-blocking background notification
-    setTimeout(() => {
-      try { sendTelegramInvoiceNotification(invoiceRecord); } catch (e) { console.warn(e); }
-      try { uploadInvoicePdfToTelegram(invoiceRecord.details, true); } catch (e) { console.warn(e); }
-      if (globalSettings.whatsappAutoSend !== false) {
-        try { autoDispatchInvoiceToWhatsApp(invoiceRecord.details); } catch (e) { console.warn(e); }
-      }
-    }, 10);
-
-    try { populateA4PrintOverlay(invoiceRecord.details); } catch (e) { console.warn(e); }
-    showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} saved! Opening print...`);
-
-    setTimeout(() => {
-      document.body.classList.remove("printing-thermal");
-      window.print();
-      resetBillingForm();
-      switchTab("history");
-      loadInvoicesHistoryTable();
-    }, 100);
-  } catch (err) {
-    console.error("Print A4 error:", err);
-    showFloatingToast("❌ Error saving invoice: " + (err.message || err), "warning");
-  } finally {
-    if (btnEl) {
-      setTimeout(() => {
-        btnEl.innerHTML = origHtml;
-        btnEl.disabled = false;
-      }, 400);
-    }
-    setTimeout(() => {
-      isSavingInvoice = false;
-    }, 500);
-  }
-};
-
-window.saveAndGenerateInvoiceOnly = async function(btnEl) {
-  if (isSavingInvoice) return;
-  isSavingInvoice = true;
-
-  let origHtml = "";
-  if (btnEl) {
+  if (btnEl && btnEl.innerHTML) {
     origHtml = btnEl.innerHTML;
     btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Saving...`;
     btnEl.disabled = true;
@@ -2382,12 +2393,15 @@ window.saveAndGenerateInvoiceOnly = async function(btnEl) {
 
     // Auto-resolve line items
     if (!prepareInvoiceItemsBeforeSave()) {
-      return;
+      return null;
     }
 
     // Ensure current phone from input is captured
     if (elements.billBuyerPhone && elements.billBuyerPhone.value) {
       currentInvoice.buyer.phone = elements.billBuyerPhone.value.trim();
+    }
+    if (currentInvoice.buyer?.name && currentInvoice.buyer?.phone) {
+      savePhoneToPartyDb(currentInvoice.buyer.name, currentInvoice.buyer.phone);
     }
 
     const sellerStateCode = globalSettings.company?.stateCode || "37";
@@ -2401,7 +2415,7 @@ window.saveAndGenerateInvoiceOnly = async function(btnEl) {
     const roundOff = breakdown.roundOff;
 
     if (!validateInvoicePaymentExceeds(currentInvoice, grandTotal)) {
-      return;
+      return null;
     }
 
     currentInvoice.taxable = taxableVal;
@@ -2446,11 +2460,7 @@ window.saveAndGenerateInvoiceOnly = async function(btnEl) {
       invoicesDb.push(invoiceRecord);
     }
 
-    // Auto-save phone to Party database for future billing
-    if (currentInvoice.buyer?.name && currentInvoice.buyer?.phone) {
-      savePhoneToPartyDb(currentInvoice.buyer.name, currentInvoice.buyer.phone);
-    }
-
+    // Persist to localStorage & push to Google Sheets master database
     try {
       localStorage.setItem("invoices", JSON.stringify(invoicesDb));
       syncDatabaseToServer("invoices", invoiceRecord);
@@ -2459,48 +2469,91 @@ window.saveAndGenerateInvoiceOnly = async function(btnEl) {
       console.warn("Unable to persist invoices:", err);
     }
 
-    // INSTANT FEEDBACK & UI RESET (Zero delay for mobile)
-    showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} successfully created & saved to history!`);
-    resetBillingForm();
-    switchTab("history");
-    loadInvoicesHistoryTable();
-
-    // Non-blocking background worker for PDF generation, Telegram upload, and WhatsApp dispatch
+    // Non-blocking background worker: generate PDF, upload to Google Drive, Telegram & WhatsApp
     (async () => {
       try {
-        sendTelegramInvoiceNotification(invoiceRecord);
+        if (typeof sendTelegramInvoiceNotification === 'function') sendTelegramInvoiceNotification(invoiceRecord);
       } catch (e) { console.warn("Telegram note:", e); }
 
       let precomputedBase64 = null;
       try {
-        const pdfRes = await generateInvoicePdfBlob(invoiceRecord.details);
-        precomputedBase64 = pdfRes ? pdfRes.pdfBase64 : null;
+        if (typeof generateInvoicePdfBlob === 'function') {
+          const pdfRes = await generateInvoicePdfBlob(invoiceRecord.details);
+          precomputedBase64 = pdfRes ? pdfRes.pdfBase64 : null;
+        }
       } catch (e) {
         console.warn("PDF compile note:", e);
       }
 
-      if (precomputedBase64) {
+      if (precomputedBase64 && typeof uploadInvoicePdfToTelegram === 'function') {
         try {
           uploadInvoicePdfToTelegram(invoiceRecord.details, true, precomputedBase64);
         } catch (e) { console.warn("Telegram PDF note:", e); }
       }
 
-      const rawPhone = getCustomerPhoneNumber(invoiceRecord.details);
-      if (rawPhone && rawPhone.toString().replace(/\D/g, '').length >= 10) {
+      const rawPhone = typeof getCustomerPhoneNumber === 'function' ? getCustomerPhoneNumber(invoiceRecord.details) : "";
+      if (rawPhone && rawPhone.toString().replace(/\D/g, '').length >= 10 && globalSettings.whatsappAutoSend !== false) {
         try {
-          await autoDispatchInvoiceToWhatsApp(invoiceRecord.details, precomputedBase64);
+          if (typeof autoDispatchInvoiceToWhatsApp === 'function') {
+            await autoDispatchInvoiceToWhatsApp(invoiceRecord.details, precomputedBase64);
+          }
         } catch (e) {
           console.warn("Auto WhatsApp dispatch note:", e);
         }
       }
     })();
-  } catch (err) {
-    console.error("Save & Generate Invoice error:", err);
-    if (typeof showFloatingToast === 'function') {
-      showFloatingToast("❌ Error saving invoice: " + (err.message || err), "warning");
+
+    // Handle action-specific outcome
+    if (actionType === 'print_a4') {
+      try { populateA4PrintOverlay(invoiceRecord.details); } catch (e) { console.warn(e); }
+      showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} saved! Opening Print...`);
+      setTimeout(() => {
+        document.body.classList.remove("printing-thermal");
+        window.print();
+        resetBillingForm();
+        switchTab("history");
+        loadInvoicesHistoryTable();
+      }, 100);
+    } else if (actionType === 'print_thermal') {
+      try { populateThermalPrintOverlay(invoiceRecord.details); } catch (e) { console.warn(e); }
+      showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} saved! Opening POS Thermal...`);
+      setTimeout(() => {
+        document.body.classList.add("printing-thermal");
+        window.print();
+        document.body.classList.remove("printing-thermal");
+        resetBillingForm();
+        switchTab("history");
+        loadInvoicesHistoryTable();
+      }, 100);
+    } else if (actionType === 'download_pdf') {
+      showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} saved! Downloading PDF...`);
+      downloadInvoicePdf(invoiceRecord.details, btnEl);
+      resetBillingForm();
+      switchTab("history");
+      loadInvoicesHistoryTable();
+    } else if (actionType === 'share_whatsapp') {
+      showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} saved! Opening WhatsApp...`);
+      shareInvoicePdfNative(invoiceRecord.details, btnEl);
+      resetBillingForm();
+      switchTab("history");
+      loadInvoicesHistoryTable();
     } else {
-      alert("Error saving invoice: " + (err.message || err));
+      // save_only: Show clear visual confirmation and quick actions modal
+      showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} successfully created & saved to Google Sheets!`);
+      if (typeof openInvoiceSuccessModal === 'function') {
+        openInvoiceSuccessModal(invoiceRecord);
+      } else {
+        resetBillingForm();
+        switchTab("history");
+        loadInvoicesHistoryTable();
+      }
     }
+
+    return invoiceRecord;
+  } catch (err) {
+    console.error("Save invoice record error:", err);
+    showFloatingToast("❌ Error saving invoice: " + (err.message || err), "warning");
+    return null;
   } finally {
     if (btnEl) {
       setTimeout(() => {
@@ -2514,156 +2567,78 @@ window.saveAndGenerateInvoiceOnly = async function(btnEl) {
   }
 };
 
+window.generateAndPrintInvoice = function(btnEl) {
+  return window.saveCurrentInvoiceRecord('print_a4', btnEl);
+};
+
+window.saveAndGenerateInvoiceOnly = function(btnEl) {
+  return window.saveCurrentInvoiceRecord('save_only', btnEl);
+};
+
 window.generateAndPrintThermal = function(btnEl) {
-  if (isSavingInvoice) return;
-  isSavingInvoice = true;
+  return window.saveCurrentInvoiceRecord('print_thermal', btnEl);
+};
 
-  let origHtml = "";
-  if (btnEl) {
-    origHtml = btnEl.innerHTML;
-    btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Saving...`;
-    btnEl.disabled = true;
+// --- INVOICE SAVED SUCCESS MODAL CONTROLLER ---
+let lastSavedInvoiceRecord = null;
+window.openInvoiceSuccessModal = function(invoiceRecord) {
+  lastSavedInvoiceRecord = invoiceRecord;
+  const modal = document.getElementById("invoice-saved-success-modal");
+  if (!modal) return;
+  const invNoEl = document.getElementById("modal-success-inv-no");
+  if (invNoEl) invNoEl.textContent = `#${invoiceRecord.invoiceNo || ''}`;
+  const custEl = document.getElementById("modal-success-customer");
+  if (custEl) custEl.textContent = invoiceRecord.customerName || 'Cash Customer';
+  const totEl = document.getElementById("modal-success-total");
+  if (totEl) totEl.textContent = `₹ ${formatCurrency(invoiceRecord.total || 0)}`;
+  modal.classList.remove("hidden");
+};
+
+window.closeInvoiceSuccessModal = function(goToHistory = false) {
+  const modal = document.getElementById("invoice-saved-success-modal");
+  if (modal) modal.classList.add("hidden");
+  resetBillingForm();
+  if (goToHistory) {
+    switchTab("history");
+  } else {
+    switchTab("billing");
   }
+  loadInvoicesHistoryTable();
+};
 
-  try {
-    isLocked = false;
-    localStorage.setItem("app_locked", "false");
-    localStorage.setItem("last_active_time", Date.now());
+window.triggerSuccessModalA4Print = function() {
+  if (!lastSavedInvoiceRecord) return;
+  const rec = lastSavedInvoiceRecord;
+  window.closeInvoiceSuccessModal(false);
+  try { populateA4PrintOverlay(rec.details); } catch (e) { console.warn(e); }
+  setTimeout(() => {
+    document.body.classList.remove("printing-thermal");
+    window.print();
+  }, 100);
+};
 
-    if (typeof syncBillingInputsToCurrentInvoice === 'function') {
-      syncBillingInputsToCurrentInvoice();
-    }
-
-    // Ensure invoiceNo is resolved
-    if (!currentInvoice.invoiceNo && elements.billInvoiceNo && elements.billInvoiceNo.value) {
-      currentInvoice.invoiceNo = elements.billInvoiceNo.value.trim();
-    }
-    if (!currentInvoice.invoiceNo) {
-      autoSuggestInvoiceNo();
-    }
-
-    // Ensure buyer name is resolved (fallback to "Cash Customer" so it never blocks!)
-    if (!currentInvoice.buyer) currentInvoice.buyer = {};
-    if (!currentInvoice.buyer.name && elements.billBuyerName && elements.billBuyerName.value) {
-      currentInvoice.buyer.name = elements.billBuyerName.value.trim();
-    }
-    if (!currentInvoice.buyer.name) {
-      currentInvoice.buyer.name = "Cash Customer";
-      if (elements.billBuyerName) elements.billBuyerName.value = "Cash Customer";
-    }
-
-    // Ensure items are prepared
-    if (!prepareInvoiceItemsBeforeSave()) {
-      return;
-    }
-
-    // Ensure current phone from input is captured
-    if (elements.billBuyerPhone && elements.billBuyerPhone.value) {
-      currentInvoice.buyer.phone = elements.billBuyerPhone.value.trim();
-    }
-    if (currentInvoice.buyer?.name && currentInvoice.buyer?.phone) {
-      savePhoneToPartyDb(currentInvoice.buyer.name, currentInvoice.buyer.phone);
-    }
-
-    const sellerStateCode = globalSettings.company?.stateCode || "37";
-    const buyerStateCode = currentInvoice.buyer?.stateCode || "37";
-    const breakdown = InvoiceUtils.calculateInvoiceBreakdown(currentInvoice.items, sellerStateCode, buyerStateCode);
-    let taxableVal = breakdown.taxableVal;
-    let totalCgst = breakdown.totalCgst;
-    let totalSgst = breakdown.totalSgst;
-    let totalIgst = breakdown.totalIgst;
-    const grandTotal = breakdown.roundedGrandTotal;
-    const roundOff = breakdown.roundOff;
-
-    if (!validateInvoicePaymentExceeds(currentInvoice, grandTotal)) {
-      return;
-    }
-
-    currentInvoice.taxable = taxableVal;
-    currentInvoice.cgst = totalCgst;
-    currentInvoice.sgst = totalSgst;
-    currentInvoice.igst = totalIgst;
-    currentInvoice.roundOff = roundOff;
-    currentInvoice.total = grandTotal;
-
-    // Auto-resolve invoice number collision on new invoices
-    if (!currentInvoice.isEditing && invoicesDb.some(inv => inv && inv.invoiceNo === currentInvoice.invoiceNo)) {
-      currentInvoice.invoiceNo = InvoiceUtils.getNextInvoiceNumber(invoicesDb);
-      if (elements.billInvoiceNo) elements.billInvoiceNo.value = currentInvoice.invoiceNo;
-    }
-
-    const uniqueId = currentInvoice.id || "inv_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
-    currentInvoice.id = uniqueId;
-
-    const invoiceRecord = {
-      id: uniqueId,
-      invoiceNo: currentInvoice.invoiceNo,
-      invoiceDate: currentInvoice.invoiceDate,
-      customerName: currentInvoice.buyer?.name || "Cash Customer",
-      itemsCount: currentInvoice.items.length,
-      total: grandTotal,
-      details: JSON.parse(JSON.stringify(currentInvoice))
-    };
-
-    let existingIdx = -1;
-    const originalId = uniqueId;
-    if (originalId && invoicesDb.some(inv => inv && inv.id === originalId)) {
-      existingIdx = invoicesDb.findIndex(inv => inv && inv.id === originalId);
-    } else if (currentInvoice.isEditing) {
-      existingIdx = invoicesDb.findIndex(inv => inv && inv.invoiceNo === invoiceRecord.invoiceNo);
-    }
-
-    if (existingIdx > -1) {
-      reconcileProductInventoryStock(invoicesDb[existingIdx]?.details, currentInvoice);
-      invoicesDb[existingIdx] = invoiceRecord;
-    } else {
-      reconcileProductInventoryStock(null, currentInvoice);
-      invoicesDb.push(invoiceRecord);
-    }
-
-    try {
-      localStorage.setItem("invoices", JSON.stringify(invoicesDb));
-      syncDatabaseToServer("invoices", invoiceRecord);
-      if (typeof window.triggerDatabaseSync === 'function') window.triggerDatabaseSync();
-    } catch (err) {
-      console.warn("Unable to persist invoices:", err);
-    }
-
-    // Non-blocking background notification
-    setTimeout(() => {
-      try { sendTelegramInvoiceNotification(invoiceRecord); } catch (e) { console.warn(e); }
-      try { uploadInvoicePdfToTelegram(invoiceRecord.details, true); } catch (e) { console.warn(e); }
-      if (globalSettings.whatsappAutoSend !== false) {
-        try { autoDispatchInvoiceToWhatsApp(invoiceRecord.details); } catch (e) { console.warn(e); }
-      }
-    }, 10);
-
-    // Trigger POS Thermal Print dialog
-    try { populateThermalPrintOverlay(invoiceRecord.details); } catch (e) { console.warn(e); }
+window.triggerSuccessModalThermalPrint = function() {
+  if (!lastSavedInvoiceRecord) return;
+  const rec = lastSavedInvoiceRecord;
+  window.closeInvoiceSuccessModal(false);
+  try { populateThermalPrintOverlay(rec.details); } catch (e) { console.warn(e); }
+  setTimeout(() => {
     document.body.classList.add("printing-thermal");
-    showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} saved! Opening Thermal print...`);
+    window.print();
+    document.body.classList.remove("printing-thermal");
+  }, 100);
+};
 
-    setTimeout(() => {
-      window.print();
-      document.body.classList.remove("printing-thermal");
-      resetBillingForm();
-      switchTab("history");
-      loadInvoicesHistoryTable();
-    }, 100);
-  } catch (err) {
-    console.error("Print Thermal error:", err);
-    showFloatingToast("❌ Error saving invoice: " + (err.message || err), "warning");
-  } finally {
-    if (btnEl) {
-      setTimeout(() => {
-        btnEl.innerHTML = origHtml;
-        btnEl.disabled = false;
-      }, 400);
-    }
-    setTimeout(() => {
-      isSavingInvoice = false;
-    }, 500);
-  }
+window.triggerSuccessModalDownloadPdf = function() {
+  if (!lastSavedInvoiceRecord) return;
+  const rec = lastSavedInvoiceRecord;
+  downloadInvoicePdf(rec.details);
+};
+
+window.triggerSuccessModalWhatsApp = function() {
+  if (!lastSavedInvoiceRecord) return;
+  const rec = lastSavedInvoiceRecord;
+  shareInvoicePdfNative(rec.details);
 };
 
 // --- POPULATE PRINT VIEW CANVAS (A4) ---
@@ -2988,14 +2963,8 @@ window.printSavedInvoiceThermal = function(id) {
 
 // --- HIGH-FIDELITY PDF EXPORTER & SHARE ENGINE ---
 window.downloadInvoicePdf = function(invoiceData, btnEl = null) {
-  if (!invoiceData && typeof syncBillingInputsToCurrentInvoice === 'function') {
-    syncBillingInputsToCurrentInvoice();
-  }
   if (!invoiceData) {
-    if (!currentInvoice.invoiceNo) autoSuggestInvoiceNo();
-    if ((!currentInvoice.items || currentInvoice.items.length === 0) && elements.billItemSelect && elements.billItemSelect.value) {
-      window.addBillingItemRow();
-    }
+    return window.saveCurrentInvoiceRecord('download_pdf', btnEl);
   }
   const details = invoiceData || currentInvoice;
   if (!details.buyer) details.buyer = {};
@@ -3238,10 +3207,17 @@ function showFloatingToast(message, type = "success") {
   toast.innerHTML = `<i class="fa-brands fa-whatsapp" style="font-size: 16px; color: #25d366;"></i> <span>${message}</span>`;
   toastContainer.appendChild(toast);
 
-  requestAnimationFrame(() => {
-    toast.style.opacity = "1";
-    toast.style.transform = "translateY(0)";
-  });
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => {
+      toast.style.opacity = "1";
+      toast.style.transform = "translateY(0)";
+    });
+  } else {
+    setTimeout(() => {
+      toast.style.opacity = "1";
+      toast.style.transform = "translateY(0)";
+    }, 16);
+  }
 
   setTimeout(() => {
     toast.style.opacity = "0";
@@ -4510,11 +4486,8 @@ window.closeWhatsappGuideModal = function() {
 };
 
 window.shareCurrentInvoiceWhatsApp = function(btnEl = null) {
-  if (elements.billBuyerPhone && elements.billBuyerPhone.value) {
-    currentInvoice.buyer.phone = elements.billBuyerPhone.value.trim();
-  }
   const button = btnEl || document.querySelector(".btn-share-whatsapp") || document.querySelector(".btn-whatsapp");
-  shareInvoicePdfNative(currentInvoice, button);
+  return window.saveCurrentInvoiceRecord('share_whatsapp', button);
 };
 
 let currentBalanceQrInv = null;
