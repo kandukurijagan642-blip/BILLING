@@ -3800,12 +3800,12 @@ function initWhatsAppEventSource() {
   }
 }
 
+function getWhatsAppApiEndpoint(path) {
+  if (window.location.port === '3001') return path;
+  return 'http://localhost:3001' + path;
+}
+
 function setupAdaptiveWhatsAppPolling() {
-  const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  if (!isLocalHost) {
-    updateWhatsAppBotPillUI({ status: 'DISCONNECTED', isReady: false, webDirect: true });
-    return;
-  }
   if (whatsappAdaptiveTimer) clearTimeout(whatsappAdaptiveTimer);
 
   const poll = async () => {
@@ -3815,23 +3815,20 @@ function setupAdaptiveWhatsAppPolling() {
       whatsappBotStatus.status === 'AUTHENTICATING' ||
       whatsappBotStatus.isDispatching
     );
-    const nextInterval = isBusy ? 1200 : 6000;
+    const nextInterval = isBusy ? 1500 : 7000;
     whatsappAdaptiveTimer = setTimeout(poll, nextInterval);
   };
 
-  whatsappAdaptiveTimer = setTimeout(poll, 1200);
+  whatsappAdaptiveTimer = setTimeout(poll, 800);
 }
 
 async function fetchWhatsAppBotStatus() {
-  const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  if (!isLocalHost) {
-    whatsappBotStatus = { status: 'DISCONNECTED', isReady: false, webDirect: true };
-    updateWhatsAppBotPillUI(whatsappBotStatus);
-    updateWhatsAppBotModalUI(whatsappBotStatus);
-    return;
-  }
   try {
-    const res = await fetch('/api/whatsapp/status');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    const res = await fetch(getWhatsAppApiEndpoint('/api/whatsapp/status'), { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error('Status not ok');
     const data = await res.json();
     whatsappBotStatus = data || { status: 'DISCONNECTED', isReady: false, webDirect: true };
     updateWhatsAppBotPillUI(whatsappBotStatus);
@@ -3942,10 +3939,11 @@ function updateWhatsAppBotModalUI(data) {
   const deviceName = document.getElementById("wa-device-name");
   const devicePhone = document.getElementById("wa-device-phone");
 
-  const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const isConnected = data && data.status === "CONNECTED";
+  const isQrReady = data && data.status === "QR_READY" && Boolean(data.qrCodeDataUrl);
 
   if (cloudBanner) {
-    cloudBanner.style.display = isLocalHost ? "none" : "block";
+    cloudBanner.style.display = (isConnected || isQrReady) ? "none" : (isLocalHost ? "none" : "block");
   }
 
   if (data && data.status === "CONNECTED") {
@@ -4117,14 +4115,20 @@ window.loadWhatsAppActivityLogs = async function() {
   }
 
   try {
-    const res = await fetch('/api/whatsapp/activity');
-    const data = await res.json();
-    const logs = (data && data.logs) || [];
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(getWhatsAppApiEndpoint('/api/whatsapp/activity'), { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error('Bot offline');
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch (e) { throw new Error('Invalid response'); }
+    const logs = Array.isArray(data) ? data : (data?.logs || []);
     if (logs.length === 0) {
       container.innerHTML = `
         <div style="text-align: center; color: #94a3b8; padding: 24px 12px; font-size: 12px;">
           <i class="fa-solid fa-paper-plane" style="font-size: 24px; color: #cbd5e1; margin-bottom: 8px; display: block;"></i>
-          No WhatsApp dispatches recorded yet.<br>Invoices & reminders sent will appear here automatically.
+          No background bot dispatches recorded yet.<br>Invoices & reminders sent will appear here automatically.
         </div>
       `;
       return;
@@ -4153,13 +4157,13 @@ window.loadWhatsAppActivityLogs = async function() {
       }
 
       html += `
-        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; font-size: 11.5px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-          <div style="display: flex; align-items: center; gap: 10px; overflow: hidden;">
-            <span style="background: ${badgeBg}; color: ${badgeColor}; padding: 3px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 700; white-space: nowrap; display: flex; align-items: center; gap: 4px;">
-              <i class="fa-solid ${badgeIcon}"></i> ${badgeText}
-            </span>
-            <div style="overflow: hidden;">
-              <div style="font-weight: 700; color: #1e293b; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">${phoneClean}</div>
+        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+            <div style="background: ${badgeBg}; color: ${badgeColor}; width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0;">
+              <i class="fa-solid ${badgeIcon}"></i>
+            </div>
+            <div style="min-width: 0;">
+              <div style="font-weight: 700; font-size: 12px; color: #1e293b;">${phoneClean} <span style="font-size: 10px; font-weight: 600; color: ${badgeColor}; background: ${badgeBg}; padding: 1px 6px; border-radius: 4px; margin-left: 4px;">${badgeText}</span></div>
               <div style="font-size: 10.5px; color: #64748b; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">${detail}</div>
             </div>
           </div>
@@ -4173,7 +4177,13 @@ window.loadWhatsAppActivityLogs = async function() {
     html += '</div>';
     container.innerHTML = html;
   } catch (err) {
-    container.innerHTML = `<div style="color: #ef4444; font-size: 11.5px; padding: 12px; text-align: center;">Error loading history: ${err.message}</div>`;
+    container.innerHTML = `
+      <div style="text-align: center; color: #64748b; padding: 24px 12px; font-size: 12px;">
+        <i class="fa-solid fa-clock-rotate-left" style="font-size: 24px; color: #cbd5e1; margin-bottom: 8px; display: block;"></i>
+        <p style="margin: 0; font-weight: 600; color: #334155;">WhatsApp History</p>
+        <p style="margin: 4px 0 0 0; font-size: 11.5px; color: #64748b;">No background bot logs available right now. Invoices sent via 1-Click WhatsApp are saved in your invoices record.</p>
+      </div>
+    `;
   }
 };
 
@@ -4196,7 +4206,7 @@ window.requestWhatsAppPairCode = async function() {
   if (codeText) codeText.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="font-size: 20px;"></i> Generating Code...';
 
   try {
-    const res = await fetch('/api/whatsapp/pair-code', {
+    const res = await fetch(getWhatsAppApiEndpoint('/api/whatsapp/pair-code'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone })
@@ -4454,20 +4464,9 @@ window.closeWhatsAppBotModal = function(e) {
 };
 
 window.initiateWhatsAppConnect = async function(forceClean = false) {
-  const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   const qrLoading = document.getElementById("wa-qr-loading");
   const qrPlaceholder = document.getElementById("wa-qr-placeholder");
   const qrImage = document.getElementById("wa-qr-image");
-
-  if (!isLocalHost) {
-    if (qrLoading) qrLoading.style.display = "none";
-    if (qrPlaceholder) qrPlaceholder.style.display = "block";
-    switchWhatsAppPairTab('direct');
-    if (typeof showFloatingToast === 'function') {
-      showFloatingToast("ℹ️ Cloud Web App: 1-Click WhatsApp Direct Share is active! To run background bot (QR scan), launch Start_WhatsApp_Bot.bat on your PC.", 4500);
-    }
-    return;
-  }
 
   if (qrPlaceholder) qrPlaceholder.style.display = "none";
   if (qrLoading) qrLoading.style.display = "block";
@@ -4475,8 +4474,8 @@ window.initiateWhatsAppConnect = async function(forceClean = false) {
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    const res = await fetch('/api/whatsapp/connect', {
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const res = await fetch(getWhatsAppApiEndpoint('/api/whatsapp/connect'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ forceClean }),
@@ -4506,7 +4505,7 @@ window.disconnectWhatsAppBot = async function() {
   }
   if (!confirm("⚠️ Are you sure you want to disconnect/unlink this WhatsApp device?")) return;
   try {
-    const res = await fetch('/api/whatsapp/disconnect', { method: 'POST' });
+    const res = await fetch(getWhatsAppApiEndpoint('/api/whatsapp/disconnect'), { method: 'POST' });
     const data = await res.json();
     fetchWhatsAppBotStatus();
     if (typeof showFloatingToast === 'function') {
@@ -4536,7 +4535,7 @@ window.sendWhatsAppTestMessage = async function() {
 
   try {
     const testMsg = `🔔 *WhatsApp Bot Test Message*\n🏛️ *${globalSettings.company?.name || 'AARYAN AQUA NEEDS'}*\n\n✅ Automation bridge is working properly! Invoices and reports will be delivered automatically.`;
-    const res = await fetch('/api/whatsapp/send-message', {
+    const res = await fetch(getWhatsAppApiEndpoint('/api/whatsapp/send-message'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone, text: testMsg })
@@ -4671,7 +4670,7 @@ async function autoDispatchInvoiceToWhatsApp(details, precomputedBase64 = null) 
   // Check live status if needed
   if (!whatsappBotStatus || !whatsappBotStatus.isReady) {
     try {
-      const liveRes = await fetch('/api/whatsapp/status').then(r => r.json()).catch(() => null);
+      const liveRes = await fetch(getWhatsAppApiEndpoint('/api/whatsapp/status')).then(r => r.json()).catch(() => null);
       if (liveRes && liveRes.isReady) {
         whatsappBotStatus = liveRes;
         updateWhatsAppBotPillUI(whatsappBotStatus);
@@ -4693,7 +4692,7 @@ async function autoDispatchInvoiceToWhatsApp(details, precomputedBase64 = null) 
 
   if (useBot && cleanPhone) {
     try {
-      const res = await fetch('/api/whatsapp/send-invoice', {
+      const res = await fetch(getWhatsAppApiEndpoint('/api/whatsapp/send-invoice'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -4776,7 +4775,7 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
         console.warn("Could not compile PDF for bot share:", e);
       }
 
-      const fastRes = await fetch('/api/whatsapp/send-invoice', {
+      const fastRes = await fetch(getWhatsAppApiEndpoint('/api/whatsapp/send-invoice'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: cleanPhone, text: fullShareText, filename, pdfBase64 })

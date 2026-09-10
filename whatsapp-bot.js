@@ -9,6 +9,14 @@ const { exec } = require('child_process');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Private-Network', 'true');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '50mb' }));
 
@@ -261,8 +269,11 @@ app.get('/api/whatsapp/activity', (req, res) => {
   res.json(activityLogs);
 });
 
-// Direct Web UI for QR code scanning
-app.get('/', (req, res) => {
+// Serve full billing application (with built-in WhatsApp QR scanner modal)
+app.use(express.static(__dirname));
+
+// Standalone companion card
+app.get('/companion', (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
