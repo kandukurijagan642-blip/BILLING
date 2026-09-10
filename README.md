@@ -1,6 +1,6 @@
 # 🌊 Aaryan Aqua Billing System
 
-Enterprise-grade, offline-first GST billing, inventory management, and invoice dispatching platform engineered exclusively with **Google Cloud Services** (Google Apps Script, Google Sheets, Google Drive) and a static web client.
+Lightweight, offline-capable GST billing and inventory management platform engineered exclusively with **Google Cloud Services** (Google Apps Script, Google Sheets, Google Drive) and a static web client.
 
 ---
 
