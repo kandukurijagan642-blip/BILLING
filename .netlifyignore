@@ -1,0 +1,8 @@
+node_modules
+.git
+.gemini
+backend
+scratch
+*.gs
+whatsapp-bot.js
+Start_WhatsApp_Bot.bat
