@@ -1,61 +1,60 @@
 /**
  * ============================================================================
- * AARYAN AQUA BILLING SYSTEM - GOOGLE APPS SCRIPT CLOUD BACKEND (v5.0 SECURE)
- * 100% Google Services Architecture: Google Apps Script + Google Sheets + Google Drive
+ * AARYAN AQUA BILLING SYSTEM - GOOGLE APPS SCRIPT SECURE BACKEND (v5.0 PROD)
+ * 100% Google Cloud Services Architecture: Google Apps Script + Google Sheets + Google Drive
  * 
- * SPREADSHEET URL: https://docs.google.com/spreadsheets/d/1BZnCqi9DPhJxhwUpux1HRfo_PDVn2QLDNDheR0Kf73Q/edit
+ * NOTE: For production deployment:
+ * 1. Open your master spreadsheet in Google Sheets -> Extensions -> Apps Script.
+ * 2. Paste this Code.gs content.
+ * 3. Go to Project Settings -> Script Properties and set:
+ *    - MASTER_SPREADSHEET_ID = <your Google Sheet ID>
+ *    - API_SECRET_KEY = <your chosen API token>
+ * 4. Deploy -> New deployment -> Web app -> Execute as: Me -> Who has access: Anyone.
  * ============================================================================
  */
 
-var MASTER_SPREADSHEET_ID = "1BZnCqi9DPhJxhwUpux1HRfo_PDVn2QLDNDheR0Kf73Q";
-var ROOT_FOLDER_NAME = "Aaryan_Aqua_Billing_Data";
-var INVOICES_FOLDER_NAME = "Aaryan_Aqua_Invoices";
-var SPREADSHEET_NAME = "Aaryan_Aqua_Live_Master_Sheet";
-var DEFAULT_API_KEY = "AARYAN_AQUA_SECURE_KEY_2026";
-var MAX_PDF_SIZE_BYTES = 15 * 1024 * 1024; // 15MB
-
-var ALLOWED_ACTIONS = [
-  "status",
-  "sync",
-  "pull",
-  "save_invoice",
-  "delete_record",
-  "save_products",
-  "save_parties",
-  "save_settings",
-  "upload_pdf"
-];
 
 // ============================================================================
-// 1. AUTHENTICATION & SECURITY
+// MODULE 1: AUTHENTICATION & SECURITY
 // ============================================================================
+/**
+ * ============================================================================
+ * AuthService.gs - Google Apps Script Security & Authentication Module
+ * ============================================================================
+ */
 
 function getApiSecretKey() {
   var props = PropertiesService.getScriptProperties();
-  var key = props.getProperty("API_SECRET_KEY");
-  if (!key) {
-    key = DEFAULT_API_KEY;
-    try {
-      props.setProperty("API_SECRET_KEY", key);
-    } catch (e) {
-      Logger.log("PropertiesService notice: " + e.message);
-    }
+  return props.getProperty("API_SECRET_KEY");
+}
+
+function constantTimeEquals(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  if (a.length !== b.length) return false;
+  var result = 0;
+  for (var i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
   }
-  return key;
+  return result === 0;
 }
 
 function extractRequestToken(e, data) {
   var token = "";
+  
+  // 1. Check query parameter ?token=... or ?apiKey=... or ?auth=...
   if (e && e.parameter) {
     if (e.parameter.token) token = e.parameter.token;
     else if (e.parameter.apiKey) token = e.parameter.apiKey;
     else if (e.parameter.auth) token = e.parameter.auth;
   }
+  
+  // 2. Check JSON payload { auth: "...", token: "...", apiKey: "..." }
   if (!token && data && typeof data === 'object') {
     if (data.token) token = data.token;
     else if (data.apiKey) token = data.apiKey;
     else if (data.auth) token = data.auth;
   }
+  
   return String(token || "").trim();
 }
 
@@ -63,21 +62,40 @@ function authenticateRequest(e, data) {
   var expectedKey = getApiSecretKey();
   var providedToken = extractRequestToken(e, data);
 
+  // If no secret key is configured in Script Properties, fail closed (never allow open access)
   if (!expectedKey) {
-    return { ok: true, user: "Setup_Mode" };
+    return { 
+      ok: false, 
+      error: "Server configuration error: 'API_SECRET_KEY' is not configured in Google Apps Script Project Settings -> Script Properties." 
+    };
   }
+
   if (!providedToken) {
-    return { ok: false, error: "Authentication required: Missing API token." };
+    return { 
+      ok: false, 
+      error: "Unauthorized: Authentication required. Please provide a valid API token in 'auth', 'token', or '?token='." 
+    };
   }
-  if (providedToken !== expectedKey) {
-    return { ok: false, error: "Unauthorized: Invalid API authentication token." };
+
+  if (!constantTimeEquals(providedToken, expectedKey)) {
+    return { 
+      ok: false, 
+      error: "Unauthorized: Invalid API authentication token." 
+    };
   }
-  return { ok: true, user: "Authorized_Admin" };
+
+  return { ok: true, user: "Authorized_Admin_User" };
 }
 
+
 // ============================================================================
-// 2. FINANCIAL CALCULATIONS & STRICT VALIDATION
+// MODULE 2: VALIDATION & FINANCIAL ENGINE
 // ============================================================================
+/**
+ * ============================================================================
+ * ValidationService.gs - Strict Server-Side Validation & Financial Calculations
+ * ============================================================================
+ */
 
 function roundToTwo(num) {
   return Math.round((Number(num) || 0) * 100) / 100;
@@ -88,12 +106,14 @@ function validateAndComputeInvoice(invoiceData, existingInvoices) {
     return { valid: false, error: "Invalid invoice payload: Object required" };
   }
 
+  // 1. Validate Customer Information
   var buyer = invoiceData.buyer || {};
   var customerName = String(buyer.name || invoiceData.customerName || "").trim();
   if (!customerName) {
     return { valid: false, error: "Validation failed: Customer/Party name is required" };
   }
 
+  // 2. Validate Items Array
   var items = invoiceData.items || [];
   if (!Array.isArray(items) || items.length === 0) {
     return { valid: false, error: "Validation failed: Invoice must contain at least one line item" };
@@ -117,12 +137,12 @@ function validateAndComputeInvoice(invoiceData, existingInvoices) {
 
     var desc = String(itm.description || itm.name || "").trim();
     if (!desc) {
-      return { valid: false, error: "Validation failed: Line item #" + (i + 1) + " must have a description" };
+      return { valid: false, error: "Validation failed: Line item #" + (i + 1) + " must have a description or product name" };
     }
 
     var qty = Number(itm.quantity !== undefined ? itm.quantity : (itm.qty !== undefined ? itm.qty : 0));
     if (isNaN(qty) || qty <= 0) {
-      return { valid: false, error: "Validation failed: Quantity for '" + desc + "' must be greater than zero" };
+      return { valid: false, error: "Validation failed: Quantity for '" + desc + "' must be a positive number greater than zero" };
     }
 
     var rate = Number(itm.rate !== undefined ? itm.rate : (itm.price !== undefined ? itm.price : 0));
@@ -140,13 +160,17 @@ function validateAndComputeInvoice(invoiceData, existingInvoices) {
       return { valid: false, error: "Validation failed: Tax/GST rate for '" + desc + "' must be between 0% and 100%" };
     }
 
+    // Line item financial calculation
     var lineGross = roundToTwo(qty * rate);
     var lineDiscountAmt = roundToTwo(lineGross * (discount / 100));
     var lineTaxable = roundToTwo(lineGross - lineDiscountAmt);
     taxableSubtotal += lineTaxable;
 
+    // GST calculation
     var lineGstAmt = roundToTwo(lineTaxable * (taxRate / 100));
-    var lineCgst = 0, lineSgst = 0, lineIgst = 0;
+    var lineCgst = 0;
+    var lineSgst = 0;
+    var lineIgst = 0;
 
     if (isLocal) {
       lineCgst = roundToTwo(lineGstAmt / 2);
@@ -188,6 +212,7 @@ function validateAndComputeInvoice(invoiceData, existingInvoices) {
   var grandTotal = Math.round(rawTotal);
   var roundOff = roundToTwo(grandTotal - rawTotal);
 
+  // 3. Validate Payments
   var paymentStatus = String(invoiceData.paymentStatus || (invoiceData.details && invoiceData.details.paymentStatus) || "Paid").trim();
   var inputPaid = Number(invoiceData.paidAmount !== undefined ? invoiceData.paidAmount : (invoiceData.details && invoiceData.details.paidAmount !== undefined ? invoiceData.details.paidAmount : (paymentStatus === 'Paid' ? grandTotal : 0)));
   
@@ -196,9 +221,12 @@ function validateAndComputeInvoice(invoiceData, existingInvoices) {
   }
 
   var paidAmount = roundToTwo(inputPaid);
-  if (paymentStatus === "Paid") paidAmount = grandTotal;
+  if (paymentStatus === "Paid") {
+    paidAmount = grandTotal;
+  }
   var balanceDue = roundToTwo(Math.max(0, grandTotal - paidAmount));
 
+  // 4. Validate Invoice Number Uniqueness
   var invNo = String(invoiceData.invoiceNo || (invoiceData.details && invoiceData.details.invoiceNo) || "").trim();
   var invId = String(invoiceData.id || "").trim();
 
@@ -208,10 +236,11 @@ function validateAndComputeInvoice(invoiceData, existingInvoices) {
       var existingNo = String(existing.invoiceNo || (existing.details && existing.details.invoiceNo) || "").trim();
       var existingId = String(existing.id || "").trim();
 
+      // If matching invoiceNo but different ID -> Duplicate invoice number!
       if (existingNo === invNo && existingId && invId && existingId !== invId) {
         return { 
           valid: false, 
-          error: "Validation failed: Invoice #" + invNo + " already exists. Duplicate invoice numbers are rejected." 
+          error: "Validation failed: Invoice #" + invNo + " already exists. Duplicate invoice numbers are strictly rejected." 
         };
       }
     }
@@ -239,17 +268,174 @@ function validateAndComputeInvoice(invoiceData, existingInvoices) {
   };
 }
 
+
 // ============================================================================
-// 3. MASTER SPREADSHEET AS AUTHORITATIVE DATA STORE
+// MODULE 3: PRIVATE GOOGLE DRIVE STORAGE
 // ============================================================================
+/**
+ * ============================================================================
+ * DriveService.gs - Secure Google Drive Document & PDF Storage Engine
+ * ============================================================================
+ */
+
+var ROOT_FOLDER_NAME = "Aaryan_Aqua_Billing_Data";
+var INVOICES_FOLDER_NAME = "Aaryan_Aqua_Invoices";
+var MAX_PDF_SIZE_BYTES = 15 * 1024 * 1024; // 15MB max
+
+function getRootFolder() {
+  var props = PropertiesService.getScriptProperties();
+  var folderId = props.getProperty("ROOT_FOLDER_ID");
+  if (folderId) {
+    try {
+      var existing = DriveApp.getFolderById(folderId);
+      if (existing && !existing.isTrashed()) return existing;
+    } catch (e) {}
+  }
+
+  var folders = DriveApp.getFoldersByName(ROOT_FOLDER_NAME);
+  if (folders.hasNext()) {
+    var f = folders.next();
+    try { props.setProperty("ROOT_FOLDER_ID", f.getId()); } catch (e) {}
+    return f;
+  }
+
+  var newFolder = DriveApp.createFolder(ROOT_FOLDER_NAME);
+  try { props.setProperty("ROOT_FOLDER_ID", newFolder.getId()); } catch (e) {}
+  return newFolder;
+}
+
+function getInvoicesFolder() {
+  var props = PropertiesService.getScriptProperties();
+  var folderId = props.getProperty("INVOICES_FOLDER_ID");
+  if (folderId) {
+    try {
+      var existing = DriveApp.getFolderById(folderId);
+      if (existing && !existing.isTrashed()) return existing;
+    } catch (e) {}
+  }
+
+  var root = getRootFolder();
+  var folders = root.getFoldersByName(INVOICES_FOLDER_NAME);
+  var invFolder = null;
+  if (folders.hasNext()) {
+    invFolder = folders.next();
+  } else {
+    invFolder = root.createFolder(INVOICES_FOLDER_NAME);
+  }
+
+  // Enforce Privacy: Ensure folder is NOT public
+  try {
+    invFolder.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+  } catch (e) {}
+
+  try { props.setProperty("INVOICES_FOLDER_ID", invFolder.getId()); } catch (e) {}
+  return invFolder;
+}
+
+function saveInvoicePdfSecure(data) {
+  if (!data || typeof data !== 'object') {
+    return { ok: false, error: "Upload failed: Missing payload" };
+  }
+
+  var pdfBase64 = data.pdfBase64;
+  if (!pdfBase64) {
+    return { ok: false, error: "Upload failed: Missing pdfBase64 payload" };
+  }
+
+  // 1. Sanitize Filename
+  var invNo = String(data.invoiceNo || "").trim();
+  var rawFilename = String(data.filename || ("Invoice_" + (invNo || Date.now()) + ".pdf")).trim();
+  var safeFilename = rawFilename.replace(/[^a-zA-Z0-9_\.-]/g, "_");
+  if (!safeFilename.toLowerCase().endsWith(".pdf")) safeFilename += ".pdf";
+
+  // 2. Validate Base64 Payload & PDF Header
+  var cleanBase64 = pdfBase64.replace(/^data:application\/pdf;base64,/, "").replace(/\s/g, '');
+  if (cleanBase64.length > (MAX_PDF_SIZE_BYTES * 1.37)) {
+    return { ok: false, error: "Upload rejected: File size exceeds 15MB limit" };
+  }
+
+  var decodedBytes = null;
+  try {
+    decodedBytes = Utilities.base64Decode(cleanBase64);
+  } catch (e) {
+    return { ok: false, error: "Upload rejected: Invalid base64 encoding" };
+  }
+
+  if (!decodedBytes || decodedBytes.length === 0) {
+    return { ok: false, error: "Upload rejected: Empty PDF content" };
+  }
+
+  // 3. Verify PDF Magic Bytes (%PDF)
+  var isPdf = false;
+  if (decodedBytes.length >= 4) {
+    // 0x25 = %, 0x50 = P, 0x44 = D, 0x46 = F
+    if (decodedBytes[0] === 37 && decodedBytes[1] === 80 && decodedBytes[2] === 68 && decodedBytes[3] === 70) {
+      isPdf = true;
+    }
+  }
+
+  if (!isPdf && !pdfBase64.startsWith("data:application/pdf")) {
+    return { ok: false, error: "Upload rejected: File is not a valid PDF document" };
+  }
+
+  var blob = Utilities.newBlob(decodedBytes, "application/pdf", safeFilename);
+  var invFolder = getInvoicesFolder();
+
+  // Trash existing file with exact same name to keep archive clean
+  var existingFiles = invFolder.getFilesByName(safeFilename);
+  while (existingFiles.hasNext()) {
+    try { existingFiles.next().setTrashed(true); } catch (e) {}
+  }
+
+  var file = invFolder.createFile(blob);
+  
+  // Security Enforcement: Set file access to PRIVATE
+  try {
+    file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+  } catch (e) {}
+
+  var fileId = file.getId();
+  var viewUrl = "https://drive.google.com/file/d/" + fileId + "/view";
+
+  return {
+    ok: true,
+    fileId: fileId,
+    filename: safeFilename,
+    url: viewUrl,
+    pdfUrl: viewUrl,
+    invoiceNo: invNo
+  };
+}
+
+
+// ============================================================================
+// MODULE 4: GOOGLE SHEETS AUTHORITATIVE STORAGE
+// ============================================================================
+/**
+ * ============================================================================
+ * SpreadsheetService.gs - Authoritative Data Store Engine using Google Sheets
+ * ============================================================================
+ */
+
+var SPREADSHEET_NAME = "Aaryan_Aqua_Live_Master_Sheet";
+
+function getMasterSpreadsheetId() {
+  var props = PropertiesService.getScriptProperties();
+  return props.getProperty("MASTER_SPREADSHEET_ID");
+}
+var SPREADSHEET_NAME = "Aaryan_Aqua_Live_Master_Sheet";
 
 function getMasterSpreadsheet() {
   var ss = null;
-  if (MASTER_SPREADSHEET_ID) {
+  var sheetId = getMasterSpreadsheetId();
+  if (sheetId) {
     try {
-      ss = SpreadsheetApp.openById(MASTER_SPREADSHEET_ID);
-    } catch (e) {}
+      ss = SpreadsheetApp.openById(sheetId);
+    } catch (e) {
+      Logger.log("Could not open spreadsheet by configured ID: " + e.message);
+    }
   }
+
   if (!ss) {
     var root = getRootFolder();
     var files = root.getFilesByName(SPREADSHEET_NAME);
@@ -261,7 +447,11 @@ function getMasterSpreadsheet() {
       root.addFile(ssFile);
       DriveApp.getRootFolder().removeFile(ssFile);
     }
+    try {
+      PropertiesService.getScriptProperties().setProperty("MASTER_SPREADSHEET_ID", ss.getId());
+    } catch (pe) {}
   }
+
   setupSpreadsheetTabs(ss);
   return ss;
 }
@@ -305,6 +495,7 @@ function ensureSheetWithHeaders(ss, sheetName, headers, headerColor) {
   if (!sheet) {
     sheet = ss.insertSheet(sheetName);
   }
+
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(headers);
     var headerRange = sheet.getRange(1, 1, 1, headers.length);
@@ -313,12 +504,15 @@ function ensureSheetWithHeaders(ss, sheetName, headers, headerColor) {
     headerRange.setFontWeight("bold");
     headerRange.setHorizontalAlignment("center");
     sheet.setFrozenRows(1);
+
     for (var i = 1; i <= headers.length; i++) {
       sheet.setColumnWidth(i, 150);
     }
   }
   return sheet;
 }
+
+// --- INVOICES CRUD FROM AUTHORITATIVE GOOGLE SHEET ---
 
 function readInvoicesFromSheet(ss) {
   if (!ss) ss = getMasterSpreadsheet();
@@ -364,8 +558,10 @@ function readInvoicesFromSheet(ss) {
       };
       invObj.details = Object.assign({}, invObj);
     }
+
     invoices.push(invObj);
   }
+
   return invoices;
 }
 
@@ -391,6 +587,7 @@ function writeInvoiceToSheet(inv, ss) {
   var dest = d.destination || inv.destination || "";
   var lastUpdated = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || "Asia/Kolkata", "yyyy-MM-dd HH:mm:ss");
   var pdfUrl = inv.pdfUrl || d.pdfUrl || "";
+
   var fullJson = JSON.stringify(inv);
 
   var lastRow = sheet.getLastRow();
@@ -442,6 +639,8 @@ function deleteInvoiceFromSheet(delId, ss) {
   return false;
 }
 
+// --- INVENTORY CRUD FROM AUTHORITATIVE GOOGLE SHEET ---
+
 function readInventoryFromSheet(ss) {
   if (!ss) ss = getMasterSpreadsheet();
   var sheet = ss.getSheetByName("Inventory");
@@ -483,6 +682,7 @@ function writeInventoryToSheet(products, ss) {
   if (lastRow >= 2) {
     sheet.getRange(2, 1, lastRow - 1, 11).clearContent();
   }
+
   if (products.length === 0) return;
 
   var rows = products.map(function(p, idx) {
@@ -513,6 +713,8 @@ function writeInventoryToSheet(products, ss) {
   sheet.getRange(2, 8, rows.length, 1).setNumberFormat("₹#,##0.00");
   sheet.getRange(2, 10, rows.length, 1).setNumberFormat("₹#,##0.00");
 }
+
+// --- CUSTOMERS CRUD FROM AUTHORITATIVE GOOGLE SHEET ---
 
 function readCustomersFromSheet(ss) {
   if (!ss) ss = getMasterSpreadsheet();
@@ -552,6 +754,7 @@ function writeCustomersToSheet(parties, ss) {
   if (lastRow >= 2) {
     sheet.getRange(2, 1, lastRow - 1, 8).clearContent();
   }
+
   if (parties.length === 0) return;
 
   var rows = parties.map(function(p, idx) {
@@ -570,127 +773,59 @@ function writeCustomersToSheet(parties, ss) {
   sheet.getRange(2, 1, rows.length, 8).setValues(rows);
 }
 
+// --- AUDIT LOGGING ---
+
 function appendAuditLog(action, user, recordId, status, details, ss) {
   try {
     if (!ss) ss = getMasterSpreadsheet();
     var sheet = ss.getSheetByName("Audit_Logs");
     if (!sheet) return;
+
     var timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || "Asia/Kolkata", "yyyy-MM-dd HH:mm:ss");
-    sheet.appendRow([timestamp, String(action || ""), String(user || "System"), String(recordId || "—"), String(status || "SUCCESS"), String(details || "")]);
-  } catch (e) {}
-}
-
-// ============================================================================
-// 4. SECURE PRIVATE GOOGLE DRIVE STORAGE
-// ============================================================================
-
-function getRootFolder() {
-  var props = PropertiesService.getScriptProperties();
-  var folderId = props.getProperty("ROOT_FOLDER_ID");
-  if (folderId) {
-    try {
-      var existing = DriveApp.getFolderById(folderId);
-      if (existing && !existing.isTrashed()) return existing;
-    } catch (e) {}
-  }
-  var folders = DriveApp.getFoldersByName(ROOT_FOLDER_NAME);
-  if (folders.hasNext()) {
-    var f = folders.next();
-    try { props.setProperty("ROOT_FOLDER_ID", f.getId()); } catch (e) {}
-    return f;
-  }
-  var newFolder = DriveApp.createFolder(ROOT_FOLDER_NAME);
-  try { props.setProperty("ROOT_FOLDER_ID", newFolder.getId()); } catch (e) {}
-  return newFolder;
-}
-
-function getInvoicesFolder() {
-  var props = PropertiesService.getScriptProperties();
-  var folderId = props.getProperty("INVOICES_FOLDER_ID");
-  if (folderId) {
-    try {
-      var existing = DriveApp.getFolderById(folderId);
-      if (existing && !existing.isTrashed()) return existing;
-    } catch (e) {}
-  }
-  var root = getRootFolder();
-  var folders = root.getFoldersByName(INVOICES_FOLDER_NAME);
-  var invFolder = folders.hasNext() ? folders.next() : root.createFolder(INVOICES_FOLDER_NAME);
-
-  // Enforce Privacy: Never public
-  try { invFolder.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE); } catch (e) {}
-  try { props.setProperty("INVOICES_FOLDER_ID", invFolder.getId()); } catch (e) {}
-  return invFolder;
-}
-
-function saveInvoicePdfSecure(data) {
-  if (!data || typeof data !== 'object') {
-    return { ok: false, error: "Missing payload" };
-  }
-  var pdfBase64 = data.pdfBase64;
-  if (!pdfBase64) {
-    return { ok: false, error: "Missing pdfBase64 data" };
-  }
-
-  var invNo = String(data.invoiceNo || "").trim();
-  var rawFilename = String(data.filename || ("Invoice_" + (invNo || Date.now()) + ".pdf")).trim();
-  var safeFilename = rawFilename.replace(/[^a-zA-Z0-9_\.-]/g, "_");
-  if (!safeFilename.toLowerCase().endsWith(".pdf")) safeFilename += ".pdf";
-
-  var cleanBase64 = pdfBase64.replace(/^data:application\/pdf;base64,/, "").replace(/\s/g, '');
-  if (cleanBase64.length > (MAX_PDF_SIZE_BYTES * 1.37)) {
-    return { ok: false, error: "File exceeds 15MB limit" };
-  }
-
-  var decodedBytes = null;
-  try {
-    decodedBytes = Utilities.base64Decode(cleanBase64);
+    var row = [
+      timestamp,
+      String(action || ""),
+      String(user || "System"),
+      String(recordId || "—"),
+      String(status || "SUCCESS"),
+      String(details || "")
+    ];
+    sheet.appendRow(row);
   } catch (e) {
-    return { ok: false, error: "Invalid base64 encoding" };
+    Logger.log("Audit log failed: " + e.message);
   }
-
-  var blob = Utilities.newBlob(decodedBytes, "application/pdf", safeFilename);
-  var invFolder = getInvoicesFolder();
-
-  var existingFiles = invFolder.getFilesByName(safeFilename);
-  while (existingFiles.hasNext()) {
-    try { existingFiles.next().setTrashed(true); } catch (e) {}
-  }
-
-  var file = invFolder.createFile(blob);
-  try { file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE); } catch (e) {}
-
-  var fileId = file.getId();
-  var viewUrl = "https://drive.google.com/file/d/" + fileId + "/view";
-
-  return {
-    ok: true,
-    fileId: fileId,
-    filename: safeFilename,
-    url: viewUrl,
-    pdfUrl: viewUrl,
-    invoiceNo: invNo
-  };
 }
 
+
 // ============================================================================
-// 5. INVOICE CREATION & CONCURRENCY ENGINE
+// MODULE 5: INVOICE & INVENTORY SERVICE (LOCKSERVICE CONCURRENCY)
 // ============================================================================
+/**
+ * ============================================================================
+ * InvoiceService.gs - Business Logic, Concurrency & Inventory Integration
+ * ============================================================================
+ */
 
 function processSaveInvoice(invoiceData, user, ss) {
   if (!ss) ss = getMasterSpreadsheet();
 
+  // 1. Concurrency Locking via LockService
   var lock = LockService.getScriptLock();
   try {
-    lock.waitLock(30000);
+    lock.waitLock(30000); // Wait up to 30 seconds for lock
   } catch (lockErr) {
-    return { ok: false, error: "Server busy: Could not acquire lock. Please retry." };
+    return {
+      ok: false,
+      error: "Server busy: Could not acquire concurrency lock. Another transaction is in progress. Please retry."
+    };
   }
 
   try {
+    // 2. Read Authoritative State from Sheets
     var existingInvoices = readInvoicesFromSheet(ss);
     var inventory = readInventoryFromSheet(ss);
 
+    // 3. Strict Server-Side Validation & Recalculation
     var valResult = validateAndComputeInvoice(invoiceData, existingInvoices);
     if (!valResult.valid) {
       return { ok: false, error: valResult.error };
@@ -698,6 +833,7 @@ function processSaveInvoice(invoiceData, user, ss) {
 
     var computed = valResult.computed;
 
+    // 4. Auto-Generate Next Sequential Invoice Number if empty
     if (!computed.invoiceNo) {
       var maxNo = 0;
       for (var k = 0; k < existingInvoices.length; k++) {
@@ -707,7 +843,8 @@ function processSaveInvoice(invoiceData, user, ss) {
       computed.invoiceNo = String(maxNo + 1).padStart(4, "0");
     }
 
-    // Inventory Stock Adjustment
+    // 5. Atomic Inventory Stock Adjustment
+    // If editing existing invoice, first restore previous items
     var existingIdx = -1;
     for (var i = 0; i < existingInvoices.length; i++) {
       if (existingInvoices[i].id === computed.id || existingInvoices[i].invoiceNo === computed.invoiceNo) {
@@ -732,6 +869,7 @@ function processSaveInvoice(invoiceData, user, ss) {
       }
     }
 
+    // Deduct new items from inventory
     var updatedInventory = JSON.parse(JSON.stringify(inventory));
     for (var ni = 0; ni < computed.items.length; ni++) {
       var newItm = computed.items[ni];
@@ -759,6 +897,7 @@ function processSaveInvoice(invoiceData, user, ss) {
       }
     }
 
+    // 6. Build Consolidated Full Invoice Record
     var fullInvoice = Object.assign({}, invoiceData, {
       id: computed.id,
       invoiceNo: computed.invoiceNo,
@@ -778,13 +917,20 @@ function processSaveInvoice(invoiceData, user, ss) {
       roundOff: computed.roundOff,
       updatedAt: Utilities.formatDate(new Date(), Session.getScriptTimeZone() || "Asia/Kolkata", "yyyy-MM-dd HH:mm:ss")
     });
+
     fullInvoice.details = Object.assign({}, fullInvoice);
 
+    // 7. Write Authoritative Data to Sheets in Batches
     writeInvoiceToSheet(fullInvoice, ss);
     writeInventoryToSheet(updatedInventory, ss);
 
-    try { CacheService.getScriptCache().remove("cache_sync_bundle"); } catch (e) {}
-    appendAuditLog("SAVE_INVOICE", user, computed.invoiceNo, "SUCCESS", "Total: ₹" + computed.total + " | Paid: ₹" + computed.paidAmount, ss);
+    // 8. Invalidate High-Speed Cache Bundle
+    try {
+      CacheService.getScriptCache().remove("cache_sync_bundle");
+    } catch (e) {}
+
+    // 9. Audit Logging
+    appendAuditLog("SAVE_INVOICE", user || "Admin", computed.invoiceNo, "SUCCESS", "Total: ₹" + computed.total + " | Paid: ₹" + computed.paidAmount + " | Items: " + computed.items.length, ss);
 
     return {
       ok: true,
@@ -792,6 +938,7 @@ function processSaveInvoice(invoiceData, user, ss) {
       record: fullInvoice,
       serverTime: Date.now()
     };
+
   } finally {
     try { lock.releaseLock(); } catch (e) {}
   }
@@ -818,6 +965,7 @@ function processDeleteRecord(type, id, user, ss) {
         }
       }
 
+      // Restore inventory stock for deleted invoice
       if (targetInv) {
         var items = (targetInv.details && targetInv.details.items) || targetInv.items || [];
         var inventory = readInventoryFromSheet(ss);
@@ -841,7 +989,8 @@ function processDeleteRecord(type, id, user, ss) {
       deleteInvoiceFromSheet(id, ss);
 
       try { CacheService.getScriptCache().remove("cache_sync_bundle"); } catch (e) {}
-      appendAuditLog("DELETE_INVOICE", user, id, "SUCCESS", "Invoice deleted, inventory restored", ss);
+
+      appendAuditLog("DELETE_INVOICE", user || "Admin", id, "SUCCESS", "Invoice deleted and inventory stock restored", ss);
       return { ok: true, deletedId: id, type: "invoice" };
 
     } else if (type === "product") {
@@ -849,7 +998,7 @@ function processDeleteRecord(type, id, user, ss) {
       var filtered = inventory.filter(function(p) { return p.id !== id; });
       writeInventoryToSheet(filtered, ss);
       try { CacheService.getScriptCache().remove("cache_sync_bundle"); } catch (e) {}
-      appendAuditLog("DELETE_PRODUCT", user, id, "SUCCESS", "Product deleted", ss);
+      appendAuditLog("DELETE_PRODUCT", user || "Admin", id, "SUCCESS", "Product removed from inventory", ss);
       return { ok: true, deletedId: id, type: "product" };
 
     } else if (type === "party" || type === "customer") {
@@ -857,23 +1006,43 @@ function processDeleteRecord(type, id, user, ss) {
       var filteredC = customers.filter(function(c) { return c.id !== id; });
       writeCustomersToSheet(filteredC, ss);
       try { CacheService.getScriptCache().remove("cache_sync_bundle"); } catch (e) {}
-      appendAuditLog("DELETE_CUSTOMER", user, id, "SUCCESS", "Customer deleted", ss);
+      appendAuditLog("DELETE_CUSTOMER", user || "Admin", id, "SUCCESS", "Customer removed from parties database", ss);
       return { ok: true, deletedId: id, type: "party" };
     }
 
     return { ok: false, error: "Invalid record type: " + type };
+
   } finally {
     try { lock.releaseLock(); } catch (e) {}
   }
 }
 
-// ============================================================================
-// 6. REST API WEB APP ENTRYPOINTS (doGet & doPost)
-// ============================================================================
 
-function doGet(e) {
+// ============================================================================
+// MODULE 6: API ROUTER & WEB APP ENTRY POINTS (doGet / doPost)
+// ============================================================================
+/**
+ * ============================================================================
+ * ApiRouter.gs - Action Allowlist, Security Filter & HTTP Dispatcher
+ * ============================================================================
+ */
+
+var ALLOWED_ACTIONS = [
+  "status",
+  "sync",
+  "pull",
+  "save_invoice",
+  "delete_record",
+  "save_products",
+  "save_parties",
+  "save_settings",
+  "upload_pdf"
+];
+
+function handleApiGet(e) {
   var action = (e && e.parameter && e.parameter.action) ? String(e.parameter.action).trim() : "status";
 
+  // Check allowlist
   if (ALLOWED_ACTIONS.indexOf(action) === -1) {
     return ContentService.createTextOutput(JSON.stringify({
       ok: false,
@@ -881,25 +1050,22 @@ function doGet(e) {
     })).setMimeType(ContentService.MimeType.JSON);
   }
 
+  // 1. Status Health Check
   if (action === "status") {
-    var ss = getMasterSpreadsheet();
-    return ContentService.createTextOutput(JSON.stringify({
-      ok: true,
-      service: "Aaryan Aqua Serverless Google Backend",
-      status: "ONLINE",
-      architecture: "Google Apps Script + Google Sheets + Google Drive",
-      spreadsheetUrl: ss ? ss.getUrl() : "",
+    
       serverTime: Date.now(),
       timestamp: new Date().toISOString()
     })).setMimeType(ContentService.MimeType.JSON);
   }
 
+  // 2. Authoritative Sync / Pull from Google Sheets
   if (action === "sync" || action === "pull") {
     var auth = authenticateRequest(e, null);
     if (!auth.ok) {
       return ContentService.createTextOutput(JSON.stringify(auth)).setMimeType(ContentService.MimeType.JSON);
     }
 
+    // High-speed RAM cache check
     var cache = CacheService.getScriptCache();
     var cachedBundle = null;
     try {
@@ -912,6 +1078,7 @@ function doGet(e) {
       return ContentService.createTextOutput(JSON.stringify(cachedBundle)).setMimeType(ContentService.MimeType.JSON);
     }
 
+    // Read Authoritative Data directly from Google Sheets
     var ssMaster = getMasterSpreadsheet();
     var invs = readInvoicesFromSheet(ssMaster);
     var prods = readInventoryFromSheet(ssMaster);
@@ -939,7 +1106,7 @@ function doGet(e) {
   }
 }
 
-function doPost(e) {
+function handleApiPost(e) {
   if (!e || !e.postData || !e.postData.contents) {
     return ContentService.createTextOutput(JSON.stringify({
       ok: false,
@@ -952,6 +1119,7 @@ function doPost(e) {
     var data = JSON.parse(rawBody || "{}");
     var action = String(data.action || "").trim();
 
+    // 1. Action Allowlist Enforcement
     if (!action || ALLOWED_ACTIONS.indexOf(action) === -1) {
       return ContentService.createTextOutput(JSON.stringify({
         ok: false,
@@ -959,6 +1127,7 @@ function doPost(e) {
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
+    // 2. Authentication Enforcement
     var auth = authenticateRequest(e, data);
     if (!auth.ok) {
       return ContentService.createTextOutput(JSON.stringify(auth)).setMimeType(ContentService.MimeType.JSON);
@@ -967,6 +1136,7 @@ function doPost(e) {
     var user = auth.user;
     var ss = getMasterSpreadsheet();
 
+    // 3. Dispatch to Specialized Service Handlers
     if (action === "sync" || action === "pull") {
       var invs = readInvoicesFromSheet(ss);
       var prods = readInventoryFromSheet(ss);
@@ -1018,7 +1188,7 @@ function doPost(e) {
 
     if (action === "save_settings") {
       var settingsObj = data.settings || {};
-      appendAuditLog("SAVE_SETTINGS", user, "—", "SUCCESS", "Settings updated", ss);
+      appendAuditLog("SAVE_SETTINGS", user, "—", "SUCCESS", "System settings updated", ss);
       return ContentService.createTextOutput(JSON.stringify({ ok: true, settings: settingsObj })).setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -1050,3 +1220,16 @@ function doPost(e) {
     })).setMimeType(ContentService.MimeType.JSON);
   }
 }
+
+// ============================================================================
+// Global Web App Entry Points
+// ============================================================================
+
+function doGet(e) {
+  return handleApiGet(e);
+}
+
+function doPost(e) {
+  return handleApiPost(e);
+}
+

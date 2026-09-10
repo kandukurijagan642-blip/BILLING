@@ -4,16 +4,22 @@
  * ============================================================================
  */
 
-var MASTER_SPREADSHEET_ID = "1BZnCqi9DPhJxhwUpux1HRfo_PDVn2QLDNDheR0Kf73Q";
+var SPREADSHEET_NAME = "Aaryan_Aqua_Live_Master_Sheet";
+
+function getMasterSpreadsheetId() {
+  var props = PropertiesService.getScriptProperties();
+  return props.getProperty("MASTER_SPREADSHEET_ID");
+}
 var SPREADSHEET_NAME = "Aaryan_Aqua_Live_Master_Sheet";
 
 function getMasterSpreadsheet() {
   var ss = null;
-  if (MASTER_SPREADSHEET_ID) {
+  var sheetId = getMasterSpreadsheetId();
+  if (sheetId) {
     try {
-      ss = SpreadsheetApp.openById(MASTER_SPREADSHEET_ID);
+      ss = SpreadsheetApp.openById(sheetId);
     } catch (e) {
-      Logger.log("⚠️ Could not open by ID, searching in Drive folder...");
+      Logger.log("Could not open spreadsheet by configured ID: " + e.message);
     }
   }
 
@@ -28,6 +34,9 @@ function getMasterSpreadsheet() {
       root.addFile(ssFile);
       DriveApp.getRootFolder().removeFile(ssFile);
     }
+    try {
+      PropertiesService.getScriptProperties().setProperty("MASTER_SPREADSHEET_ID", ss.getId());
+    } catch (pe) {}
   }
 
   setupSpreadsheetTabs(ss);

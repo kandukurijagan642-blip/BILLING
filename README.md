@@ -87,9 +87,10 @@ The Google Sheets master workbook contains 5 dedicated worksheets:
    [Aaryan Aqua Master Spreadsheet](https://docs.google.com/spreadsheets/d/1BZnCqi9DPhJxhwUpux1HRfo_PDVn2QLDNDheR0Kf73Q/edit)
 2. In the top menu, go to **Extensions** → **Apps Script**.
 3. Copy the consolidated code from [`Code.gs`](file:///c:/Users/ADMIN/Documents/fish%20billing/Code.gs) (or the modular files from the [`backend/`](file:///c:/Users/ADMIN/Documents/fish%20billing/backend) folder) into the Apps Script editor.
-4. Set your private secret key:
+4. Set your private Script Properties:
    - Click **Project Settings** (gear icon) → **Script Properties**.
-   - Add property: `API_SECRET_KEY` = `aaryan_aqua_secure_secret_2026` (or your preferred secret).
+   - Add property: `MASTER_SPREADSHEET_ID` = `1BZnCqi9DPhJxhwUpux1HRfo_PDVn2QLDNDheR0Kf73Q` (your Google Sheet ID).
+   - Add property: `API_SECRET_KEY` = `aaryan_aqua_secure_secret_2026` (your private API authorization token).
 5. Deploy Web App:
    - Click **Deploy** → **New deployment**.
    - Select type: **Web app**.

@@ -4,26 +4,25 @@
  * ============================================================================
  */
 
-var DEFAULT_API_KEY = "AARYAN_AQUA_SECURE_KEY_2026";
-
 function getApiSecretKey() {
   var props = PropertiesService.getScriptProperties();
-  var key = props.getProperty("API_SECRET_KEY");
-  if (!key) {
-    key = DEFAULT_API_KEY;
-    try {
-      props.setProperty("API_SECRET_KEY", key);
-    } catch (e) {
-      Logger.log("Could not set default API key in ScriptProperties: " + e.message);
-    }
+  return props.getProperty("API_SECRET_KEY");
+}
+
+function constantTimeEquals(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  if (a.length !== b.length) return false;
+  var result = 0;
+  for (var i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
   }
-  return key;
+  return result === 0;
 }
 
 function extractRequestToken(e, data) {
   var token = "";
   
-  // 1. Check query parameter ?token=... or ?apiKey=...
+  // 1. Check query parameter ?token=... or ?apiKey=... or ?auth=...
   if (e && e.parameter) {
     if (e.parameter.token) token = e.parameter.token;
     else if (e.parameter.apiKey) token = e.parameter.apiKey;
@@ -44,19 +43,22 @@ function authenticateRequest(e, data) {
   var expectedKey = getApiSecretKey();
   var providedToken = extractRequestToken(e, data);
 
-  // If no secret key is set and system is in open setup mode, allow with warning
+  // If no secret key is configured in Script Properties, fail closed (never allow open access)
   if (!expectedKey) {
-    return { ok: true, user: "System_Setup_Mode" };
+    return { 
+      ok: false, 
+      error: "Server configuration error: 'API_SECRET_KEY' is not configured in Google Apps Script Project Settings -> Script Properties." 
+    };
   }
 
   if (!providedToken) {
     return { 
       ok: false, 
-      error: "Authentication required. Please provide a valid API token in 'auth', 'token', or '?token='." 
+      error: "Unauthorized: Authentication required. Please provide a valid API token in 'auth', 'token', or '?token='." 
     };
   }
 
-  if (providedToken !== expectedKey) {
+  if (!constantTimeEquals(providedToken, expectedKey)) {
     return { 
       ok: false, 
       error: "Unauthorized: Invalid API authentication token." 

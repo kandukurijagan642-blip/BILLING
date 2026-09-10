@@ -29,13 +29,7 @@ function handleApiGet(e) {
 
   // 1. Status Health Check
   if (action === "status") {
-    var ss = getMasterSpreadsheet();
-    return ContentService.createTextOutput(JSON.stringify({
-      ok: true,
-      service: "Aaryan Aqua Serverless Google Backend",
-      status: "ONLINE",
-      architecture: "Google Apps Script + Google Sheets + Google Drive",
-      spreadsheetUrl: ss ? ss.getUrl() : "",
+    
       serverTime: Date.now(),
       timestamp: new Date().toISOString()
     })).setMimeType(ContentService.MimeType.JSON);
@@ -202,4 +196,16 @@ function handleApiPost(e) {
       error: "Server-side error: " + err.message
     })).setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+// ============================================================================
+// Global Web App Entry Points
+// ============================================================================
+
+function doGet(e) {
+  return handleApiGet(e);
+}
+
+function doPost(e) {
+  return handleApiPost(e);
 }
