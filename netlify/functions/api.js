@@ -2,6 +2,33 @@ const SCRIPT_URL = process.env.GOOGLE_SCRIPT_URL || 'https://script.google.com/m
 const SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/1BZnCqi9DPhJxhwUpux1HRfo_PDVn2QLDNDheR0Kf73Q/edit';
 const DRIVE_FOLDER = 'Aaryan_Aqua_Billing_Data';
 
+const BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'application/json, text/plain, */*',
+  'Accept-Language': 'en-US,en;q=0.9'
+};
+
+async function fetchFromGas(url, options = {}) {
+  const mergedHeaders = Object.assign({}, BROWSER_HEADERS, options.headers || {});
+  try {
+    const res = await fetch(url, {
+      ...options,
+      headers: mergedHeaders,
+      redirect: 'follow'
+    });
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch (parseErr) {
+      console.warn("GAS returned non-JSON:", text.substring(0, 300));
+      return { ok: false, error: "Non-JSON response from Google Apps Script", raw: text.substring(0, 300) };
+    }
+  } catch (netErr) {
+    console.error("fetchFromGas network error:", netErr);
+    return { ok: false, error: netErr.message };
+  }
+}
+
 exports.handler = async (event, context) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -20,12 +47,12 @@ exports.handler = async (event, context) => {
   try {
     // 1. GET /sync (Pulls data from Google Apps Script)
     if (path === '/sync' && event.httpMethod === 'GET') {
-      const res = await fetch(`${SCRIPT_URL}?action=sync`, { redirect: 'follow' });
-      const data = await res.json();
+      const data = await fetchFromGas(`${SCRIPT_URL}?action=sync`);
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({
+          ok: true,
           invoices: data.invoices || [],
           products: data.products || [],
           parties: data.parties || [],
@@ -81,8 +108,7 @@ exports.handler = async (event, context) => {
       const body = event.body ? JSON.parse(event.body) : {};
 
       if (path === '/google-drive/sync-now') {
-        const res = await fetch(`${SCRIPT_URL}?action=sync`, { redirect: 'follow' });
-        const data = await res.json();
+        const data = await fetchFromGas(`${SCRIPT_URL}?action=sync`);
         return {
           statusCode: 200,
           headers,
@@ -125,21 +151,21 @@ exports.handler = async (event, context) => {
       }
 
       if (gasPayload) {
-        const gasRes = await fetch(SCRIPT_URL, {
+        const gasData = await fetchFromGas(SCRIPT_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(gasPayload),
-          redirect: 'follow'
+          body: JSON.stringify(gasPayload)
         });
-        const gasData = await gasRes.json().catch(() => ({ ok: true }));
+
         if (gasData && gasData.ok) {
           if (gasData.viewUrl && !gasData.pdfUrl) gasData.pdfUrl = gasData.viewUrl;
           if (gasData.viewUrl && !gasData.googleDriveUrl) gasData.googleDriveUrl = gasData.viewUrl;
         }
+
         return {
           statusCode: 200,
           headers,
-          body: JSON.stringify(gasData || { success: true })
+          body: JSON.stringify(gasData || { ok: true, success: true })
         };
       }
     }
@@ -152,9 +178,9 @@ exports.handler = async (event, context) => {
 
   } catch (err) {
     return {
-      statusCode: 500,
+      statusCode: 200,
       headers,
-      body: JSON.stringify({ error: 'Serverless function error', message: err.message })
+      body: JSON.stringify({ ok: false, error: 'Serverless function notice', message: err.message })
     };
   }
 };
