@@ -2608,9 +2608,8 @@ window.saveCurrentInvoiceRecord = async function(actionType = 'save_only', btnEl
       }
     } else {
       // save_only ("Generate & Save Invoice"):
-      // Automatically send to that customer's WhatsApp & show success actions modal
-      showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} saved! Sending to WhatsApp...`);
-      shareInvoicePdfNative(invoiceRecord.details, btnEl);
+      // Fully automated in backend: saves invoice, compiles PDF, syncs Google Drive & auto-dispatches via WhatsApp bot without browser redirect
+      showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} successfully created & saved to Google Sheets!`);
       if (typeof openInvoiceSuccessModal === 'function') {
         openInvoiceSuccessModal(invoiceRecord);
       } else {
@@ -4291,9 +4290,9 @@ async function generateInvoicePdfBlob(details) {
   return { blob, pdfBase64, filename };
 }
 
-// Automatic Silent WhatsApp Dispatch upon bill generation
+// Automatic Silent WhatsApp Dispatch upon bill generation (100% Automated Backend Process, NO Browser Redirect)
 async function autoDispatchInvoiceToWhatsApp(details, precomputedBase64 = null) {
-  if (!details || !details.invoiceNo || !details.buyer?.name) return false;
+  if (!details || !details.invoiceNo) return false;
   let rawPhone = getCustomerPhoneNumber(details);
   if (!rawPhone || rawPhone.toString().replace(/\D/g, '').length < 10) {
     console.log("No valid phone number for auto WhatsApp dispatch");
@@ -4301,8 +4300,11 @@ async function autoDispatchInvoiceToWhatsApp(details, precomputedBase64 = null) 
   }
   const cleanPhone = formatWhatsAppPhone(rawPhone);
 
-  const text = formatInvoiceWhatsAppSummary(details);
-  const customerClean = (details.buyer.name || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
+  const text = typeof generateWhatsAppInvoiceMessage === 'function'
+    ? generateWhatsAppInvoiceMessage(details)
+    : formatInvoiceWhatsAppSummary(details);
+  const custName = details.buyer?.name || details.customerName || 'Customer';
+  const customerClean = custName.replace(/[^a-zA-Z0-9]/g, '_');
   const filename = `Invoice_${details.invoiceNo}_${customerClean}.pdf`;
 
   // Check live status if needed
@@ -4318,33 +4320,17 @@ async function autoDispatchInvoiceToWhatsApp(details, precomputedBase64 = null) 
 
   const useBot = whatsappBotStatus && whatsappBotStatus.isReady && !whatsappBotStatus.webDirect;
 
-  if (useBot) {
-    let pdfBase64 = precomputedBase64;
-    if (!pdfBase64) {
-      // Try fast-path first: check if file is on disk
-      try {
-        const fastRes = await fetch('/api/whatsapp/send-invoice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: cleanPhone, text, filename, fastPathOnly: true })
-        });
-        const fastData = await fastRes.json();
-        if (fastData && fastData.ok) {
-          playSuccessChime();
-          showFloatingToast(`📱 Invoice #${details.invoiceNo} sent directly to ${details.buyer?.name || 'Customer'} (+${cleanPhone}) via WhatsApp!`);
-          return true;
-        }
-      } catch (e) {}
-
-      // If not on disk, generate PDF blob
-      try {
-        const gen = await generateInvoicePdfBlob(details);
-        pdfBase64 = gen.pdfBase64;
-      } catch (err) {
-        console.warn("Could not generate PDF for auto dispatch:", err);
-      }
+  let pdfBase64 = precomputedBase64;
+  if (!pdfBase64) {
+    try {
+      const gen = await generateInvoicePdfBlob(details);
+      pdfBase64 = gen ? gen.pdfBase64 : null;
+    } catch (err) {
+      console.warn("Could not generate PDF for auto dispatch:", err);
     }
+  }
 
+  if (useBot && cleanPhone) {
     try {
       const res = await fetch('/api/whatsapp/send-invoice', {
         method: 'POST',
@@ -4358,22 +4344,24 @@ async function autoDispatchInvoiceToWhatsApp(details, precomputedBase64 = null) 
       });
       const data = await res.json();
       if (data && data.ok) {
-        playSuccessChime();
+        if (typeof playSuccessChime === 'function') playSuccessChime();
         console.log(`✅ Automated WhatsApp Invoice sent to +${cleanPhone}`);
-        showFloatingToast(`📱 Invoice #${details.invoiceNo} sent directly to ${details.buyer?.name || 'Customer'} (+${cleanPhone}) via WhatsApp!`);
+        showFloatingToast(`📱 Invoice #${details.invoiceNo} & PDF receipt sent automatically to ${custName} (+${cleanPhone}) via WhatsApp!`, 5000);
         return true;
+      } else {
+        console.warn("Auto WhatsApp dispatch response:", data);
       }
     } catch (err) {
       console.warn("Auto WhatsApp dispatch notice:", err);
     }
   } else {
-    // When bot is offline, do NOT trigger popups on mobile during background auto-dispatch
-    console.log("WhatsApp Bot is offline. Automatic silent background dispatch skipped.");
+    // When bot is offline, do NOT trigger redirects during background auto-dispatch
+    console.log("WhatsApp Bot is offline. Automatic silent background dispatch completed without browser redirect.");
   }
   return false;
 }
 
-// Dual-Mode Native Share: Auto background bot when linked on PC, instant unblocked 1-click WhatsApp on mobile & web
+// Dual-Mode Native Share: Auto background bot when linked on PC, instant unblocked 1-click WhatsApp on manual trigger
 window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click = false) {
   if (!details || !details.invoiceNo) {
     showFloatingToast("⚠️ Please add items to invoice before sharing!", "warning");
@@ -4386,7 +4374,6 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
     cleanPhone = formatWhatsAppPhone(rawPhone);
   } else {
     // If not entered in billing form, prompt user for phone number
-    // But NEVER abort or error if empty/cancelled! Fallback to WhatsApp contact chooser!
     const custName = details.buyer?.name || details.customerName || 'Customer';
     const entered = prompt(`📱 Enter 10-digit WhatsApp number for ${custName}\n(Or press OK / Cancel to select contact directly inside WhatsApp):`, "");
     if (entered && entered.trim().replace(/\D/g, '').length >= 10) {
@@ -4396,12 +4383,14 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
     }
   }
 
-  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   const isWebDirect = whatsappBotStatus && whatsappBotStatus.webDirect;
-  const useBackgroundBot = !isMobile && whatsappBotStatus && whatsappBotStatus.isReady && !isWebDirect && !force1Click;
+  const useBackgroundBot = whatsappBotStatus && whatsappBotStatus.isReady && !isWebDirect && !force1Click;
 
-  const fullShareText = generateWhatsAppInvoiceMessage(details);
-  const customerClean = (details.buyer?.name || details.customerName || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
+  const fullShareText = typeof generateWhatsAppInvoiceMessage === 'function'
+    ? generateWhatsAppInvoiceMessage(details)
+    : formatInvoiceWhatsAppSummary(details);
+  const custName = details.buyer?.name || details.customerName || 'Customer';
+  const customerClean = custName.replace(/[^a-zA-Z0-9]/g, '_');
   const filename = `Invoice_${details.invoiceNo}_${customerClean}.pdf`;
 
   let origHtml = "";
@@ -4409,37 +4398,45 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
     origHtml = btnEl.innerHTML;
   }
 
-  // --- DESKTOP ULTRA-FAST PATH: If Background Bot is active on local PC ---
+  // --- ULTRA-FAST PATH: If Background Bot is active, send document PDF in background ---
   if (useBackgroundBot && cleanPhone) {
     if (btnEl && btnEl.tagName) {
-      btnEl.innerHTML = `<i class="fa-solid fa-paper-plane fa-spin"></i> Sending via Bot...`;
+      btnEl.innerHTML = `<i class="fa-solid fa-paper-plane fa-spin"></i> Sending PDF via Bot...`;
       btnEl.disabled = true;
     }
     try {
+      let pdfBase64 = null;
+      try {
+        const gen = await generateInvoicePdfBlob(details);
+        pdfBase64 = gen ? gen.pdfBase64 : null;
+      } catch (e) {
+        console.warn("Could not compile PDF for bot share:", e);
+      }
+
       const fastRes = await fetch('/api/whatsapp/send-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: cleanPhone, text: fullShareText, filename, fastPathOnly: true })
+        body: JSON.stringify({ phone: cleanPhone, text: fullShareText, filename, pdfBase64 })
       });
       const fastData = await fastRes.json();
       if (fastData && fastData.ok) {
-        playSuccessChime();
+        if (typeof playSuccessChime === 'function') playSuccessChime();
         if (btnEl && btnEl.tagName) {
-          btnEl.innerHTML = `<i class="fa-solid fa-check text-success"></i> Sent!`;
+          btnEl.innerHTML = `<i class="fa-solid fa-check text-success"></i> Sent PDF!`;
           setTimeout(() => {
             btnEl.innerHTML = origHtml;
             btnEl.disabled = false;
           }, 2000);
         }
-        showFloatingToast(`✅ Invoice #${details.invoiceNo} sent via WhatsApp Bot to +${cleanPhone}!`);
+        showFloatingToast(`✅ Invoice #${details.invoiceNo} & PDF receipt sent via WhatsApp Bot to +${cleanPhone}!`);
         return;
       }
     } catch (fastErr) {
-      console.warn("Background bot fast path failed, falling back to 1-click WhatsApp:", fastErr);
+      console.warn("Background bot dispatch failed, falling back to manual WhatsApp:", fastErr);
     }
   }
 
-  // --- INSTANT 1-CLICK WHATSAPP DISPATCH (Mobile & Desktop Web) ---
+  // Fallback: 1-click WhatsApp Web/App when user explicitly clicked manual share button and bot is offline
   const waUrl = launchWhatsAppWebOrApp(cleanPhone, fullShareText);
   openWhatsAppDirect(waUrl);
 

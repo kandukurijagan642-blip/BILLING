@@ -94,11 +94,11 @@ exports.handler = async (event, context) => {
         statusCode: 200,
         headers,
         body: JSON.stringify({
-          status: 'CONNECTED',
-          isReady: true,
-          webDirect: true,
-          clientInfo: { pushname: 'Aaryan Aqua (Direct Web)' },
-          message: 'Direct WhatsApp integration active'
+          status: 'DISCONNECTED',
+          isReady: false,
+          webDirect: false,
+          clientInfo: null,
+          message: 'WhatsApp automated background bot runs locally on your shop server (server.js).'
         })
       };
     }
