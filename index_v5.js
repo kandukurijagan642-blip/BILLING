@@ -3801,6 +3801,11 @@ function initWhatsAppEventSource() {
 }
 
 function setupAdaptiveWhatsAppPolling() {
+  const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  if (!isLocalHost) {
+    updateWhatsAppBotPillUI({ status: 'DISCONNECTED', isReady: false, webDirect: true });
+    return;
+  }
   if (whatsappAdaptiveTimer) clearTimeout(whatsappAdaptiveTimer);
 
   const poll = async () => {
@@ -3818,15 +3823,23 @@ function setupAdaptiveWhatsAppPolling() {
 }
 
 async function fetchWhatsAppBotStatus() {
+  const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  if (!isLocalHost) {
+    whatsappBotStatus = { status: 'DISCONNECTED', isReady: false, webDirect: true };
+    updateWhatsAppBotPillUI(whatsappBotStatus);
+    updateWhatsAppBotModalUI(whatsappBotStatus);
+    return;
+  }
   try {
     const res = await fetch('/api/whatsapp/status');
     const data = await res.json();
-    whatsappBotStatus = data || { status: 'DISCONNECTED', isReady: false };
+    whatsappBotStatus = data || { status: 'DISCONNECTED', isReady: false, webDirect: true };
     updateWhatsAppBotPillUI(whatsappBotStatus);
     updateWhatsAppBotModalUI(whatsappBotStatus);
   } catch (err) {
-    whatsappBotStatus = { status: 'DISCONNECTED', isReady: false };
+    whatsappBotStatus = { status: 'DISCONNECTED', isReady: false, webDirect: true };
     updateWhatsAppBotPillUI(whatsappBotStatus);
+    updateWhatsAppBotModalUI(whatsappBotStatus);
   }
 }
 
@@ -3901,16 +3914,16 @@ function updateWhatsAppBotPillUI(data) {
     return;
   }
 
-  // 5. DISCONNECTED / OFFLINE
-  pill.classList.add("disconnected");
-  if (radarDot) radarDot.style.display = "none";
+  // 5. DISCONNECTED / OFFLINE (1-Click Direct Mode Active)
+  pill.classList.add("connected");
+  if (radarDot) radarDot.style.display = "inline-block";
   if (statusIcon) {
     statusIcon.className = "fa-brands fa-whatsapp";
     statusIcon.style.display = "inline-block";
-    statusIcon.style.color = "#64748b";
+    statusIcon.style.color = "#16a34a";
   }
-  statusText.textContent = "WhatsApp Bot";
-  pill.title = "WhatsApp Bot Offline - Click to connect or use 1-Click Instant Share";
+  statusText.textContent = "WhatsApp (1-Click)";
+  pill.title = "WhatsApp 1-Click Direct Share Ready - Click to view status & test";
 }
 
 function updateWhatsAppBotModalUI(data) {
@@ -3972,13 +3985,21 @@ function updateWhatsAppBotModalUI(data) {
     if (qrLoading) qrLoading.style.display = "block";
     if (qrImage) qrImage.style.display = "none";
   } else {
-    statusCard.classList.add("wa-status-disconnected");
-    if (statusTitle) statusTitle.textContent = "WhatsApp Bot Disconnected";
-    if (statusDesc) statusDesc.textContent = "Scan QR code or use Phone Pairing Code below to link your device.";
+    statusCard.classList.add("wa-status-connected");
+    if (statusTitle) {
+      statusTitle.textContent = "WhatsApp 1-Click Direct Share Ready";
+      statusTitle.style.color = "#166534";
+    }
+    if (statusDesc) {
+      statusDesc.textContent = "1-Click WhatsApp dispatch is active. Bills open directly in WhatsApp Web or on your mobile device.";
+      statusDesc.style.color = "#475569";
+    }
     if (qrSection) { qrSection.classList.remove("hidden"); qrSection.style.display = "block"; }
     if (connectedSection) { connectedSection.classList.add("hidden"); connectedSection.style.display = "none"; }
-    if (qrLoading) qrLoading.style.display = "block";
+    if (qrLoading) qrLoading.style.display = "none";
     if (qrImage) qrImage.style.display = "none";
+    const directBox = document.getElementById("wa-direct-mode-box");
+    if (directBox) directBox.style.display = "block";
   }
 }
 
@@ -4358,11 +4379,17 @@ function _openWhatsAppBotModalActual() {
   const fallbackToggle = document.getElementById("wa-fallback-1click-toggle");
   if (fallbackToggle) fallbackToggle.checked = settings.whatsappFallback1Click !== false;
 
-  fetchWhatsAppBotStatus();
-  if (whatsappPollInterval) clearInterval(whatsappPollInterval);
-  whatsappPollInterval = setInterval(fetchWhatsAppBotStatus, 2000);
-
-  initiateWhatsAppConnect();
+  const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  if (isLocalHost) {
+    fetchWhatsAppBotStatus();
+    if (whatsappPollInterval) clearInterval(whatsappPollInterval);
+    whatsappPollInterval = setInterval(fetchWhatsAppBotStatus, 2000);
+    initiateWhatsAppConnect();
+  } else {
+    whatsappBotStatus = { status: 'DISCONNECTED', isReady: false, webDirect: true };
+    updateWhatsAppBotPillUI(whatsappBotStatus);
+    updateWhatsAppBotModalUI(whatsappBotStatus);
+  }
 }
 
 window.closeWhatsAppBotModal = function(e) {
@@ -6639,3 +6666,16 @@ window.importDataBackupJSON = function(event) {
     }
   });
 })();
+
+window.testDirectWhatsAppClick = function() {
+  const entered = prompt("📱 Enter 10-digit customer mobile number to test WhatsApp 1-Click share:", "91");
+  if (entered && entered.trim().replace(/\D/g, '').length >= 10) {
+    const cleanPhone = formatWhatsAppPhone(entered.trim());
+    const testMsg = "🐟 *Aaryan Aqua Needs* - Test notification from your billing system.\n\nWhatsApp 1-Click direct sharing is working perfectly! ✅";
+    const waUrl = launchWhatsAppWebOrApp(cleanPhone, testMsg);
+    openWhatsAppDirect(waUrl);
+    if (typeof showFloatingToast === 'function') {
+      showFloatingToast("📲 WhatsApp 1-Click test launched successfully!", 3500);
+    }
+  }
+};
