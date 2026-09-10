@@ -687,6 +687,13 @@ document.addEventListener("DOMContentLoaded", () => {
           });
 
           const mergedProducts = Array.from(mergedProdMap.values());
+          mergedProducts.forEach(p => {
+            const s = parseInt(p.stock, 10);
+            if (p.stock === undefined || p.stock === null || p.stock === "" || isNaN(s) || s <= 0) {
+              p.stock = 100;
+              needsPushProducts = true;
+            }
+          });
 
           if (JSON.stringify(mergedProducts) !== JSON.stringify(localProducts)) {
             localStorage.setItem("products", JSON.stringify(mergedProducts));
@@ -874,6 +881,13 @@ document.addEventListener("DOMContentLoaded", () => {
             loadProductsDatabaseTable();
             loadPartiesDatabaseLists();
             loadInvoicesHistoryTable();
+
+            // Refresh billing dropdowns with current selection preserved
+            const curProd = elements.billItemSelect ? elements.billItemSelect.value : "";
+            populateBillingSelectors();
+            if (curProd && elements.billItemSelect) {
+              elements.billItemSelect.value = curProd;
+            }
           }
         }
       })
@@ -1721,6 +1735,7 @@ function bindBillingFormInputs() {
       elements.billConsigneeName.value = party.name;
       elements.billConsigneeAddress.value = party.address;
       elements.billConsigneeGstin.value = party.gstin;
+      if (elements.billConsigneePhone) elements.billConsigneePhone.value = party.phone || "";
       elements.billConsigneeState.value = party.state;
       elements.billConsigneeStateCode.value = party.stateCode;
 
@@ -1779,12 +1794,14 @@ window.updatePrintTitleHeader = function() {
   }
 };
 
-function autoSuggestInvoiceNo() {
+function autoSuggestInvoiceNo(force = false) {
+  if (currentInvoice && currentInvoice.isEditing && !force) return;
   const nextStr = InvoiceUtils.getNextInvoiceNumber(invoicesDb);
-  currentInvoice.invoiceNo = nextStr;
-
-  if (elements.billInvoiceNo) {
-    elements.billInvoiceNo.value = currentInvoice.invoiceNo;
+  if (force || !currentInvoice.invoiceNo || !elements.billInvoiceNo || !elements.billInvoiceNo.value) {
+    currentInvoice.invoiceNo = nextStr;
+    if (elements.billInvoiceNo) {
+      elements.billInvoiceNo.value = currentInvoice.invoiceNo;
+    }
   }
 
   const today = new Date().toISOString().split('T')[0];
@@ -2033,6 +2050,7 @@ function resetBillingForm() {
   
   currentInvoice = {
     id: "",
+    isEditing: false,
     invoiceType: "Bill of Supply",
     headerLogo: "ganesha",
     invoiceNo: "",
@@ -2832,8 +2850,15 @@ window.downloadInvoicePdf = function(invoiceData, btnEl = null) {
     }
   }
   const details = invoiceData || currentInvoice;
-  if (!details.invoiceNo || !details.buyer?.name || !details.items || details.items.length === 0) {
-    alert("Please fill invoice details and add at least one line item before exporting PDF!");
+  if (!details.buyer) details.buyer = {};
+  if (!details.buyer.name && elements.billBuyerName && elements.billBuyerName.value) {
+    details.buyer.name = elements.billBuyerName.value.trim();
+  }
+  if (!details.buyer.name) {
+    details.buyer.name = "Cash Customer";
+  }
+  if (!details.invoiceNo || !details.items || details.items.length === 0) {
+    alert("Please select a product and add at least one line item before exporting PDF!");
     return;
   }
 
@@ -3968,7 +3993,7 @@ async function autoDispatchInvoiceToWhatsApp(details, precomputedBase64 = null) 
     } catch (e) {}
   }
 
-  const useBot = whatsappBotStatus && whatsappBotStatus.isReady;
+  const useBot = whatsappBotStatus && whatsappBotStatus.isReady && !whatsappBotStatus.webDirect;
 
   if (useBot) {
     let pdfBase64 = precomputedBase64;
@@ -4055,9 +4080,10 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
     }
   } catch (e) {}
 
-  const useBackgroundBot = whatsappBotStatus && whatsappBotStatus.isReady && !force1Click;
+  const isWebDirect = whatsappBotStatus && whatsappBotStatus.webDirect;
+  const useBackgroundBot = whatsappBotStatus && whatsappBotStatus.isReady && !isWebDirect && !force1Click;
 
-  if (!useBackgroundBot && !force1Click) {
+  if (!useBackgroundBot && !force1Click && !isWebDirect) {
     // Open QR Code Pairing Modal so user can link phone once for 100% automated sending
     openWhatsAppBotModal();
     showFloatingToast("📲 Scan this QR code once with WhatsApp to send PDFs automatically without manual downloading or dragging!", 6000);
@@ -4065,7 +4091,7 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
   }
 
   let waWin = null;
-  if (!useBackgroundBot && force1Click) {
+  if (!useBackgroundBot) {
     waWin = window.open("about:blank", "_blank");
   }
 
@@ -4453,7 +4479,7 @@ window.sendWhatsAppPaymentReminder = async function(id, btnEl = null) {
     }
   } catch (e) {}
 
-  const useBot = whatsappBotStatus && whatsappBotStatus.isReady;
+  const useBot = whatsappBotStatus && whatsappBotStatus.isReady && !whatsappBotStatus.webDirect;
   if (useBot) {
     try {
       const res = await fetch('/api/whatsapp/send-message', {
@@ -4672,6 +4698,7 @@ window.editSavedInvoice = function(id) {
   if (inv) {
     currentInvoice = JSON.parse(JSON.stringify(inv.details));
     currentInvoice.id = inv.id;
+    currentInvoice.isEditing = true;
     
     // Safety check default structures
     if (!currentInvoice.buyer) {
@@ -5155,6 +5182,7 @@ window.savePartyModal = function(e) {
   syncDatabaseToServer("parties", partiesDb);
   closePartyModal();
   loadPartiesDatabaseLists();
+  populateBillingSelectors();
   if (window.triggerDatabaseSync) window.triggerDatabaseSync();
 
   sendPartyTelegramReport(party, isNew);
@@ -5282,6 +5310,7 @@ window.deletePartyRowDb = function(id) {
 
     deletePartyFromServer(id);
     loadPartiesDatabaseLists();
+    populateBillingSelectors();
     if (window.triggerDatabaseSync) window.triggerDatabaseSync();
   }
 };
