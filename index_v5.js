@@ -3269,20 +3269,116 @@ function savePhoneToPartyDb(customerName, phone) {
 function launchWhatsAppWebOrApp(cleanPhone, messageText) {
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   const encodedText = encodeURIComponent(messageText);
-  let waUrl = "";
-  
   if (cleanPhone) {
-    if (isMobile) {
-      waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`;
-    } else {
-      waUrl = `https://web.whatsapp.com/send/?phone=${cleanPhone}&text=${encodedText}`;
-    }
+    return isMobile
+      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`
+      : `https://web.whatsapp.com/send/?phone=${cleanPhone}&text=${encodedText}`;
   } else {
-    waUrl = isMobile
+    return isMobile
       ? `https://api.whatsapp.com/send?text=${encodedText}`
       : `https://web.whatsapp.com/send/?text=${encodedText}`;
   }
-  return waUrl;
+}
+
+function openWhatsAppDirect(waUrl) {
+  if (!waUrl) return;
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  if (isMobile) {
+    try {
+      const a = document.createElement('a');
+      a.href = waUrl;
+      a.target = '_top';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        try { document.body.removeChild(a); } catch (e) {}
+      }, 1000);
+    } catch (err) {
+      window.location.href = waUrl;
+    }
+  } else {
+    const win = window.open(waUrl, '_blank', 'noopener,noreferrer');
+    if (!win || win.closed || typeof win.closed === 'undefined') {
+      window.location.href = waUrl;
+    }
+  }
+}
+
+function generateWhatsAppInvoiceMessage(details) {
+  const company = globalSettings.company || {};
+  const companyName = company.name || 'AARYAN AQUA NEEDS';
+  const companyPhone = company.phone || '7386262139';
+  const realUpiId = (globalSettings.upiId || globalSettings.bank?.upi || "7386262139@upi").trim();
+
+  const total = parseFloat(details.total || 0);
+  const status = details.paymentStatus || 'Paid';
+  const paid = parseFloat(details.paidAmount !== undefined ? details.paidAmount : (status === 'Paid' ? total : 0));
+  const balance = Math.max(0, total - paid);
+
+  let msg = `🏛️ *${companyName}*\n`;
+  msg += `-----------------------------------\n`;
+  msg += `📄 *Tax Invoice:* #${details.invoiceNo || 'INV'}\n`;
+  msg += `👤 *Customer:* ${details.buyer?.name || details.customerName || 'Customer'}\n`;
+  if (details.buyer?.phone) {
+    msg += `📱 *Phone:* ${details.buyer.phone}\n`;
+  }
+  msg += `📅 *Date:* ${details.invoiceDate || (typeof formatInputDateString === 'function' ? formatInputDateString(new Date()) : '')}\n`;
+  msg += `-----------------------------------\n`;
+
+  // Itemized List
+  const items = details.items || [];
+  if (items.length > 0) {
+    msg += `📦 *ITEMS ORDERED:*\n`;
+    items.forEach((item, index) => {
+      const name = item.description || item.name || `Item ${index + 1}`;
+      const qty = item.quantity !== undefined ? item.quantity : (item.qty || 1);
+      const unit = item.unit ? ` ${item.unit}` : '';
+      const rate = parseFloat(item.rate || item.price || 0);
+      const amt = parseFloat(item.amount || (qty * rate));
+      msg += `${index + 1}. *${name}*\n   ${qty}${unit} × ₹${formatCurrency(rate)} = *₹${formatCurrency(amt)}*\n`;
+    });
+    msg += `-----------------------------------\n`;
+  }
+
+  // Financial Breakdown
+  if (details.taxable && (details.cgst > 0 || details.sgst > 0 || details.igst > 0)) {
+    msg += `Subtotal: ₹${formatCurrency(details.taxable)}\n`;
+    if (details.cgst > 0) msg += `CGST: ₹${formatCurrency(details.cgst)}\n`;
+    if (details.sgst > 0) msg += `SGST: ₹${formatCurrency(details.sgst)}\n`;
+    if (details.igst > 0) msg += `IGST: ₹${formatCurrency(details.igst)}\n`;
+    if (details.roundOff) msg += `Round Off: ₹${formatCurrency(details.roundOff)}\n`;
+  }
+
+  msg += `💰 *Grand Total:* ₹ ${formatCurrency(total)}\n`;
+
+  if (balance <= 0 || status === 'Paid') {
+    msg += `✅ *Payment Status:* FULLY PAID (₹ ${formatCurrency(total)})\n`;
+    msg += `💳 *Payment Mode:* ${details.paymentMode || 'UPI / Cash'}\n`;
+    msg += `-----------------------------------\n`;
+    msg += `Thank you for your business! 🙏\n`;
+  } else {
+    msg += `✅ *Amount Paid:* ₹ ${formatCurrency(paid)}\n`;
+    msg += `🔴 *PENDING BALANCE:* ₹ ${formatCurrency(balance)}\n`;
+    msg += `-----------------------------------\n`;
+    msg += `📲 *Pay Balance via UPI:*\n`;
+    msg += `UPI ID: *${realUpiId}*\n`;
+    const cleanNote = `Bill${details.invoiceNo || '1'}`.replace(/[^a-zA-Z0-9]/g, '');
+    const upiName = encodeURIComponent(companyName.replace(/[^a-zA-Z0-9 ]/g, '').trim());
+    msg += `UPI Pay Link: upi://pay?pa=${realUpiId}&pn=${upiName}&am=${balance.toFixed(2)}&cu=INR&tn=${cleanNote}\n\n`;
+    msg += `Kindly clear the balance at your earliest convenience. Thank you! 🙏\n`;
+  }
+
+  const onlinePdfUrl = details.pdfUrl || details.googleDriveUrl || details.viewUrl;
+  if (onlinePdfUrl && onlinePdfUrl.startsWith('http') && !onlinePdfUrl.includes('localhost')) {
+    msg += `-----------------------------------\n`;
+    msg += `📄 *View / Download PDF Invoice:*\n${onlinePdfUrl}\n`;
+  }
+
+  msg += `-----------------------------------\n`;
+  msg += `📞 *Shop Contact:* +91 ${companyPhone}`;
+
+  return msg;
 }
 
 let pendingWaMsg = "";
@@ -4204,88 +4300,44 @@ async function autoDispatchInvoiceToWhatsApp(details, precomputedBase64 = null) 
   return false;
 }
 
-// Dual-Mode Native Share: Auto background bot when linked, instant 1-click WhatsApp fallback when offline
+// Dual-Mode Native Share: Auto background bot when linked on PC, instant unblocked 1-click WhatsApp on mobile & web
 window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click = false) {
-  if (!details || !details.invoiceNo || !details.buyer?.name || !details.items || details.items.length === 0) {
-    alert("Please fill invoice details and add items before sharing!");
+  if (!details || !details.invoiceNo) {
+    showFloatingToast("⚠️ Please add items to invoice before sharing!", "warning");
     return;
   }
 
   let rawPhone = getCustomerPhoneNumber(details);
-  if (!rawPhone || rawPhone.toString().replace(/\D/g, '').length < 10) {
-    const entered = prompt(`📱 Enter 10-digit WhatsApp mobile number for ${details.buyer?.name || 'Customer'}:`, rawPhone || "");
+  let cleanPhone = "";
+  if (rawPhone && rawPhone.toString().replace(/\D/g, '').length >= 10) {
+    cleanPhone = formatWhatsAppPhone(rawPhone);
+  } else {
+    // If not entered in billing form, prompt user for phone number
+    // But NEVER abort or error if empty/cancelled! Fallback to WhatsApp contact chooser!
+    const custName = details.buyer?.name || details.customerName || 'Customer';
+    const entered = prompt(`📱 Enter 10-digit WhatsApp number for ${custName}\n(Or press OK / Cancel to select contact directly inside WhatsApp):`, "");
     if (entered && entered.trim().replace(/\D/g, '').length >= 10) {
-      rawPhone = entered.trim();
-      if (details.buyer) details.buyer.phone = rawPhone;
-      savePhoneToPartyDb(details.buyer?.name, rawPhone);
-    } else {
-      alert("WhatsApp sharing requires a valid 10-digit mobile number to open the customer's chat directly.");
-      return;
+      cleanPhone = formatWhatsAppPhone(entered.trim());
+      if (details.buyer) details.buyer.phone = entered.trim();
+      savePhoneToPartyDb(custName, entered.trim());
     }
   }
-  const cleanPhone = formatWhatsAppPhone(rawPhone);
 
-  // Check live bot status before deciding dispatch route
-  try {
-    const liveStatusRes = await fetch('/api/whatsapp/status').then(r => r.json()).catch(() => null);
-    if (liveStatusRes) {
-      whatsappBotStatus = liveStatusRes;
-      updateWhatsAppBotPillUI(whatsappBotStatus);
-    }
-  } catch (e) {}
-
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   const isWebDirect = whatsappBotStatus && whatsappBotStatus.webDirect;
-  const useBackgroundBot = whatsappBotStatus && whatsappBotStatus.isReady && !isWebDirect && !force1Click;
+  const useBackgroundBot = !isMobile && whatsappBotStatus && whatsappBotStatus.isReady && !isWebDirect && !force1Click;
 
-  if (!useBackgroundBot && !force1Click && !isWebDirect) {
-    // Open QR Code Pairing Modal so user can link phone once for 100% automated sending
-    openWhatsAppBotModal();
-    showFloatingToast("📲 Scan this QR code once with WhatsApp to send PDFs automatically without manual downloading or dragging!", 6000);
-    return;
-  }
-
-  let waWin = null;
-  if (!useBackgroundBot) {
-    waWin = window.open("about:blank", "_blank");
-  }
+  const fullShareText = generateWhatsAppInvoiceMessage(details);
+  const customerClean = (details.buyer?.name || details.customerName || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
+  const filename = `Invoice_${details.invoiceNo}_${customerClean}.pdf`;
 
   let origHtml = "";
   if (btnEl && btnEl.tagName) {
     origHtml = btnEl.innerHTML;
   }
 
-  const customerClean = (details.buyer?.name || 'Customer').replace(/[^a-zA-Z0-9]/g, '_');
-  const filename = `Invoice_${details.invoiceNo}_${customerClean}.pdf`;
-
-  const total = parseFloat(details.total || 0);
-  const status = details.paymentStatus || 'Paid';
-  const paid = parseFloat(details.paidAmount !== undefined ? details.paidAmount : (status === 'Paid' ? total : 0));
-  const balance = Math.max(0, total - paid);
-  const realUpiId = globalSettings.upiId || globalSettings.bank?.upi || "7386262139@upi";
-
-  let text = `🏛️ *${globalSettings.company?.name || 'AARYAN AQUA NEEDS'}*\n`;
-  text += `-----------------------------------\n`;
-  text += `📄 *Tax Invoice #:* #${details.invoiceNo} (${details.invoiceType || 'Tax Invoice'})\n`;
-  text += `👤 *Customer:* ${details.buyer?.name || 'Customer'}\n`;
-  text += `📅 *Date:* ${details.invoiceDate || ''}\n`;
-  text += `💰 *Grand Total:* ₹ ${formatCurrency(total)}\n`;
-
-  if (balance <= 0 || status === 'Paid') {
-    text += `✅ *Payment Status:* FULLY PAID (₹ ${formatCurrency(total)})\n`;
-    text += `💳 *Payment Mode:* ${details.paymentMode || 'UPI / Cash'}\n`;
-    text += `-----------------------------------\n`;
-    text += `Thank you for your business! 🙏`;
-  } else {
-    text += `✅ *Amount Paid:* ₹ ${formatCurrency(paid)}\n`;
-    text += `🔴 *PENDING BALANCE DUE:* ₹ ${formatCurrency(balance)}\n`;
-    text += `-----------------------------------\n`;
-    text += `📲 *Pay Pending Balance via UPI:*\n`;
-    text += `UPI ID: *${realUpiId}*\n\n`;
-    text += `Kindly clear the pending balance at your earliest convenience. Thank you! 🙏`;
-  }
-
-  // --- ULTRA-FAST PATH: If Bot is active, dispatch existing disk PDF in sub-second without DOM rendering ---
-  if (useBackgroundBot) {
+  // --- DESKTOP ULTRA-FAST PATH: If Background Bot is active on local PC ---
+  if (useBackgroundBot && cleanPhone) {
     if (btnEl && btnEl.tagName) {
       btnEl.innerHTML = `<i class="fa-solid fa-paper-plane fa-spin"></i> Sending via Bot...`;
       btnEl.disabled = true;
@@ -4294,7 +4346,7 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
       const fastRes = await fetch('/api/whatsapp/send-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: cleanPhone, text, filename, fastPathOnly: true })
+        body: JSON.stringify({ phone: cleanPhone, text: fullShareText, filename, fastPathOnly: true })
       });
       const fastData = await fastRes.json();
       if (fastData && fastData.ok) {
@@ -4306,151 +4358,77 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
             btnEl.disabled = false;
           }, 2000);
         }
-        showFloatingToast(`✅ Invoice #${details.invoiceNo} & PDF delivered instantly to +${cleanPhone} via WhatsApp Bot!`);
+        showFloatingToast(`✅ Invoice #${details.invoiceNo} sent via WhatsApp Bot to +${cleanPhone}!`);
         return;
       }
     } catch (fastErr) {
-      console.warn("Fast path notice:", fastErr);
+      console.warn("Background bot fast path failed, falling back to 1-click WhatsApp:", fastErr);
     }
   }
+
+  // --- INSTANT 1-CLICK WHATSAPP DISPATCH (Mobile & Desktop Web) ---
+  const waUrl = launchWhatsAppWebOrApp(cleanPhone, fullShareText);
+  openWhatsAppDirect(waUrl);
 
   if (btnEl && btnEl.tagName) {
-    btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Preparing PDF...`;
-    btnEl.disabled = true;
-  }
-
-  populateA4PrintOverlay(details);
-  const element = document.getElementById("print-invoice-wrapper");
-  if (!element) {
-    if (waWin && !waWin.closed) waWin.close();
-    if (btnEl && btnEl.tagName) {
+    btnEl.innerHTML = `<i class="fa-solid fa-check text-success"></i> Opened!`;
+    setTimeout(() => {
       btnEl.innerHTML = origHtml;
       btnEl.disabled = false;
-    }
-    return;
+    }, 2000);
   }
 
-  element.style.display = "block";
-  document.body.classList.remove("printing-thermal");
+  showFloatingToast(cleanPhone ? `📲 Opening WhatsApp chat for +${cleanPhone}...` : `📲 Opening WhatsApp to choose customer contact...`, 4000);
 
-  const opt = {
-    margin: [3, 3, 3, 3],
-    filename: filename,
-    image: { type: 'jpeg', quality: 0.95 },
-    html2canvas: { scale: 1.35, useCORS: true, logging: false },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-  };
+  // Optional background non-blocking PDF download / upload to Google Drive
+  setTimeout(async () => {
+    try {
+      populateA4PrintOverlay(details);
+      const element = document.getElementById("print-invoice-wrapper");
+      if (!element || typeof html2pdf === 'undefined') return;
 
-  try {
-    const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
-    element.style.display = "none";
+      const opt = {
+        margin: [3, 3, 3, 3],
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: { scale: 1.2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
 
-    const reader = new FileReader();
-    const pdfBase64 = await new Promise((resolve) => {
-      reader.onloadend = () => resolve(reader.result);
-      reader.readAsDataURL(pdfBlob);
-    });
+      element.style.display = "block";
+      const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
+      element.style.display = "none";
 
-    if (useBackgroundBot) {
-      if (btnEl && btnEl.tagName) {
-        btnEl.innerHTML = `<i class="fa-solid fa-paper-plane fa-spin"></i> Sending via Bot...`;
-      }
-      const botRes = await fetch('/api/whatsapp/send-invoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: cleanPhone, text, filename, pdfBase64 })
-      });
-      const botData = await botRes.json();
-      if (botData && botData.ok) {
-        playSuccessChime();
-        if (btnEl && btnEl.tagName) {
-          btnEl.innerHTML = `<i class="fa-solid fa-check text-success"></i> Sent!`;
+      // On desktop, auto-download so merchant can drag into WhatsApp Web if desired
+      if (!isMobile) {
+        try {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(pdfBlob);
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
           setTimeout(() => {
-            btnEl.innerHTML = origHtml;
-            btnEl.disabled = false;
-          }, 2500);
-        }
-        showFloatingToast(`✅ Invoice #${details.invoiceNo} & PDF sent automatically to +${cleanPhone} via WhatsApp Bot!`);
-        return;
+            try { document.body.removeChild(a); } catch (e) {}
+          }, 500);
+        } catch (e) {}
       }
+
+      // Background upload to Google Drive if server API is reachable
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
+          await fetch("/api/invoices/upload-pdf", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ filename, invoiceNo: details.invoiceNo, id: details.id, pdfBase64: reader.result })
+          });
+        } catch (e) {}
+      };
+      reader.readAsDataURL(pdfBlob);
+    } catch (bgErr) {
+      console.warn("Background PDF generation note:", bgErr);
     }
-
-    // Try Native Web Share API with actual PDF File Document (Supported on Edge, Chrome, Windows & Android)
-    const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' });
-    if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
-      if (waWin && !waWin.closed) waWin.close();
-      try {
-        if (btnEl && btnEl.tagName) {
-          btnEl.innerHTML = origHtml;
-          btnEl.disabled = false;
-        }
-        await navigator.share({
-          files: [pdfFile],
-          title: `Invoice #${details.invoiceNo}`,
-          text: text
-        });
-        showFloatingToast(`✅ Invoice #${details.invoiceNo} PDF sent via WhatsApp!`);
-        return;
-      } catch (shareErr) {
-        if (shareErr.name === 'AbortError') return; // User closed share window
-        console.warn("Native file share fallback:", shareErr);
-      }
-    }
-
-    // 1-Click Fallback: Upload PDF to Google Drive backend (never include localhost in customer message)
-    let drivePdfUrl = "";
-    try {
-      const uploadRes = await fetch("/api/invoices/upload-pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename, invoiceNo: details.invoiceNo, id: details.id, pdfBase64 })
-      });
-      const uploadData = await uploadRes.json();
-      const pDriveUrl = uploadData ? (uploadData.googleDriveUrl || uploadData.pdfUrl || uploadData.viewUrl || uploadData.url) : "";
-      if (uploadData && uploadData.ok && pDriveUrl) {
-        drivePdfUrl = pDriveUrl;
-      }
-    } catch (e) {}
-
-    let fullShareText = text;
-    // Only include Google Drive link if available; NEVER include localhost
-    if (drivePdfUrl && drivePdfUrl.startsWith('https://drive.google.com')) {
-      fullShareText += `\n\n📄 *Official PDF Invoice (Google Drive):*\n${drivePdfUrl}`;
-    }
-
-    const waUrl = launchWhatsAppWebOrApp(cleanPhone, fullShareText);
-
-    // Auto-download the PDF file so user can immediately drag & drop into chat
-    try {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(pdfBlob);
-      a.download = filename;
-      a.click();
-    } catch(e) {}
-
-    if (btnEl && btnEl.tagName) {
-      btnEl.innerHTML = origHtml;
-      btnEl.disabled = false;
-    }
-
-    if (waWin && !waWin.closed) {
-      waWin.location.href = waUrl;
-    } else {
-      window.open(waUrl, '_blank');
-    }
-
-    // Suggest linking the Background Bot for 100% automated PDF attachment
-    showFloatingToast(`📎 PDF downloaded! Drag it into WhatsApp, or link the WhatsApp Bot in the top bar to send PDFs automatically!`, 6000);
-
-  } catch (err) {
-    console.error("PDF share generation error:", err);
-    if (waWin && !waWin.closed) waWin.close();
-    element.style.display = "none";
-    if (btnEl && btnEl.tagName) {
-      btnEl.innerHTML = origHtml;
-      btnEl.disabled = false;
-    }
-  }
+  }, 200);
 };
 
 window.openWhatsappWebChat = function() {
@@ -4469,12 +4447,12 @@ window.openWhatsappWebChat = function() {
 
   let url = "";
   if (cleanPhone) {
-    url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(pendingWaMsg)}`;
+    url = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(pendingWaMsg)}`;
   } else {
     url = `https://api.whatsapp.com/send?text=${encodeURIComponent(pendingWaMsg)}`;
   }
 
-  window.open(url, '_blank');
+  openWhatsAppDirect(url);
 };
 
 window.closeWhatsappGuideModal = function() {
@@ -4575,23 +4553,23 @@ window.sendWhatsAppPaymentReminder = async function(id, btnEl = null) {
   const balance = Math.max(0, total - paid);
 
   if (balance <= 0 && details.paymentStatus === 'Paid') {
-    alert(`Invoice #${inv.invoiceNo} is already fully paid! No balance reminder needed.`);
+    showFloatingToast(`Invoice #${inv.invoiceNo} is already fully paid! No balance reminder needed.`, "info");
     return;
   }
 
   let rawPhone = getCustomerPhoneNumber(details);
-  if (!rawPhone || rawPhone.toString().replace(/\D/g, '').length < 10) {
-    const entered = prompt(`📱 Enter 10-digit WhatsApp mobile number for ${details.buyer?.name || inv.customerName || 'Customer'}:`, rawPhone || "");
+  let cleanPhone = "";
+  if (rawPhone && rawPhone.toString().replace(/\D/g, '').length >= 10) {
+    cleanPhone = formatWhatsAppPhone(rawPhone);
+  } else {
+    const custName = details.buyer?.name || inv.customerName || 'Customer';
+    const entered = prompt(`📱 Enter 10-digit WhatsApp mobile number for ${custName}\n(Or press OK / Cancel to select contact in WhatsApp):`, rawPhone || "");
     if (entered && entered.trim().replace(/\D/g, '').length >= 10) {
-      rawPhone = entered.trim();
-      if (details.buyer) details.buyer.phone = rawPhone;
-      savePhoneToPartyDb(details.buyer?.name || inv.customerName, rawPhone);
-    } else {
-      alert("WhatsApp reminder requires a valid 10-digit mobile number.");
-      return;
+      cleanPhone = formatWhatsAppPhone(entered.trim());
+      if (details.buyer) details.buyer.phone = entered.trim();
+      savePhoneToPartyDb(custName, entered.trim());
     }
   }
-  const cleanPhone = formatWhatsAppPhone(rawPhone);
 
   const realUpiId = (globalSettings.upiId || globalSettings.bank?.upi || "7386262139@upi").trim();
   const companyName = globalSettings.company?.name || "AARYAN AQUA NEEDS";
@@ -4622,17 +4600,11 @@ window.sendWhatsAppPaymentReminder = async function(id, btnEl = null) {
     btnEl.disabled = true;
   }
 
-  // Check live bot status
-  try {
-    const liveStatusRes = await fetch('/api/whatsapp/status').then(r => r.json()).catch(() => null);
-    if (liveStatusRes) {
-      whatsappBotStatus = liveStatusRes;
-      updateWhatsAppBotPillUI(whatsappBotStatus);
-    }
-  } catch (e) {}
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const isWebDirect = whatsappBotStatus && whatsappBotStatus.webDirect;
+  const useBot = !isMobile && whatsappBotStatus && whatsappBotStatus.isReady && !isWebDirect;
 
-  const useBot = whatsappBotStatus && whatsappBotStatus.isReady && !whatsappBotStatus.webDirect;
-  if (useBot) {
+  if (useBot && cleanPhone) {
     try {
       const res = await fetch('/api/whatsapp/send-message', {
         method: 'POST',
@@ -4666,15 +4638,15 @@ window.sendWhatsAppPaymentReminder = async function(id, btnEl = null) {
   if (sec.whatsappProtectChats !== false && !isWhatsAppUnlocked()) {
     promptWhatsAppSecurity(() => {
       const waUrl = launchWhatsAppWebOrApp(cleanPhone, reminderText);
-      window.open(waUrl, "_blank");
-      showFloatingToast(`🔔 Opening WhatsApp to send payment reminder to +${cleanPhone}...`);
+      openWhatsAppDirect(waUrl);
+      showFloatingToast(cleanPhone ? `🔔 Opening WhatsApp reminder for +${cleanPhone}...` : `🔔 Opening WhatsApp to send payment reminder...`);
     });
     return;
   }
 
   const waUrl = launchWhatsAppWebOrApp(cleanPhone, reminderText);
-  window.open(waUrl, "_blank");
-  showFloatingToast(`🔔 Opening WhatsApp to send payment reminder to +${cleanPhone}...`);
+  openWhatsAppDirect(waUrl);
+  showFloatingToast(cleanPhone ? `🔔 Opening WhatsApp reminder for +${cleanPhone}...` : `🔔 Opening WhatsApp to send payment reminder...`);
 };
 
 window.shareInvoiceToWhatsApp = function(id, btnEl = null) {
@@ -5397,14 +5369,14 @@ window.sendPartyPaymentReminderWhatsApp = function(partyName, phone) {
     promptWhatsAppSecurity(() => {
       const cleanPhone = formatWhatsAppPhone(phone);
       const waUrl = launchWhatsAppWebOrApp(cleanPhone, text);
-      window.open(waUrl, '_blank');
+      openWhatsAppDirect(waUrl);
     });
     return;
   }
 
   const cleanPhone = formatWhatsAppPhone(phone);
   const waUrl = launchWhatsAppWebOrApp(cleanPhone, text);
-  window.open(waUrl, '_blank');
+  openWhatsAppDirect(waUrl);
 };
 
 function createPartyListCard(p) {
