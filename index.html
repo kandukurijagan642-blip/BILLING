@@ -39,7 +39,7 @@
     }
   </script>
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=98">
+  <link rel="stylesheet" href="index.css?v=99">
   <script src="invoice_utils_v5.js?v=95"></script>
 </head>
 <body>
@@ -1172,6 +1172,60 @@
                     <label for="set-login-password">Login Password</label>
                     <input type="password" id="set-login-password" required placeholder="e.g. 1234">
                   </div>
+
+                  <!-- Dedicated WhatsApp Security Controls -->
+                  <div class="col-12" style="border-top: 1px solid #e2e8f0; margin-top: 15px; padding-top: 15px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                      <h4 style="margin: 0; font-size: 13.5px; color: #075e54; display: flex; align-items: center; gap: 8px; font-weight: 700;">
+                        <i class="fa-brands fa-whatsapp" style="font-size: 17px; color: #25d366;"></i> WhatsApp Security &amp; Privacy Shield
+                      </h4>
+                      <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #075e54; cursor: pointer; margin: 0;">
+                        <input type="checkbox" id="set-wa-lock-enabled" checked style="width: 16px; height: 16px;">
+                        <span>Lock Active</span>
+                      </label>
+                    </div>
+                    <p style="margin: 0 0 12px 0; font-size: 11.5px; color: var(--text-muted); line-height: 1.4;">
+                      Restricts access so unauthorized staff cannot open WhatsApp bot settings, scan QR, unlink your account, or read customer chats &amp; dispatch logs.
+                    </p>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="set-wa-pin"><i class="fa-solid fa-key text-teal"></i> WhatsApp Security PIN (4 Digits)</label>
+                    <input type="password" id="set-wa-pin" maxlength="12" placeholder="e.g. 2024" value="2024">
+                    <span class="info-lbl">Master password also accepted as fallback</span>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="set-wa-autolock"><i class="fa-solid fa-hourglass-half text-teal"></i> Auto-Relock WhatsApp</label>
+                    <select id="set-wa-autolock">
+                      <option value="immediate">Immediately on Close</option>
+                      <option value="5">After 5 Minutes</option>
+                      <option value="15" selected>After 15 Minutes</option>
+                      <option value="60">After 1 Hour</option>
+                      <option value="screen">When Screen Locks</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group col-12" style="display: flex; flex-direction: column; gap: 8px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; margin-top: 4px;">
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; margin: 0;">
+                      <input type="checkbox" id="set-wa-mask-phones" checked>
+                      <span><strong>Mask Customer Numbers:</strong> Conceal middle digits in WhatsApp activity logs (e.g. 98••••1234)</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; margin: 0;">
+                      <input type="checkbox" id="set-wa-protect-chats" checked>
+                      <span><strong>Lock Manual WhatsApp Chats:</strong> Require PIN before launching external WhatsApp Web chat windows</span>
+                    </label>
+                  </div>
+
+                  <div class="col-12" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 8px 12px;">
+                    <span style="font-size: 11.5px; color: #065f46; font-weight: 600;">
+                      <i class="fa-solid fa-shield-halved text-teal"></i> Quick WhatsApp Session Lock:
+                    </span>
+                    <button type="button" class="btn btn-xs btn-rose" onclick="lockWhatsAppSession(true)" style="padding: 5px 12px; font-size: 11px; font-weight: 700;">
+                      <i class="fa-solid fa-lock"></i> Lock WhatsApp Now
+                    </button>
+                  </div>
+
                   <div class="form-group col-12 margin-top-20">
                     <button type="submit" class="btn btn-primary">Save Security Settings</button>
                   </div>
@@ -1796,6 +1850,71 @@
     </div>
   </div>
 
+  <!-- WHATSAPP SECURITY LOCK & PIN VERIFICATION MODAL -->
+  <div id="whatsapp-lock-modal" class="modal-overlay hidden" onclick="if(event.target === this) closeWhatsAppLockModal(event);" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); z-index: 2147483645; align-items: center; justify-content: center;">
+    <div class="modal-box wa-lock-card" style="max-width: 390px; width: 92%; border-radius: 20px; overflow: hidden; background: #ffffff; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 255, 255, 0.2);">
+      
+      <!-- HEADER -->
+      <div style="background: linear-gradient(135deg, #064e3b 0%, #075e54 100%); color: white; padding: 22px 20px 18px 20px; text-align: center; position: relative;">
+        <button type="button" onclick="closeWhatsAppLockModal(event)" aria-label="Close" style="position: absolute; right: 12px; top: 12px; width: 36px; height: 36px; border-radius: 50%; border: none; background: rgba(255,255,255,0.15); color: white; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+        <div style="width: 52px; height: 52px; margin: 0 auto 10px auto; background: rgba(255,255,255,0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+          <i class="fa-solid fa-shield-halved" style="color: #6ee7b7;"></i>
+        </div>
+        <h3 style="margin: 0 0 4px 0; color: #ffffff; font-size: 17px; font-weight: 800; letter-spacing: -0.2px;">WhatsApp Security Protection</h3>
+        <p style="margin: 0; font-size: 12px; color: rgba(255,255,255,0.85); line-height: 1.4;">
+          Restricted Area • Enter Admin PIN or Master Password to access WhatsApp controls and chats.
+        </p>
+      </div>
+
+      <!-- BODY -->
+      <div style="padding: 22px 20px;">
+        
+        <!-- ERROR BANNER -->
+        <div id="wa-lock-error" class="hidden" style="background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; border-radius: 8px; padding: 10px 14px; font-size: 12px; font-weight: 600; text-align: center; margin-bottom: 14px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+          <i class="fa-solid fa-circle-exclamation"></i>
+          <span id="wa-lock-error-text">Invalid Security PIN or Password!</span>
+        </div>
+
+        <!-- PIN INPUT BOX -->
+        <form onsubmit="submitWhatsAppUnlock(event)" autocomplete="off">
+          <div style="position: relative; margin-bottom: 16px;">
+            <input type="password" id="wa-lock-pin-input" maxlength="20" placeholder="••••" autocomplete="off" autofocus style="width: 100%; text-align: center; font-size: 26px; font-weight: 800; letter-spacing: 8px; padding: 12px 45px 12px 16px; border: 2px solid #cbd5e1; border-radius: 12px; background: #f8fafc; color: #0f172a; transition: all 0.2s ease;">
+            <button type="button" onclick="toggleWaLockPinVisibility()" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #64748b; font-size: 18px; cursor: pointer; padding: 6px;">
+              <i class="fa-solid fa-eye" id="wa-lock-eye-icon"></i>
+            </button>
+          </div>
+
+          <!-- NUMERIC TOUCH PIN PAD -->
+          <div class="wa-keypad-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px;">
+            <button type="button" class="wa-keypad-btn" onclick="appendWaKeypadDigit('1')">1</button>
+            <button type="button" class="wa-keypad-btn" onclick="appendWaKeypadDigit('2')">2</button>
+            <button type="button" class="wa-keypad-btn" onclick="appendWaKeypadDigit('3')">3</button>
+            <button type="button" class="wa-keypad-btn" onclick="appendWaKeypadDigit('4')">4</button>
+            <button type="button" class="wa-keypad-btn" onclick="appendWaKeypadDigit('5')">5</button>
+            <button type="button" class="wa-keypad-btn" onclick="appendWaKeypadDigit('6')">6</button>
+            <button type="button" class="wa-keypad-btn" onclick="appendWaKeypadDigit('7')">7</button>
+            <button type="button" class="wa-keypad-btn" onclick="appendWaKeypadDigit('8')">8</button>
+            <button type="button" class="wa-keypad-btn" onclick="appendWaKeypadDigit('9')">9</button>
+            <button type="button" class="wa-keypad-btn wa-keypad-action" onclick="clearWaKeypad()" style="color: #ef4444; font-size: 14px; font-weight: 700;">C</button>
+            <button type="button" class="wa-keypad-btn" onclick="appendWaKeypadDigit('0')">0</button>
+            <button type="button" class="wa-keypad-btn wa-keypad-action" onclick="backspaceWaKeypad()" style="font-size: 16px;"><i class="fa-solid fa-delete-left"></i></button>
+          </div>
+
+          <!-- ACTIONS -->
+          <div style="display: flex; gap: 10px;">
+            <button type="button" class="btn btn-secondary" onclick="closeWhatsAppLockModal(event)" style="flex: 1; padding: 12px; font-weight: 600; border-radius: 10px;">Cancel</button>
+            <button type="submit" class="btn btn-primary" style="flex: 2; padding: 12px; font-weight: 700; background: linear-gradient(135deg, #059669 0%, #10b981 100%); border: none; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+              <i class="fa-solid fa-unlock"></i> Unlock WhatsApp
+            </button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+  </div>
+
   <!-- WHATSAPP BOT & AUTOMATION MODAL -->
   <div id="whatsapp-bot-modal" class="modal-overlay hidden" onclick="if(event.target === this) closeWhatsAppBotModal(event);" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); align-items: center; justify-content: center;">
     <div class="modal-box" style="max-width: 520px; width: 92%; border-radius: 16px; overflow: hidden; background: #ffffff; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);">
@@ -1809,9 +1928,14 @@
             <span style="font-size: 11.5px; color: rgba(255,255,255,0.85);">100% Free Background Bot &amp; Instant Share</span>
           </div>
         </div>
-        <button type="button" class="modal-close-btn" onclick="closeWhatsAppBotModal(event)" aria-label="Close WhatsApp Modal" style="color: white; background: rgba(255,255,255,0.22); border: none; font-size: 20px; cursor: pointer; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; touch-action: manipulation; -webkit-tap-highlight-color: transparent; flex-shrink: 0;">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button type="button" class="btn btn-xs" onclick="lockWhatsAppSession(true)" title="Lock WhatsApp immediately" style="background: rgba(255,255,255,0.22); border: 1px solid rgba(255,255,255,0.4); color: white; padding: 6px 12px; border-radius: 20px; font-weight: 600; font-size: 11.5px; display: flex; align-items: center; gap: 6px; cursor: pointer; touch-action: manipulation;">
+            <i class="fa-solid fa-lock"></i> <span>Lock</span>
+          </button>
+          <button type="button" class="modal-close-btn" onclick="closeWhatsAppBotModal(event)" aria-label="Close WhatsApp Modal" style="color: white; background: rgba(255,255,255,0.22); border: none; font-size: 20px; cursor: pointer; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; touch-action: manipulation; -webkit-tap-highlight-color: transparent; flex-shrink: 0;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
       </div>
       
       <div class="modal-body" style="padding: 20px; max-height: 75vh; overflow-y: auto;">
@@ -1964,6 +2088,6 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=124"></script>
+  <script src="index_v5.js?v=125"></script>
 </body>
 </html>

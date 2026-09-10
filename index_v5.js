@@ -129,6 +129,11 @@ const elements = {
   setAutolockTimer: document.getElementById('set-autolock-timer'),
   setLoginUsername: document.getElementById('set-login-username'),
   setLoginPassword: document.getElementById('set-login-password'),
+  setWaLockEnabled: document.getElementById('set-wa-lock-enabled'),
+  setWaPin: document.getElementById('set-wa-pin'),
+  setWaAutolock: document.getElementById('set-wa-autolock'),
+  setWaMaskPhones: document.getElementById('set-wa-mask-phones'),
+  setWaProtectChats: document.getElementById('set-wa-protect-chats'),
 
   setCName: document.getElementById('set-c-name'),
   setCTagline: document.getElementById('set-c-tagline'),
@@ -1142,6 +1147,15 @@ function loadAllDatabases() {
   }
   if (!globalSettings.security.password || globalSettings.security.password === "1234" || globalSettings.security.pin === "1234") {
     globalSettings.security.password = "Aaryan@2024";
+  }
+  if (globalSettings.security.whatsappLockEnabled === undefined) {
+    globalSettings.security.whatsappLockEnabled = true;
+  }
+  if (!globalSettings.security.whatsappPin) {
+    globalSettings.security.whatsappPin = "2024";
+  }
+  if (!globalSettings.security.whatsappAutoLockMinutes) {
+    globalSettings.security.whatsappAutoLockMinutes = "15";
   }
 
   // Enforce address updates (GUNTURU -> GUNTUR)
@@ -3296,6 +3310,26 @@ window.switchWhatsAppPairTab = function(tab) {
 window.loadWhatsAppActivityLogs = async function() {
   const container = document.getElementById("wa-activity-logs-container");
   if (!container) return;
+
+  const sec = globalSettings?.security || {};
+  if (!isWhatsAppUnlocked()) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 24px 14px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px;">
+        <div style="width: 42px; height: 42px; background: #ecfdf5; color: #059669; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px auto; font-size: 18px;">
+          <i class="fa-solid fa-lock"></i>
+        </div>
+        <h4 style="margin: 0 0 6px 0; font-size: 13px; color: #0f172a; font-weight: 700;">Customer WhatsApp Chats &amp; History Protected</h4>
+        <p style="margin: 0 0 12px 0; font-size: 11.5px; color: #64748b; line-height: 1.4;">
+          Enter Admin Security PIN or Master Password to view customer dispatch history, recipient numbers, and delivery timestamps.
+        </p>
+        <button type="button" class="btn btn-sm btn-primary" onclick="promptWhatsAppSecurity(loadWhatsAppActivityLogs)" style="background: #075e54; border-color: #075e54; font-weight: 600; padding: 6px 14px;">
+          <i class="fa-solid fa-unlock"></i> Unlock Activity History
+        </button>
+      </div>
+    `;
+    return;
+  }
+
   try {
     const res = await fetch('/api/whatsapp/activity');
     const data = await res.json();
@@ -3310,6 +3344,7 @@ window.loadWhatsAppActivityLogs = async function() {
       return;
     }
 
+    const maskPhones = sec.whatsappMaskPhones !== false;
     let html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
     logs.forEach(log => {
       const isPdf = log.type === 'INVOICE_PDF';
@@ -3320,7 +3355,16 @@ window.loadWhatsAppActivityLogs = async function() {
       const badgeIcon = isPdf ? 'fa-file-pdf' : 'fa-comment-dots';
       const badgeText = isPdf ? 'PDF Invoice' : 'Text Reminder';
       const detail = log.filename || log.preview || 'Delivered message';
-      const phoneClean = log.phone ? `+${log.phone}` : 'Customer';
+      
+      let phoneClean = 'Customer';
+      if (log.phone) {
+        const rawDigits = log.phone.toString().replace(/\D/g, '');
+        if (maskPhones && rawDigits.length >= 10) {
+          phoneClean = `+91 ${rawDigits.slice(0, 2)}•••••${rawDigits.slice(-3)}`;
+        } else {
+          phoneClean = `+${rawDigits}`;
+        }
+      }
 
       html += `
         <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; font-size: 11.5px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
@@ -3348,6 +3392,10 @@ window.loadWhatsAppActivityLogs = async function() {
 };
 
 window.requestWhatsAppPairCode = async function() {
+  if (!isWhatsAppUnlocked()) {
+    promptWhatsAppSecurity(window.requestWhatsAppPairCode);
+    return;
+  }
   const phoneInput = document.getElementById("wa-pair-phone-input");
   const codeBox = document.getElementById("wa-code-display-box");
   const codeText = document.getElementById("wa-code-text");
@@ -3381,7 +3429,191 @@ window.requestWhatsAppPairCode = async function() {
   }
 };
 
+// --- WHATSAPP SECURITY & PRIVACY CONTROLLER ---
+let isWhatsAppSessionUnlocked = false;
+let whatsappUnlockExpiry = 0;
+let pendingWhatsAppCallback = null;
+
+window.isWhatsAppUnlocked = function() {
+  const sec = globalSettings?.security || {};
+  if (sec.whatsappLockEnabled === false) return true; // Security lock disabled by admin
+  if (!isWhatsAppSessionUnlocked) return false;
+  if (whatsappUnlockExpiry && Date.now() > whatsappUnlockExpiry) {
+    isWhatsAppSessionUnlocked = false;
+    whatsappUnlockExpiry = 0;
+    return false;
+  }
+  return true;
+};
+
+window.promptWhatsAppSecurity = function(onSuccessCallback = null) {
+  const sec = globalSettings?.security || {};
+  if (sec.whatsappLockEnabled === false || isWhatsAppUnlocked()) {
+    if (typeof onSuccessCallback === 'function') onSuccessCallback();
+    return;
+  }
+
+  pendingWhatsAppCallback = onSuccessCallback;
+  const lockModal = document.getElementById("whatsapp-lock-modal");
+  const pinInput = document.getElementById("wa-lock-pin-input");
+  const errBlock = document.getElementById("wa-lock-error");
+
+  if (errBlock) errBlock.classList.add("hidden");
+  if (pinInput) {
+    pinInput.value = "";
+    pinInput.type = "password";
+  }
+  const eyeIcon = document.getElementById("wa-lock-eye-icon");
+  if (eyeIcon) eyeIcon.className = "fa-solid fa-eye";
+
+  if (lockModal) {
+    lockModal.classList.remove("hidden");
+    lockModal.style.setProperty("display", "flex", "important");
+    lockModal.style.setProperty("visibility", "visible", "important");
+    lockModal.style.setProperty("opacity", "1", "important");
+    lockModal.style.setProperty("pointer-events", "auto", "important");
+    lockModal.style.setProperty("z-index", "2147483645", "important");
+  }
+
+  setTimeout(() => {
+    if (pinInput) pinInput.focus();
+  }, 100);
+};
+
+window.closeWhatsAppLockModal = function(e) {
+  if (e && e.stopPropagation) e.stopPropagation();
+  const lockModal = document.getElementById("whatsapp-lock-modal");
+  if (lockModal) {
+    lockModal.classList.add("hidden");
+    lockModal.style.setProperty("display", "none", "important");
+    lockModal.style.setProperty("visibility", "hidden", "important");
+    lockModal.style.setProperty("opacity", "0", "important");
+    lockModal.style.setProperty("pointer-events", "none", "important");
+  }
+  pendingWhatsAppCallback = null;
+};
+
+window.appendWaKeypadDigit = function(digit) {
+  const pinInput = document.getElementById("wa-lock-pin-input");
+  if (!pinInput) return;
+  if (pinInput.value.length < 16) {
+    pinInput.value += digit;
+  }
+  const errBlock = document.getElementById("wa-lock-error");
+  if (errBlock) errBlock.classList.add("hidden");
+};
+
+window.clearWaKeypad = function() {
+  const pinInput = document.getElementById("wa-lock-pin-input");
+  if (pinInput) pinInput.value = "";
+  const errBlock = document.getElementById("wa-lock-error");
+  if (errBlock) errBlock.classList.add("hidden");
+};
+
+window.backspaceWaKeypad = function() {
+  const pinInput = document.getElementById("wa-lock-pin-input");
+  if (pinInput && pinInput.value.length > 0) {
+    pinInput.value = pinInput.value.slice(0, -1);
+  }
+  const errBlock = document.getElementById("wa-lock-error");
+  if (errBlock) errBlock.classList.add("hidden");
+};
+
+window.toggleWaLockPinVisibility = function() {
+  const pinInput = document.getElementById("wa-lock-pin-input");
+  const eyeIcon = document.getElementById("wa-lock-eye-icon");
+  if (!pinInput) return;
+  if (pinInput.type === "password") {
+    pinInput.type = "text";
+    if (eyeIcon) eyeIcon.className = "fa-solid fa-eye-slash";
+  } else {
+    pinInput.type = "password";
+    if (eyeIcon) eyeIcon.className = "fa-solid fa-eye";
+  }
+};
+
+window.submitWhatsAppUnlock = function(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const pinInput = document.getElementById("wa-lock-pin-input");
+  const errBlock = document.getElementById("wa-lock-error");
+  const errText = document.getElementById("wa-lock-error-text");
+  const card = document.querySelector("#whatsapp-lock-modal .wa-lock-card");
+
+  const entered = (pinInput ? pinInput.value : "").trim();
+  const sec = globalSettings?.security || {};
+  const targetPin = (sec.whatsappPin || "2024").toString().trim();
+  const masterPassword = (sec.password || activePassword || "Aaryan@2024").toString().trim();
+
+  if (!entered) {
+    if (errText) errText.textContent = "Please enter Security PIN or Password!";
+    if (errBlock) errBlock.classList.remove("hidden");
+    return;
+  }
+
+  // Validate entered credentials against target PIN or master login password
+  if (entered === targetPin || entered === masterPassword) {
+    isWhatsAppSessionUnlocked = true;
+    const autolockVal = sec.whatsappAutoLockMinutes || "15";
+    if (autolockVal !== "immediate" && autolockVal !== "screen" && !isNaN(parseInt(autolockVal))) {
+      whatsappUnlockExpiry = Date.now() + (parseInt(autolockVal) * 60 * 1000);
+    } else {
+      whatsappUnlockExpiry = 0;
+    }
+
+    closeWhatsAppLockModal();
+    if (typeof showFloatingToast === 'function') {
+      showFloatingToast("🔓 WhatsApp unlocked successfully!", 3000);
+    }
+
+    const callback = pendingWhatsAppCallback;
+    pendingWhatsAppCallback = null;
+    if (typeof callback === 'function') {
+      callback();
+    } else {
+      _openWhatsAppBotModalActual();
+    }
+  } else {
+    if (errText) errText.textContent = "Incorrect PIN or Password! Access denied.";
+    if (errBlock) errBlock.classList.remove("hidden");
+    if (card) {
+      card.classList.remove("wa-lock-shake");
+      void card.offsetWidth;
+      card.classList.add("wa-lock-shake");
+    }
+    if (pinInput) {
+      pinInput.value = "";
+      pinInput.focus();
+    }
+  }
+};
+
+window.lockWhatsAppSession = function(showToast = true) {
+  isWhatsAppSessionUnlocked = false;
+  whatsappUnlockExpiry = 0;
+  closeWhatsAppBotModal();
+  if (showToast) {
+    if (typeof showFloatingToast === 'function') {
+      showFloatingToast("🔒 WhatsApp session locked securely.", 3000);
+    } else {
+      alert("WhatsApp session locked securely.");
+    }
+  }
+  const statusInd = document.getElementById("wa-lock-status-indicator");
+  if (statusInd) {
+    statusInd.textContent = "Locked";
+    statusInd.style.color = "#dc2626";
+  }
+};
+
 window.openWhatsAppBotModal = function() {
+  if (!isWhatsAppUnlocked()) {
+    promptWhatsAppSecurity(() => _openWhatsAppBotModalActual());
+    return;
+  }
+  _openWhatsAppBotModalActual();
+};
+
+function _openWhatsAppBotModalActual() {
   const modal = document.getElementById("whatsapp-bot-modal");
   if (modal) {
     modal.classList.remove("hidden");
@@ -3404,7 +3636,7 @@ window.openWhatsAppBotModal = function() {
   whatsappPollInterval = setInterval(fetchWhatsAppBotStatus, 2000);
 
   initiateWhatsAppConnect();
-};
+}
 
 window.closeWhatsAppBotModal = function(e) {
   if (e && e.stopPropagation) e.stopPropagation();
@@ -3419,6 +3651,12 @@ window.closeWhatsAppBotModal = function(e) {
   if (whatsappPollInterval) {
     clearInterval(whatsappPollInterval);
     whatsappPollInterval = null;
+  }
+
+  const sec = globalSettings?.security || {};
+  if (sec.whatsappAutoLockMinutes === "immediate") {
+    isWhatsAppSessionUnlocked = false;
+    whatsappUnlockExpiry = 0;
   }
 };
 
@@ -3446,11 +3684,18 @@ window.initiateWhatsAppConnect = async function(forceClean = false) {
 };
 
 window.disconnectWhatsAppBot = async function() {
-  if (!confirm("Are you sure you want to disconnect/unlink this WhatsApp device?")) return;
+  if (!isWhatsAppUnlocked()) {
+    promptWhatsAppSecurity(window.disconnectWhatsAppBot);
+    return;
+  }
+  if (!confirm("⚠️ Are you sure you want to disconnect/unlink this WhatsApp device?")) return;
   try {
     const res = await fetch('/api/whatsapp/disconnect', { method: 'POST' });
     const data = await res.json();
     fetchWhatsAppBotStatus();
+    if (typeof showFloatingToast === 'function') {
+      showFloatingToast("WhatsApp device disconnected successfully.", 3000);
+    }
   } catch (e) {
     console.error("Disconnect error:", e);
   }
@@ -3930,6 +4175,12 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
 };
 
 window.openWhatsappWebChat = function() {
+  const sec = globalSettings?.security || {};
+  if (sec.whatsappProtectChats !== false && !isWhatsAppUnlocked()) {
+    promptWhatsAppSecurity(window.openWhatsappWebChat);
+    return;
+  }
+
   const modalEl = document.getElementById("whatsapp-pdf-guide-modal");
   if (modalEl) modalEl.classList.add("hidden");
 
@@ -4135,6 +4386,16 @@ window.sendWhatsAppPaymentReminder = async function(id, btnEl = null) {
     btnEl.innerHTML = origHtml;
     btnEl.disabled = false;
   }
+  const sec = globalSettings?.security || {};
+  if (sec.whatsappProtectChats !== false && !isWhatsAppUnlocked()) {
+    promptWhatsAppSecurity(() => {
+      const waUrl = launchWhatsAppWebOrApp(cleanPhone, reminderText);
+      window.open(waUrl, "_blank");
+      showFloatingToast(`🔔 Opening WhatsApp to send payment reminder to +${cleanPhone}...`);
+    });
+    return;
+  }
+
   const waUrl = launchWhatsAppWebOrApp(cleanPhone, reminderText);
   window.open(waUrl, "_blank");
   showFloatingToast(`🔔 Opening WhatsApp to send payment reminder to +${cleanPhone}...`);
@@ -4853,6 +5114,16 @@ window.sendPartyPaymentReminderWhatsApp = function(partyName, phone) {
   text += `-----------------------------------\n`;
   text += `Kindly clear the outstanding balance at your earliest convenience. Thank you for your continued business! 🙏`;
 
+  const sec = globalSettings?.security || {};
+  if (sec.whatsappProtectChats !== false && !isWhatsAppUnlocked()) {
+    promptWhatsAppSecurity(() => {
+      const cleanPhone = formatWhatsAppPhone(phone);
+      const waUrl = launchWhatsAppWebOrApp(cleanPhone, text);
+      window.open(waUrl, '_blank');
+    });
+    return;
+  }
+
   const cleanPhone = formatWhatsAppPhone(phone);
   const waUrl = launchWhatsAppWebOrApp(cleanPhone, text);
   window.open(waUrl, '_blank');
@@ -5215,6 +5486,12 @@ function loadSettingsFields() {
   elements.setLoginUsername.value = globalSettings.security?.username || "Aaryanaqua";
   elements.setLoginPassword.value = globalSettings.security?.password || globalSettings.security?.pin || "Aaryan@2024";
 
+  if (elements.setWaLockEnabled) elements.setWaLockEnabled.checked = globalSettings.security?.whatsappLockEnabled !== false;
+  if (elements.setWaPin) elements.setWaPin.value = globalSettings.security?.whatsappPin || "2024";
+  if (elements.setWaAutolock) elements.setWaAutolock.value = globalSettings.security?.whatsappAutoLockMinutes || "15";
+  if (elements.setWaMaskPhones) elements.setWaMaskPhones.checked = globalSettings.security?.whatsappMaskPhones !== false;
+  if (elements.setWaProtectChats) elements.setWaProtectChats.checked = globalSettings.security?.whatsappProtectChats !== false;
+
   elements.setCName.value = globalSettings.company?.name || "";
   elements.setCTagline.value = globalSettings.company?.tagline || "";
   elements.setCAddress.value = globalSettings.company?.address || "";
@@ -5315,10 +5592,27 @@ window.saveSecuritySettings = function(e) {
     return;
   }
 
-  globalSettings.security = { autolock, username, password };
+  const waLockEnabled = elements.setWaLockEnabled ? elements.setWaLockEnabled.checked : true;
+  const waPin = elements.setWaPin ? elements.setWaPin.value.trim() : (globalSettings.security?.whatsappPin || "2024");
+  const waAutoLock = elements.setWaAutolock ? elements.setWaAutolock.value : "15";
+  const waMaskPhones = elements.setWaMaskPhones ? elements.setWaMaskPhones.checked : true;
+  const waProtectChats = elements.setWaProtectChats ? elements.setWaProtectChats.checked : true;
+
+  globalSettings.security = {
+    ...(globalSettings.security || {}),
+    autolock,
+    username,
+    password,
+    whatsappLockEnabled: waLockEnabled,
+    whatsappPin: waPin || "2024",
+    whatsappAutoLockMinutes: waAutoLock,
+    whatsappMaskPhones: waMaskPhones,
+    whatsappProtectChats: waProtectChats
+  };
+
   localStorage.setItem("settings", JSON.stringify(globalSettings));
   syncDatabaseToServer("settings", globalSettings);
-  alert("Login credentials and lock settings saved successfully!");
+  alert("Login credentials and WhatsApp security settings saved successfully!");
   loadAllDatabases();
   resetAutolockTimer();
 };
@@ -5418,6 +5712,9 @@ window.triggerManualLock = function() {
 
 function triggerLockOverlay() {
   isLocked = true;
+  if (typeof lockWhatsAppSession === 'function') {
+    lockWhatsAppSession(false);
+  }
   localStorage.setItem("app_locked", "true");
   document.getElementById("login-form").reset();
   document.getElementById("login-error-message").classList.add("hidden");
