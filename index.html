@@ -1508,7 +1508,7 @@
               <circle cx="70" cy="60" r="1.5" fill="#004b73" opacity="0.5"/>
             </svg>
             <div class="title-area">
-              <h1 class="company-name-text">AARYAN AQUA NEEDS</h1>
+              <h1 class="company-name-text" id="p-print-company-name">AARYAN AQUA NEEDS</h1>
               <span class="company-tagline-text" id="p-print-company-tagline">QUALITY PRODUCTS FOR BETTER AQUACULTURE</span>
             </div>
           </div>
@@ -1802,9 +1802,6 @@
       
       <!-- Hidden elements to prevent JS crashes on unsaved features -->
       <div style="display: none;">
-        <div id="p-print-company-name"></div>
-        <div id="p-print-company-state"></div>
-        <div id="p-print-company-state-code"></div>
         <div id="p-print-divine-motto"></div>
         <img id="p-print-divine-img" src="" alt="">
         <img id="p-print-divine-img-right" src="" alt="">
@@ -2160,7 +2157,7 @@
   </div>
 
   <!-- DATABASE TURBO TELEMETRY MODAL -->
-  <div id="database-telemetry-modal" class="modal-overlay hidden" onclick="closeDatabaseTelemetryModal(event)" style="display: none; align-items: center; justify-content: center; z-index: 99999;">
+  <div id="database-telemetry-modal" class="modal-overlay hidden" onclick="closeDatabaseTelemetryModal(event)" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 2147483640;">
     <div class="modal-card" style="max-width: 540px; width: 92%; background: #ffffff; border-radius: 14px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); border: 1px solid #e2e8f0; overflow: hidden; animation: popIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);">
       <div class="modal-header" style="background: linear-gradient(135deg, #0a4b5c, #06b6d4); color: #ffffff; padding: 18px 22px; display: flex; justify-content: space-between; align-items: center;">
         <div style="display: flex; align-items: center; gap: 10px;">
@@ -2232,6 +2229,6 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=139"></script>
+  <script src="index_v5.js?v=140"></script>
 </body>
 </html>

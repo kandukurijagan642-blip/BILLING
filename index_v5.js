@@ -178,7 +178,7 @@ const GOOGLE_SCRIPT_FALLBACK_URL = "https://script.google.com/macros/s/AKfycbwke
 // --- INTER-TAB REAL-TIME SYNCHRONIZATION VIA BROADCAST-CHANNEL (0.05ms) ---
 let interTabChannel = null;
 try {
-  if ('BroadcastChannel' in window) {
+  if (typeof BroadcastChannel !== 'undefined') {
     interTabChannel = new BroadcastChannel('aaryan_aqua_db_channel');
     interTabChannel.onmessage = (event) => {
       const msg = event.data;
@@ -604,7 +604,10 @@ window.openDatabaseTelemetryModal = async function() {
   const modal = document.getElementById("database-telemetry-modal");
   if (!modal) return;
   modal.classList.remove("hidden");
-  modal.style.display = "flex";
+  modal.style.setProperty("display", "flex", "important");
+  modal.style.setProperty("visibility", "visible", "important");
+  modal.style.setProperty("opacity", "1", "important");
+  modal.style.setProperty("pointer-events", "auto", "important");
 
   const pingValEl = document.getElementById("telemetry-ping-ms");
   const ramCountEl = document.getElementById("telemetry-ram-count");
@@ -652,7 +655,10 @@ window.closeDatabaseTelemetryModal = function(e) {
   const modal = document.getElementById("database-telemetry-modal");
   if (modal) {
     modal.classList.add("hidden");
-    modal.style.display = "none";
+    modal.style.setProperty("display", "none", "important");
+    modal.style.setProperty("visibility", "hidden", "important");
+    modal.style.setProperty("opacity", "0", "important");
+    modal.style.setProperty("pointer-events", "none", "important");
   }
 };
 
@@ -4704,6 +4710,8 @@ async function autoDispatchInvoiceToWhatsApp(details, precomputedBase64 = null) 
   }
   return false;
 }
+window.autoDispatchInvoiceToWhatsApp = autoDispatchInvoiceToWhatsApp;
+window.triggerAutomatedWhatsAppDispatch = autoDispatchInvoiceToWhatsApp;
 
 // Dual-Mode Native Share: Auto background bot when linked on PC, instant unblocked 1-click WhatsApp on manual trigger
 window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click = false) {
