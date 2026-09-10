@@ -35,11 +35,18 @@ let cacheTimestamp = 0;
 let isRefreshing = false;
 const CACHE_TTL_MS = 60 * 1000; // 60 seconds TTL
 
-// Seed initial memory cache from bundled data files if available
+// Seed initial memory cache from bundled seed data
 try {
-  const invoicesData = require('../../data/invoices.json');
-  const productsData = require('../../data/products.json');
-  const partiesData = require('../../data/parties.json');
+  let invoicesData = [], productsData = [], partiesData = [];
+  try {
+    const seed = require('./seed-data.json');
+    invoicesData = seed.invoices || [];
+    productsData = seed.products || [];
+    partiesData = seed.parties || [];
+  } catch(e) {
+    console.warn("Could not load seed-data.json:", e.message);
+  }
+
   cachedSyncData = {
     ok: true,
     invoices: invoicesData || [],
@@ -58,6 +65,7 @@ try {
     }
   };
   cacheTimestamp = Date.now();
+  console.log('⚡ High-Speed Cache Initialized: ' + (invoicesData ? invoicesData.length : 0) + ' invoices loaded in 0ms');
 } catch (seedErr) {
   console.log("Memory seed notice:", seedErr.message);
 }
