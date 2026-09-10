@@ -39,7 +39,7 @@
     }
   </script>
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=97">
+  <link rel="stylesheet" href="index.css?v=98">
   <script src="invoice_utils_v5.js?v=95"></script>
 </head>
 <body>
@@ -1220,11 +1220,11 @@
 
 
   <!-- PRODUCT EDIT POPUP MODAL -->
-  <div id="product-modal" class="modal-overlay hidden no-print">
+  <div id="product-modal" class="modal-overlay hidden no-print" onclick="if(event.target === this) closeProductModal();">
     <div class="modal-box">
       <div class="modal-header">
         <h3 id="product-modal-title">Add New Product</h3>
-        <button class="modal-close" onclick="closeProductModal()"><i class="fa-solid fa-xmark"></i></button>
+        <button type="button" class="modal-close" onclick="closeProductModal()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <form id="modal-product-form" onsubmit="saveProductModal(event)" class="form-grid">
         <input type="hidden" id="modal-prod-id">
@@ -1278,11 +1278,11 @@
   </div>
 
   <!-- PARTY EDIT POPUP MODAL -->
-  <div id="party-modal" class="modal-overlay hidden no-print">
+  <div id="party-modal" class="modal-overlay hidden no-print" onclick="if(event.target === this) closePartyModal();">
     <div class="modal-box">
       <div class="modal-header">
         <h3 id="party-modal-title">Add Party Profile</h3>
-        <button class="modal-close" onclick="closePartyModal()"><i class="fa-solid fa-xmark"></i></button>
+        <button type="button" class="modal-close" onclick="closePartyModal()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <form id="modal-party-form" onsubmit="savePartyModal(event)" class="form-grid">
         <input type="hidden" id="modal-party-id">
@@ -1330,11 +1330,11 @@
   </div>
 
   <!-- WHATSAPP DESKTOP PDF GUIDE MODAL -->
-  <div id="whatsapp-pdf-guide-modal" class="modal-overlay hidden no-print">
+  <div id="whatsapp-pdf-guide-modal" class="modal-overlay hidden no-print" onclick="if(event.target === this) closeWhatsappGuideModal();">
     <div class="modal-box" style="max-width: 480px;">
       <div class="modal-header">
         <h3 style="display: flex; align-items: center; gap: 8px; color: #25d366;"><i class="fa-brands fa-whatsapp"></i> Attach PDF Document</h3>
-        <button class="modal-close" onclick="closeWhatsappGuideModal()"><i class="fa-solid fa-xmark"></i></button>
+        <button type="button" class="modal-close" onclick="closeWhatsappGuideModal()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="modal-body" style="padding: 15px; color: var(--editor-text); font-size: 13px; line-height: 1.5;">
         <div style="background: rgba(37, 211, 102, 0.15); border: 1px solid rgba(37, 211, 102, 0.35); padding: 10px 14px; border-radius: 8px; margin-bottom: 15px; color: #25d366; font-weight: 600;">
@@ -1747,11 +1747,11 @@
   </div>
 
   <!-- BALANCE UPI QR MODAL -->
-  <div id="balance-qr-modal" class="modal-overlay hidden">
+  <div id="balance-qr-modal" class="modal-overlay hidden" onclick="if(event.target === this) closeBalanceQrModal();">
     <div class="modal-box text-center" style="max-width: 380px; background: #ffffff;">
       <div class="modal-header" style="justify-content: center; position: relative;">
         <h3 style="margin: 0; color: #0a4b5c; font-size: 16px;"><i class="fa-solid fa-qrcode text-teal"></i> Balance Payment QR</h3>
-        <button class="modal-close-btn" onclick="closeBalanceQrModal()" style="position: absolute; right: 12px; top: 12px;">&times;</button>
+        <button type="button" class="modal-close-btn" onclick="closeBalanceQrModal()" aria-label="Close" style="position: absolute; right: 12px; top: 12px; min-width: 36px; min-height: 36px; display: flex; align-items: center; justify-content: center; border: none; background: #f1f5f9; border-radius: 50%; cursor: pointer;"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="modal-body padding-20">
         <div style="background: #f8fafc; border-radius: 8px; padding: 12px; margin-bottom: 14px; font-size: 12.5px; text-align: left; border: 1px solid #e2e8f0;">
@@ -1797,7 +1797,7 @@
   </div>
 
   <!-- WHATSAPP BOT & AUTOMATION MODAL -->
-  <div id="whatsapp-bot-modal" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 999999; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center;">
+  <div id="whatsapp-bot-modal" class="modal-overlay hidden" onclick="if(event.target === this) closeWhatsAppBotModal(event);" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); align-items: center; justify-content: center;">
     <div class="modal-box" style="max-width: 520px; width: 92%; border-radius: 16px; overflow: hidden; background: #ffffff; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);">
       <div class="modal-header" style="background: linear-gradient(135deg, #075e54 0%, #128c7e 100%); color: white; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
         <div style="display: flex; align-items: center; gap: 12px;">
@@ -1809,7 +1809,9 @@
             <span style="font-size: 11.5px; color: rgba(255,255,255,0.85);">100% Free Background Bot &amp; Instant Share</span>
           </div>
         </div>
-        <button class="modal-close-btn" onclick="closeWhatsAppBotModal()" style="color: white; background: none; border: none; font-size: 26px; cursor: pointer;">&times;</button>
+        <button type="button" class="modal-close-btn" onclick="closeWhatsAppBotModal(event)" aria-label="Close WhatsApp Modal" style="color: white; background: rgba(255,255,255,0.22); border: none; font-size: 20px; cursor: pointer; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; touch-action: manipulation; -webkit-tap-highlight-color: transparent; flex-shrink: 0;">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
       
       <div class="modal-body" style="padding: 20px; max-height: 75vh; overflow-y: auto;">
@@ -1955,13 +1957,13 @@
 
       </div>
       
-      <div class="modal-footer" style="padding: 12px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+      <div class="modal-footer" style="padding: 14px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; gap: 10px; position: relative; z-index: 10;">
         <span style="font-size: 11px; color: #64748b;"><i class="fa-solid fa-shield-halved text-teal"></i> 100% Free &amp; Secure (Local PC Engine)</span>
-        <button class="btn btn-secondary btn-sm" onclick="closeWhatsAppBotModal()">Close</button>
+        <button type="button" class="btn btn-secondary" onclick="closeWhatsAppBotModal(event)" style="min-width: 105px; min-height: 42px; font-weight: 700; cursor: pointer; touch-action: manipulation;">Close</button>
       </div>
     </div>
   </div>
 
-  <script src="index_v5.js?v=123"></script>
+  <script src="index_v5.js?v=124"></script>
 </body>
 </html>

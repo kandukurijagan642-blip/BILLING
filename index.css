@@ -3199,7 +3199,14 @@ body {
   display: flex !important;
   visibility: visible !important;
   opacity: 1 !important;
-  z-index: 999999 !important;
+  z-index: 2147483640 !important;
+}
+
+#whatsapp-bot-modal.hidden {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* ==========================================================================
@@ -3905,22 +3912,33 @@ body {
   }
 
   /* 5. Mobile Modals (Centered, accessible on touch, scrollable body) */
-  .modal-overlay {
+  .modal-overlay:not(.hidden) {
     padding: 12px !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    z-index: 2147483640 !important;
+  }
+
+  .modal-overlay.hidden,
+  .hidden {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
   }
 
   .modal-box {
     width: 100% !important;
     max-width: 96vw !important;
-    max-height: 90vh !important;
+    max-height: 86vh !important;
     display: flex !important;
     flex-direction: column !important;
     border-radius: 14px !important;
-    margin: auto !important;
+    margin: auto auto 30px auto !important;
     overflow: hidden !important;
+    position: relative !important;
+    z-index: 2147483641 !important;
   }
 
   .modal-header {
@@ -3928,26 +3946,45 @@ body {
     padding: 14px 16px !important;
   }
 
+  .modal-close,
+  .modal-close-btn {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 22px !important;
+    cursor: pointer !important;
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent !important;
+    border-radius: 50% !important;
+  }
+
   .modal-body {
     flex: 1 1 auto !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch !important;
     padding: 14px 16px !important;
-    max-height: calc(90vh - 120px) !important;
+    max-height: calc(86vh - 120px) !important;
   }
 
   .modal-footer {
     flex-shrink: 0 !important;
-    padding: 12px 16px !important;
+    padding: 14px 16px 20px 16px !important;
     display: flex !important;
-    gap: 8px !important;
+    gap: 10px !important;
     flex-wrap: wrap !important;
+    position: relative !important;
+    z-index: 2147483642 !important;
   }
 
   .modal-footer button {
     flex: 1 1 auto !important;
-    min-width: 100px !important;
-    padding: 10px !important;
+    min-width: 110px !important;
+    min-height: 42px !important;
+    padding: 10px 16px !important;
+    font-weight: 600 !important;
+    touch-action: manipulation !important;
   }
 
   /* 6. Invoice History Toolbar on Mobile */

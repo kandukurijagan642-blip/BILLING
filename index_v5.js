@@ -3385,10 +3385,11 @@ window.openWhatsAppBotModal = function() {
   const modal = document.getElementById("whatsapp-bot-modal");
   if (modal) {
     modal.classList.remove("hidden");
-    modal.style.display = "flex";
-    modal.style.visibility = "visible";
-    modal.style.opacity = "1";
-    modal.style.zIndex = "999999";
+    modal.style.setProperty("display", "flex", "important");
+    modal.style.setProperty("visibility", "visible", "important");
+    modal.style.setProperty("opacity", "1", "important");
+    modal.style.setProperty("pointer-events", "auto", "important");
+    modal.style.setProperty("z-index", "2147483640", "important");
   }
   
   const settings = globalSettings || {};
@@ -3405,9 +3406,16 @@ window.openWhatsAppBotModal = function() {
   initiateWhatsAppConnect();
 };
 
-window.closeWhatsAppBotModal = function() {
+window.closeWhatsAppBotModal = function(e) {
+  if (e && e.stopPropagation) e.stopPropagation();
   const modal = document.getElementById("whatsapp-bot-modal");
-  if (modal) modal.classList.add("hidden");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.style.setProperty("display", "none", "important");
+    modal.style.setProperty("visibility", "hidden", "important");
+    modal.style.setProperty("opacity", "0", "important");
+    modal.style.setProperty("pointer-events", "none", "important");
+  }
   if (whatsappPollInterval) {
     clearInterval(whatsappPollInterval);
     whatsappPollInterval = null;
@@ -3941,7 +3949,10 @@ window.openWhatsappWebChat = function() {
 
 window.closeWhatsappGuideModal = function() {
   const modalEl = document.getElementById("whatsapp-pdf-guide-modal");
-  if (modalEl) modalEl.classList.add("hidden");
+  if (modalEl) {
+    modalEl.classList.add("hidden");
+    modalEl.style.setProperty("display", "none", "important");
+  }
 };
 
 window.shareCurrentInvoiceWhatsApp = function(btnEl = null) {
@@ -4015,7 +4026,10 @@ window.openBalanceQrModal = function(id) {
 
 window.closeBalanceQrModal = function() {
   const modalEl = document.getElementById("balance-qr-modal");
-  if (modalEl) modalEl.classList.add("hidden");
+  if (modalEl) {
+    modalEl.classList.add("hidden");
+    modalEl.style.setProperty("display", "none", "important");
+  }
 };
 
 window.shareBalanceQrWhatsApp = function() {
@@ -4453,7 +4467,11 @@ window.openProductModal = function(id = "") {
 };
 
 window.closeProductModal = function() {
-  document.getElementById("product-modal").classList.add("hidden");
+  const modalEl = document.getElementById("product-modal");
+  if (modalEl) {
+    modalEl.classList.add("hidden");
+    modalEl.style.setProperty("display", "none", "important");
+  }
 };
 
 window.saveProductModal = function(e) {
@@ -4745,7 +4763,11 @@ window.openPartyModal = function(type, id = "") {
 };
 
 window.closePartyModal = function() {
-  document.getElementById("party-modal").classList.add("hidden");
+  const modalEl = document.getElementById("party-modal");
+  if (modalEl) {
+    modalEl.classList.add("hidden");
+    modalEl.style.setProperty("display", "none", "important");
+  }
 };
 
 window.savePartyModal = function(e) {
@@ -5693,3 +5715,41 @@ window.importDataBackupJSON = function(event) {
   };
   reader.readAsText(file);
 };
+
+// --- UNIVERSAL MODAL BACKDROP AND ESCAPE-KEY DISMISS ---
+(function() {
+  function dismissAllActiveModals() {
+    document.querySelectorAll('.modal-overlay').forEach(modal => {
+      modal.classList.add('hidden');
+      modal.style.setProperty('display', 'none', 'important');
+      modal.style.setProperty('visibility', 'hidden', 'important');
+      modal.style.setProperty('opacity', '0', 'important');
+      modal.style.setProperty('pointer-events', 'none', 'important');
+    });
+    if (typeof whatsappPollInterval !== 'undefined' && whatsappPollInterval) {
+      clearInterval(whatsappPollInterval);
+      whatsappPollInterval = null;
+    }
+  }
+
+  // Backdrop click on any overlay
+  document.addEventListener('click', function(e) {
+    if (e.target && e.target.classList && e.target.classList.contains('modal-overlay')) {
+      e.target.classList.add('hidden');
+      e.target.style.setProperty('display', 'none', 'important');
+      e.target.style.setProperty('visibility', 'hidden', 'important');
+      e.target.style.setProperty('opacity', '0', 'important');
+      e.target.style.setProperty('pointer-events', 'none', 'important');
+      if (e.target.id === 'whatsapp-bot-modal' && typeof closeWhatsAppBotModal === 'function') {
+        closeWhatsAppBotModal();
+      }
+    }
+  }, true);
+
+  // Escape key closes modals
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' || e.key === 'Esc') {
+      dismissAllActiveModals();
+    }
+  });
+})();
