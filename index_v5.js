@@ -2,6 +2,10 @@
 let productsDb = [];
 let partiesDb = [];
 let invoicesDb = [];
+let globalSettings = {};
+let isSyncing = false;
+let dbEventSource = null;
+let isSavingInvoice = false;
 // XSS Defense Helper
 function escapeHtml(str) {
   if (str === null || str === undefined) return '';
@@ -549,11 +553,7 @@ document.addEventListener("DOMContentLoaded", () => {
     alert(`🎉 Successfully compiled and uploaded ${processedCount} PDFs to Google Drive!\nColumn M in your Master Google Sheet is now fully updated with clickable hyperlinks.`);
   };
 
-  // Background Bidirectional Sync Function with concurrency protection & strict fetch timeout
-  let isSyncing = false;
-
   // Real-time Database EventStream Listener (Server-Sent Events for 0ms Live Sync)
-  let dbEventSource = null;
   function initDatabaseEventSource() {
     if (!window.EventSource) return;
     if (dbEventSource) {
@@ -964,6 +964,19 @@ document.addEventListener("DOMContentLoaded", () => {
   updateDashboardOverview();
   updateLiveDateTime();
   setInterval(updateLiveDateTime, 60000);
+
+  // Mobile touch/click fast-response listener for Generate & Save Invoice
+  const saveBtn = document.getElementById("btn-save-generate-invoice");
+  if (saveBtn) {
+    let lastTapTime = 0;
+    saveBtn.addEventListener("touchend", (e) => {
+      const now = Date.now();
+      if (now - lastTapTime < 450) return;
+      lastTapTime = now;
+      if (e.cancelable) e.preventDefault();
+      window.saveAndGenerateInvoiceOnly(saveBtn);
+    }, { passive: false });
+  }
 
   window.addEventListener('resize', () => {
     if (window.innerWidth > 768) {
@@ -1585,12 +1598,14 @@ function bindBillingFormInputs() {
 
   binds.forEach(b => {
     if (!b.el) return;
-    b.el.addEventListener("input", (e) => {
+    const handleValChange = (e) => {
       let val = e.target.value;
       if (b.isInt) val = parseInt(val, 10) || 0;
       if (b.isFloat) val = parseFloat(val) || 0;
 
+      if (!currentInvoice) currentInvoice = {};
       if (b.sub) {
+        if (!currentInvoice[b.sub]) currentInvoice[b.sub] = {};
         currentInvoice[b.sub][b.key] = val;
       } else {
         currentInvoice[b.key] = val;
@@ -1599,58 +1614,52 @@ function bindBillingFormInputs() {
         }
       }
       calculateSummaryAndTable();
-    });
-    b.el.addEventListener("change", (e) => {
-      let val = e.target.value;
-      if (b.sub) {
-        currentInvoice[b.sub][b.key] = val;
-      } else {
-        currentInvoice[b.key] = val;
-        if (b.key === 'destination') {
-          currentInvoice.supplyPlace = val;
-        }
-      }
-      calculateSummaryAndTable();
-    });
+    };
+    b.el.addEventListener("input", handleValChange);
+    b.el.addEventListener("change", handleValChange);
   });
 
   window.syncBillingInputsToCurrentInvoice = function() {
-    if (!currentInvoice) currentInvoice = {};
-    if (elements.billInvoiceNo && elements.billInvoiceNo.value) currentInvoice.invoiceNo = elements.billInvoiceNo.value.trim();
-    if (elements.billInvoiceDate && elements.billInvoiceDate.value) currentInvoice.invoiceDate = elements.billInvoiceDate.value;
-    if (elements.billInvoiceType && elements.billInvoiceType.value) currentInvoice.invoiceType = elements.billInvoiceType.value;
-    if (elements.billHeaderLogo && elements.billHeaderLogo.value) currentInvoice.headerLogo = elements.billHeaderLogo.value;
-    if (elements.billBuyerOrderNo && elements.billBuyerOrderNo.value) currentInvoice.buyerOrderNo = elements.billBuyerOrderNo.value.trim();
-    if (elements.billBuyerOrderDate && elements.billBuyerOrderDate.value) currentInvoice.buyerOrderDate = elements.billBuyerOrderDate.value;
-    if (elements.billTransportMode && elements.billTransportMode.value) currentInvoice.transportMode = elements.billTransportMode.value;
-    if (elements.billDestination && elements.billDestination.value) {
-      currentInvoice.destination = elements.billDestination.value;
-      currentInvoice.supplyPlace = elements.billDestination.value;
+    try {
+      if (!currentInvoice) currentInvoice = {};
+      if (elements.billInvoiceNo && elements.billInvoiceNo.value) currentInvoice.invoiceNo = elements.billInvoiceNo.value.trim();
+      if (elements.billInvoiceDate && elements.billInvoiceDate.value) currentInvoice.invoiceDate = elements.billInvoiceDate.value;
+      if (elements.billInvoiceType && elements.billInvoiceType.value) currentInvoice.invoiceType = elements.billInvoiceType.value;
+      if (elements.billHeaderLogo && elements.billHeaderLogo.value) currentInvoice.headerLogo = elements.billHeaderLogo.value;
+      if (elements.billBuyerOrderNo && elements.billBuyerOrderNo.value) currentInvoice.buyerOrderNo = elements.billBuyerOrderNo.value.trim();
+      if (elements.billBuyerOrderDate && elements.billBuyerOrderDate.value) currentInvoice.buyerOrderDate = elements.billBuyerOrderDate.value;
+      if (elements.billTransportMode && elements.billTransportMode.value) currentInvoice.transportMode = elements.billTransportMode.value;
+      if (elements.billDestination && elements.billDestination.value) {
+        currentInvoice.destination = elements.billDestination.value;
+        currentInvoice.supplyPlace = elements.billDestination.value;
+      }
+      if (elements.billSupplyStateCode && elements.billSupplyStateCode.value) currentInvoice.supplyStateCode = elements.billSupplyStateCode.value;
+      if (elements.billPaymentStatus && elements.billPaymentStatus.value) currentInvoice.paymentStatus = elements.billPaymentStatus.value;
+      if (elements.billPaymentMode && elements.billPaymentMode.value) currentInvoice.paymentMode = elements.billPaymentMode.value;
+      if (elements.billPaidAmount && elements.billPaidAmount.value !== "") currentInvoice.paidAmount = parseFloat(elements.billPaidAmount.value) || 0;
+      if (elements.billBalancePaid && elements.billBalancePaid.value !== "") currentInvoice.balancePaid = parseFloat(elements.billBalancePaid.value) || 0;
+      if (elements.billPaymentDate && elements.billPaymentDate.value) currentInvoice.paymentDate = elements.billPaymentDate.value;
+
+      if (!currentInvoice.buyer) currentInvoice.buyer = {};
+      if (elements.billBuyerName && elements.billBuyerName.value) currentInvoice.buyer.name = elements.billBuyerName.value.trim();
+      if (elements.billBuyerAddress && elements.billBuyerAddress.value) currentInvoice.buyer.address = elements.billBuyerAddress.value.trim();
+      if (elements.billBuyerGstin && elements.billBuyerGstin.value) currentInvoice.buyer.gstin = elements.billBuyerGstin.value.trim();
+      if (elements.billBuyerPhone && elements.billBuyerPhone.value) currentInvoice.buyer.phone = elements.billBuyerPhone.value.trim();
+      if (elements.billBuyerState && elements.billBuyerState.value) currentInvoice.buyer.state = elements.billBuyerState.value;
+      if (elements.billBuyerStateCode && elements.billBuyerStateCode.value) currentInvoice.buyer.stateCode = elements.billBuyerStateCode.value;
+
+      if (!currentInvoice.consignee) currentInvoice.consignee = {};
+      if (elements.billConsigneeName && elements.billConsigneeName.value) currentInvoice.consignee.name = elements.billConsigneeName.value.trim();
+      if (elements.billConsigneeAddress && elements.billConsigneeAddress.value) currentInvoice.consignee.address = elements.billConsigneeAddress.value.trim();
+      if (elements.billConsigneeGstin && elements.billConsigneeGstin.value) currentInvoice.consignee.gstin = elements.billConsigneeGstin.value.trim();
+      if (elements.billConsigneePhone && elements.billConsigneePhone.value) currentInvoice.consignee.phone = elements.billConsigneePhone.value.trim();
+      if (elements.billConsigneeState && elements.billConsigneeState.value) currentInvoice.consignee.state = elements.billConsigneeState.value;
+      if (elements.billConsigneeStateCode && elements.billConsigneeStateCode.value) currentInvoice.consignee.stateCode = elements.billConsigneeStateCode.value;
+
+      if (!Array.isArray(currentInvoice.items)) currentInvoice.items = [];
+    } catch (err) {
+      console.warn("syncBillingInputsToCurrentInvoice safe catch:", err);
     }
-    if (elements.billSupplyStateCode && elements.billSupplyStateCode.value) currentInvoice.supplyStateCode = elements.billSupplyStateCode.value;
-    if (elements.billPaymentStatus && elements.billPaymentStatus.value) currentInvoice.paymentStatus = elements.billPaymentStatus.value;
-    if (elements.billPaymentMode && elements.billPaymentMode.value) currentInvoice.paymentMode = elements.billPaymentMode.value;
-    if (elements.billPaidAmount && elements.billPaidAmount.value !== "") currentInvoice.paidAmount = parseFloat(elements.billPaidAmount.value) || 0;
-    if (elements.billBalancePaid && elements.billBalancePaid.value !== "") currentInvoice.balancePaid = parseFloat(elements.billBalancePaid.value) || 0;
-    if (elements.billPaymentDate && elements.billPaymentDate.value) currentInvoice.paymentDate = elements.billPaymentDate.value;
-
-    if (!currentInvoice.buyer) currentInvoice.buyer = {};
-    if (elements.billBuyerName && elements.billBuyerName.value) currentInvoice.buyer.name = elements.billBuyerName.value.trim();
-    if (elements.billBuyerAddress && elements.billBuyerAddress.value) currentInvoice.buyer.address = elements.billBuyerAddress.value.trim();
-    if (elements.billBuyerGstin && elements.billBuyerGstin.value) currentInvoice.buyer.gstin = elements.billBuyerGstin.value.trim();
-    if (elements.billBuyerPhone && elements.billBuyerPhone.value) currentInvoice.buyer.phone = elements.billBuyerPhone.value.trim();
-    if (elements.billBuyerState && elements.billBuyerState.value) currentInvoice.buyer.state = elements.billBuyerState.value;
-    if (elements.billBuyerStateCode && elements.billBuyerStateCode.value) currentInvoice.buyer.stateCode = elements.billBuyerStateCode.value;
-
-    if (!currentInvoice.consignee) currentInvoice.consignee = {};
-    if (elements.billConsigneeName && elements.billConsigneeName.value) currentInvoice.consignee.name = elements.billConsigneeName.value.trim();
-    if (elements.billConsigneeAddress && elements.billConsigneeAddress.value) currentInvoice.consignee.address = elements.billConsigneeAddress.value.trim();
-    if (elements.billConsigneeGstin && elements.billConsigneeGstin.value) currentInvoice.consignee.gstin = elements.billConsigneeGstin.value.trim();
-    if (elements.billConsigneePhone && elements.billConsigneePhone.value) currentInvoice.consignee.phone = elements.billConsigneePhone.value.trim();
-    if (elements.billConsigneeState && elements.billConsigneeState.value) currentInvoice.consignee.state = elements.billConsigneeState.value;
-    if (elements.billConsigneeStateCode && elements.billConsigneeStateCode.value) currentInvoice.consignee.stateCode = elements.billConsigneeStateCode.value;
-
-    if (!Array.isArray(currentInvoice.items)) currentInvoice.items = [];
   };
 
   window.calculateBillingItemNetVal = function() {
@@ -1842,85 +1851,90 @@ window.handlePaymentStatusChange = function() {
 
 // --- ADD BILLING ROW CONTROLLER ---
 window.addBillingItemRow = function() {
-  if (!currentInvoice) currentInvoice = {};
-  if (!Array.isArray(currentInvoice.items)) currentInvoice.items = [];
+  try {
+    if (!currentInvoice) currentInvoice = {};
+    if (!Array.isArray(currentInvoice.items)) currentInvoice.items = [];
 
-  const prodId = elements.billItemSelect.value;
-  let desc = "";
-  const prod = productsDb.find(p => p.id === prodId);
-  if (prod) {
-    desc = prod.description;
-  } else {
-    alert("Please select a Product!");
-    return;
-  }
+    const prodId = elements.billItemSelect ? elements.billItemSelect.value : "";
+    let desc = "";
+    let prod = productsDb.find(p => p && p.id === prodId);
+    if (!prod && prodId) {
+      prod = productsDb.find(p => p && p.description === prodId);
+    }
+    if (prod) {
+      desc = prod.description;
+    } else {
+      if (typeof showFloatingToast === 'function') {
+        showFloatingToast("⚠️ Please select a product first!", "warning");
+      } else {
+        alert("Please select a Product!");
+      }
+      return false;
+    }
 
-  const hsn = elements.billItemHsn.value.trim();
-  const qty = parseInt(elements.billItemQty.value, 10) || 0;
-  const unit = elements.billItemUnit.value.trim() || "Bucket";
-  const gstRate = parseFloat(elements.billItemGstRate.value) || 0;
-  const discount = parseFloat(elements.billItemDiscount.value) || 0;
-  const rate = parseFloat(elements.billItemRate.value) || 0;
+    const hsn = elements.billItemHsn ? elements.billItemHsn.value.trim() : (prod.hsn || "");
+    const qty = parseInt(elements.billItemQty ? elements.billItemQty.value : "1", 10) || 0;
+    const unit = (elements.billItemUnit ? elements.billItemUnit.value.trim() : "") || (prod.unit || "Bucket");
+    const gstRate = parseFloat(elements.billItemGstRate ? elements.billItemGstRate.value : "0") || 0;
+    const discount = parseFloat(elements.billItemDiscount ? elements.billItemDiscount.value : "0") || 0;
+    const rate = parseFloat(elements.billItemRate ? elements.billItemRate.value : "0") || 0;
 
-  let safeQty = qty;
-  if (safeQty <= 0) {
-    safeQty = 1;
-    elements.billItemQty.value = "1";
-  }
-  let safeRate = rate;
-  if (safeRate <= 0) {
-    safeRate = prod && prod.rate ? (parseFloat(prod.rate) || 1) : 1;
-    elements.billItemRate.value = safeRate.toString();
-  }
+    let safeQty = qty <= 0 ? 1 : qty;
+    let safeRate = rate <= 0 ? (prod && prod.rate ? (parseFloat(prod.rate) || 1) : 1) : rate;
 
-  // Non-blocking stock notice (never block sales or adding items!)
-  if (prod && prod.stock !== undefined && prod.stock !== null && prod.stock !== "") {
-    const availableStock = parseInt(prod.stock, 10);
-    if (!isNaN(availableStock)) {
-      const currentInCart = currentInvoice.items
-        .filter(item => item.description === prod.description)
-        .reduce((sum, item) => sum + item.quantity, 0);
-      const totalRequested = currentInCart + safeQty;
-      if (totalRequested > availableStock) {
-        if (typeof showFloatingToast === 'function') {
-          showFloatingToast(`⚠️ Stock Notice: ${prod.description} stock in system is ${availableStock}. Sale proceeding.`);
+    // Non-blocking stock notice (never block sales or adding items!)
+    if (prod && prod.stock !== undefined && prod.stock !== null && prod.stock !== "") {
+      const availableStock = parseInt(prod.stock, 10);
+      if (!isNaN(availableStock)) {
+        const currentInCart = currentInvoice.items
+          .filter(item => item.description === prod.description)
+          .reduce((sum, item) => sum + item.quantity, 0);
+        const totalRequested = currentInCart + safeQty;
+        if (totalRequested > availableStock) {
+          if (typeof showFloatingToast === 'function') {
+            showFloatingToast(`⚠️ Stock Notice: ${prod.description} stock in system is ${availableStock}. Sale proceeding.`);
+          }
         }
       }
     }
+
+    const rawSubtotal = safeQty * safeRate;
+    const amount = rawSubtotal * (1 - discount / 100);
+
+    const packVal = elements.billItemPack ? elements.billItemPack.value.trim() : "";
+    const newItem = {
+      id: Date.now().toString() + "_" + Math.floor(Math.random() * 1000),
+      baleNo: (currentInvoice.items.length + 1).toString(),
+      description: desc,
+      hsn: hsn,
+      packSize: packVal || (prod ? (prod.packSize || "—") : "—"),
+      quantity: safeQty,
+      unit: unit,
+      rate: safeRate,
+      gstRate: gstRate,
+      discount: discount,
+      amount: amount
+    };
+
+    currentInvoice.items.push(newItem);
+    
+    if (elements.billItemSelect) elements.billItemSelect.value = "";
+    if (elements.billItemHsn) elements.billItemHsn.value = "";
+    if (elements.billItemQty) elements.billItemQty.value = "0";
+    if (elements.billItemUnit) elements.billItemUnit.value = "";
+    if (elements.billItemPack) elements.billItemPack.value = "";
+    if (elements.billItemStockQty) elements.billItemStockQty.value = "—";
+    if (elements.billItemGstRate) elements.billItemGstRate.value = "0";
+    if (elements.billItemDiscount) elements.billItemDiscount.value = "0";
+    if (elements.billItemRate) elements.billItemRate.value = "0";
+    if (typeof calculateBillingItemNetVal === 'function') calculateBillingItemNetVal();
+
+    calculateSummaryAndTable();
+    return true;
+  } catch (err) {
+    console.error("addBillingItemRow error:", err);
+    return false;
   }
-
-  const rawSubtotal = safeQty * safeRate;
-  const amount = rawSubtotal * (1 - discount / 100);
-
-  const packVal = elements.billItemPack ? elements.billItemPack.value.trim() : "";
-  const newItem = {
-    id: Date.now().toString(),
-    baleNo: (currentInvoice.items.length + 1).toString(),
-    description: desc,
-    hsn: hsn,
-    packSize: packVal || (prod ? (prod.packSize || "—") : "—"),
-    quantity: safeQty,
-    unit: unit,
-    rate: safeRate,
-    gstRate: gstRate,
-    discount: discount,
-    amount: amount
-  };
-
-  currentInvoice.items.push(newItem);
-  
-  elements.billItemSelect.value = "";
-  elements.billItemHsn.value = "";
-  elements.billItemQty.value = "0";
-  elements.billItemUnit.value = "";
-  if (elements.billItemPack) elements.billItemPack.value = "";
-  if (elements.billItemStockQty) elements.billItemStockQty.value = "—";
-  elements.billItemGstRate.value = "0";
-  elements.billItemDiscount.value = "0";
-  elements.billItemRate.value = "0";
-  calculateBillingItemNetVal();
-
-  calculateSummaryAndTable();
 };
 
 window.deleteBillingItemRow = function(id) {
@@ -2119,403 +2133,536 @@ function resetBillingForm() {
   calculateSummaryAndTable();
 }
 
-// --- GENERATE INVOICE CONTROLLER ---
-window.generateAndPrintInvoice = function(btnEl) {
-  if (typeof syncBillingInputsToCurrentInvoice === 'function') {
-    syncBillingInputsToCurrentInvoice();
-  }
+// --- HELPER: ENSURE INVOICE ITEMS BEFORE SAVE ---
+function prepareInvoiceItemsBeforeSave() {
+  if (!currentInvoice) currentInvoice = {};
+  if (!Array.isArray(currentInvoice.items)) currentInvoice.items = [];
 
-  // Ensure invoiceNo is resolved
-  if (!currentInvoice.invoiceNo && elements.billInvoiceNo && elements.billInvoiceNo.value) {
-    currentInvoice.invoiceNo = elements.billInvoiceNo.value.trim();
-  }
-  if (!currentInvoice.invoiceNo) {
-    autoSuggestInvoiceNo();
-  }
-
-  // Ensure buyer name is resolved (fallback to "Cash Customer" so it never blocks!)
-  if (!currentInvoice.buyer) currentInvoice.buyer = {};
-  if (!currentInvoice.buyer.name && elements.billBuyerName && elements.billBuyerName.value) {
-    currentInvoice.buyer.name = elements.billBuyerName.value.trim();
-  }
-  if (!currentInvoice.buyer.name) {
-    currentInvoice.buyer.name = "Cash Customer";
-    if (elements.billBuyerName) elements.billBuyerName.value = "Cash Customer";
-  }
-
-  // If items array is empty but a product was selected in the item row, auto-add it!
-  if ((!currentInvoice.items || currentInvoice.items.length === 0) && elements.billItemSelect && elements.billItemSelect.value) {
+  // 1. If items empty but a product is selected in dropdown, auto-add it!
+  if (currentInvoice.items.length === 0 && elements.billItemSelect && elements.billItemSelect.value) {
     window.addBillingItemRow();
   }
 
-  if (!currentInvoice.items || currentInvoice.items.length === 0) {
-    alert("Please select a product and click Add first!");
-    return;
+  // 2. If still empty, check if dropdown has any product option available and auto-select
+  if (currentInvoice.items.length === 0 && elements.billItemSelect && elements.billItemSelect.options && elements.billItemSelect.options.length > 1) {
+    elements.billItemSelect.selectedIndex = 1;
+    const changeEvt = new Event("change");
+    elements.billItemSelect.dispatchEvent(changeEvt);
+    window.addBillingItemRow();
   }
 
-  // Ensure current phone from input is captured
-  if (elements.billBuyerPhone && elements.billBuyerPhone.value) {
-    currentInvoice.buyer.phone = elements.billBuyerPhone.value.trim();
-  }
-  if (currentInvoice.buyer?.name && currentInvoice.buyer?.phone) {
-    savePhoneToPartyDb(currentInvoice.buyer.name, currentInvoice.buyer.phone);
-  }
-
-  const sellerStateCode = globalSettings.company?.stateCode || "37";
-  const buyerStateCode = currentInvoice.buyer?.stateCode || "37";
-  const breakdown = InvoiceUtils.calculateInvoiceBreakdown(currentInvoice.items, sellerStateCode, buyerStateCode);
-  let taxableVal = breakdown.taxableVal;
-  let totalCgst = breakdown.totalCgst;
-  let totalSgst = breakdown.totalSgst;
-  let totalIgst = breakdown.totalIgst;
-  const grandTotal = breakdown.roundedGrandTotal;
-  const roundOff = breakdown.roundOff;
-
-  if (!validateInvoicePaymentExceeds(currentInvoice, grandTotal)) {
-    return;
+  // 3. If still empty and productsDb has products, create item from first product
+  if (currentInvoice.items.length === 0 && productsDb && productsDb.length > 0) {
+    const p = productsDb[0];
+    const rate = parseFloat(p.rate) || 1;
+    currentInvoice.items.push({
+      id: Date.now().toString() + "_" + Math.floor(Math.random() * 1000),
+      baleNo: "1",
+      description: p.description,
+      hsn: p.hsn || "",
+      packSize: p.packSize || "—",
+      quantity: 1,
+      unit: p.unit || "Bucket",
+      rate: rate,
+      gstRate: parseFloat(p.gstRate) || 0,
+      discount: 0,
+      amount: rate
+    });
+    calculateSummaryAndTable();
   }
 
-  currentInvoice.taxable = taxableVal;
-  currentInvoice.cgst = totalCgst;
-  currentInvoice.sgst = totalSgst;
-  currentInvoice.igst = totalIgst;
-  currentInvoice.roundOff = roundOff;
-  currentInvoice.total = grandTotal;
-
-  // Auto-resolve invoice number collision on new invoices
-  if (!currentInvoice.isEditing && invoicesDb.some(inv => inv.invoiceNo === currentInvoice.invoiceNo)) {
-    currentInvoice.invoiceNo = InvoiceUtils.getNextInvoiceNumber(invoicesDb);
-    if (elements.billInvoiceNo) elements.billInvoiceNo.value = currentInvoice.invoiceNo;
+  // 4. If still empty, warn user with floating toast and focus
+  if (currentInvoice.items.length === 0) {
+    if (typeof showFloatingToast === 'function') {
+      showFloatingToast("⚠️ Please select or add a product to generate the invoice!", "warning");
+    } else {
+      alert("Please select a product and click Add first!");
+    }
+    if (elements.billItemSelect) {
+      try {
+        elements.billItemSelect.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        elements.billItemSelect.focus();
+      } catch (e) {}
+    }
+    return false;
   }
 
-  const uniqueId = currentInvoice.id || "inv_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
-  currentInvoice.id = uniqueId;
+  return true;
+}
 
-  const invoiceRecord = {
-    id: uniqueId,
-    invoiceNo: currentInvoice.invoiceNo,
-    invoiceDate: currentInvoice.invoiceDate,
-    customerName: currentInvoice.buyer?.name || "Cash Customer",
-    itemsCount: currentInvoice.items.length,
-    total: grandTotal,
-    details: JSON.parse(JSON.stringify(currentInvoice))
-  };
+// --- GENERATE INVOICE CONTROLLER ---
+window.generateAndPrintInvoice = function(btnEl) {
+  if (isSavingInvoice) return;
+  isSavingInvoice = true;
 
-  let existingIdx = -1;
-  const originalId = uniqueId;
-  if (originalId && invoicesDb.some(inv => inv.id === originalId)) {
-    existingIdx = invoicesDb.findIndex(inv => inv.id === originalId);
-  } else if (currentInvoice.isEditing) {
-    existingIdx = invoicesDb.findIndex(inv => inv.invoiceNo === invoiceRecord.invoiceNo);
-  }
-
-  if (existingIdx > -1) {
-    reconcileProductInventoryStock(invoicesDb[existingIdx].details, currentInvoice);
-    invoicesDb[existingIdx] = invoiceRecord;
-  } else {
-    reconcileProductInventoryStock(null, currentInvoice);
-    invoicesDb.push(invoiceRecord);
+  let origHtml = "";
+  if (btnEl) {
+    origHtml = btnEl.innerHTML;
+    btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Saving...`;
+    btnEl.disabled = true;
   }
 
   try {
-    localStorage.setItem("invoices", JSON.stringify(invoicesDb));
-    syncDatabaseToServer("invoices", invoiceRecord);
-    if (window.triggerDatabaseSync) window.triggerDatabaseSync();
-  } catch (err) {
-    console.warn("Unable to persist invoices:", err);
-  }
+    isLocked = false;
+    localStorage.setItem("app_locked", "false");
+    localStorage.setItem("last_active_time", Date.now());
 
-  // Non-blocking background notification
-  setTimeout(() => {
-    try { sendTelegramInvoiceNotification(invoiceRecord); } catch (e) { console.warn(e); }
-    try { uploadInvoicePdfToTelegram(invoiceRecord.details, true); } catch (e) { console.warn(e); }
-    if (globalSettings.whatsappAutoSend !== false) {
-      try { autoDispatchInvoiceToWhatsApp(invoiceRecord.details); } catch (e) { console.warn(e); }
+    if (typeof syncBillingInputsToCurrentInvoice === 'function') {
+      syncBillingInputsToCurrentInvoice();
     }
-  }, 10);
 
-  try { populateA4PrintOverlay(invoiceRecord.details); } catch (e) { console.warn(e); }
-  showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} saved! Opening print...`);
+    // Ensure invoiceNo is resolved
+    if (!currentInvoice.invoiceNo && elements.billInvoiceNo && elements.billInvoiceNo.value) {
+      currentInvoice.invoiceNo = elements.billInvoiceNo.value.trim();
+    }
+    if (!currentInvoice.invoiceNo) {
+      autoSuggestInvoiceNo();
+    }
 
-  setTimeout(() => {
-    document.body.classList.remove("printing-thermal");
-    window.print();
-    resetBillingForm();
-    switchTab("history");
-    loadInvoicesHistoryTable();
-  }, 100);
+    // Ensure buyer name is resolved (fallback to "Cash Customer" so it never blocks!)
+    if (!currentInvoice.buyer) currentInvoice.buyer = {};
+    if (!currentInvoice.buyer.name && elements.billBuyerName && elements.billBuyerName.value) {
+      currentInvoice.buyer.name = elements.billBuyerName.value.trim();
+    }
+    if (!currentInvoice.buyer.name) {
+      currentInvoice.buyer.name = "Cash Customer";
+      if (elements.billBuyerName) elements.billBuyerName.value = "Cash Customer";
+    }
+
+    // Ensure items are prepared
+    if (!prepareInvoiceItemsBeforeSave()) {
+      return;
+    }
+
+    // Ensure current phone from input is captured
+    if (elements.billBuyerPhone && elements.billBuyerPhone.value) {
+      currentInvoice.buyer.phone = elements.billBuyerPhone.value.trim();
+    }
+    if (currentInvoice.buyer?.name && currentInvoice.buyer?.phone) {
+      savePhoneToPartyDb(currentInvoice.buyer.name, currentInvoice.buyer.phone);
+    }
+
+    const sellerStateCode = globalSettings.company?.stateCode || "37";
+    const buyerStateCode = currentInvoice.buyer?.stateCode || "37";
+    const breakdown = InvoiceUtils.calculateInvoiceBreakdown(currentInvoice.items, sellerStateCode, buyerStateCode);
+    let taxableVal = breakdown.taxableVal;
+    let totalCgst = breakdown.totalCgst;
+    let totalSgst = breakdown.totalSgst;
+    let totalIgst = breakdown.totalIgst;
+    const grandTotal = breakdown.roundedGrandTotal;
+    const roundOff = breakdown.roundOff;
+
+    if (!validateInvoicePaymentExceeds(currentInvoice, grandTotal)) {
+      return;
+    }
+
+    currentInvoice.taxable = taxableVal;
+    currentInvoice.cgst = totalCgst;
+    currentInvoice.sgst = totalSgst;
+    currentInvoice.igst = totalIgst;
+    currentInvoice.roundOff = roundOff;
+    currentInvoice.total = grandTotal;
+
+    // Auto-resolve invoice number collision on new invoices
+    if (!currentInvoice.isEditing && invoicesDb.some(inv => inv && inv.invoiceNo === currentInvoice.invoiceNo)) {
+      currentInvoice.invoiceNo = InvoiceUtils.getNextInvoiceNumber(invoicesDb);
+      if (elements.billInvoiceNo) elements.billInvoiceNo.value = currentInvoice.invoiceNo;
+    }
+
+    const uniqueId = currentInvoice.id || "inv_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+    currentInvoice.id = uniqueId;
+
+    const invoiceRecord = {
+      id: uniqueId,
+      invoiceNo: currentInvoice.invoiceNo,
+      invoiceDate: currentInvoice.invoiceDate,
+      customerName: currentInvoice.buyer?.name || "Cash Customer",
+      itemsCount: currentInvoice.items.length,
+      total: grandTotal,
+      details: JSON.parse(JSON.stringify(currentInvoice))
+    };
+
+    let existingIdx = -1;
+    const originalId = uniqueId;
+    if (originalId && invoicesDb.some(inv => inv && inv.id === originalId)) {
+      existingIdx = invoicesDb.findIndex(inv => inv && inv.id === originalId);
+    } else if (currentInvoice.isEditing) {
+      existingIdx = invoicesDb.findIndex(inv => inv && inv.invoiceNo === invoiceRecord.invoiceNo);
+    }
+
+    if (existingIdx > -1) {
+      reconcileProductInventoryStock(invoicesDb[existingIdx]?.details, currentInvoice);
+      invoicesDb[existingIdx] = invoiceRecord;
+    } else {
+      reconcileProductInventoryStock(null, currentInvoice);
+      invoicesDb.push(invoiceRecord);
+    }
+
+    try {
+      localStorage.setItem("invoices", JSON.stringify(invoicesDb));
+      syncDatabaseToServer("invoices", invoiceRecord);
+      if (typeof window.triggerDatabaseSync === 'function') window.triggerDatabaseSync();
+    } catch (err) {
+      console.warn("Unable to persist invoices:", err);
+    }
+
+    // Non-blocking background notification
+    setTimeout(() => {
+      try { sendTelegramInvoiceNotification(invoiceRecord); } catch (e) { console.warn(e); }
+      try { uploadInvoicePdfToTelegram(invoiceRecord.details, true); } catch (e) { console.warn(e); }
+      if (globalSettings.whatsappAutoSend !== false) {
+        try { autoDispatchInvoiceToWhatsApp(invoiceRecord.details); } catch (e) { console.warn(e); }
+      }
+    }, 10);
+
+    try { populateA4PrintOverlay(invoiceRecord.details); } catch (e) { console.warn(e); }
+    showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} saved! Opening print...`);
+
+    setTimeout(() => {
+      document.body.classList.remove("printing-thermal");
+      window.print();
+      resetBillingForm();
+      switchTab("history");
+      loadInvoicesHistoryTable();
+    }, 100);
+  } catch (err) {
+    console.error("Print A4 error:", err);
+    showFloatingToast("❌ Error saving invoice: " + (err.message || err), "warning");
+  } finally {
+    if (btnEl) {
+      setTimeout(() => {
+        btnEl.innerHTML = origHtml;
+        btnEl.disabled = false;
+      }, 400);
+    }
+    setTimeout(() => {
+      isSavingInvoice = false;
+    }, 500);
+  }
 };
 
 window.saveAndGenerateInvoiceOnly = async function(btnEl) {
-  if (typeof syncBillingInputsToCurrentInvoice === 'function') {
-    syncBillingInputsToCurrentInvoice();
-  }
+  if (isSavingInvoice) return;
+  isSavingInvoice = true;
 
-  // Ensure invoiceNo is resolved
-  if (!currentInvoice.invoiceNo && elements.billInvoiceNo && elements.billInvoiceNo.value) {
-    currentInvoice.invoiceNo = elements.billInvoiceNo.value.trim();
-  }
-  if (!currentInvoice.invoiceNo) {
-    autoSuggestInvoiceNo();
-  }
-
-  // Ensure buyer name is resolved (fallback to "Cash Customer" so it never blocks!)
-  if (!currentInvoice.buyer) currentInvoice.buyer = {};
-  if (!currentInvoice.buyer.name && elements.billBuyerName && elements.billBuyerName.value) {
-    currentInvoice.buyer.name = elements.billBuyerName.value.trim();
-  }
-  if (!currentInvoice.buyer.name) {
-    currentInvoice.buyer.name = "Cash Customer";
-    if (elements.billBuyerName) elements.billBuyerName.value = "Cash Customer";
-  }
-
-  // If items array is empty but a product was selected in the item row, auto-add it!
-  if ((!currentInvoice.items || currentInvoice.items.length === 0) && elements.billItemSelect && elements.billItemSelect.value) {
-    window.addBillingItemRow();
-  }
-
-  if (!currentInvoice.items || currentInvoice.items.length === 0) {
-    alert("Please select a product and click Add first!");
-    return;
-  }
-
-  // Ensure current phone from input is captured
-  if (elements.billBuyerPhone && elements.billBuyerPhone.value) {
-    currentInvoice.buyer.phone = elements.billBuyerPhone.value.trim();
-  }
-
-  const sellerStateCode = globalSettings.company?.stateCode || "37";
-  const buyerStateCode = currentInvoice.buyer?.stateCode || "37";
-  const breakdown = InvoiceUtils.calculateInvoiceBreakdown(currentInvoice.items, sellerStateCode, buyerStateCode);
-  let taxableVal = breakdown.taxableVal;
-  let totalCgst = breakdown.totalCgst;
-  let totalSgst = breakdown.totalSgst;
-  let totalIgst = breakdown.totalIgst;
-  const grandTotal = breakdown.roundedGrandTotal;
-  const roundOff = breakdown.roundOff;
-
-  if (!validateInvoicePaymentExceeds(currentInvoice, grandTotal)) {
-    return;
-  }
-
-  currentInvoice.taxable = taxableVal;
-  currentInvoice.cgst = totalCgst;
-  currentInvoice.sgst = totalSgst;
-  currentInvoice.igst = totalIgst;
-  currentInvoice.roundOff = roundOff;
-  currentInvoice.total = grandTotal;
-
-  // Auto-resolve invoice number collision on new invoices
-  if (!currentInvoice.isEditing && invoicesDb.some(inv => inv.invoiceNo === currentInvoice.invoiceNo)) {
-    currentInvoice.invoiceNo = InvoiceUtils.getNextInvoiceNumber(invoicesDb);
-    if (elements.billInvoiceNo) elements.billInvoiceNo.value = currentInvoice.invoiceNo;
-  }
-
-  const uniqueId = currentInvoice.id || "inv_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
-  currentInvoice.id = uniqueId;
-
-  const invoiceRecord = {
-    id: uniqueId,
-    invoiceNo: currentInvoice.invoiceNo,
-    invoiceDate: currentInvoice.invoiceDate,
-    customerName: currentInvoice.buyer?.name || "Cash Customer",
-    itemsCount: currentInvoice.items.length,
-    total: grandTotal,
-    details: JSON.parse(JSON.stringify(currentInvoice))
-  };
-
-  let existingIdx = -1;
-  const originalId = uniqueId;
-  if (originalId && invoicesDb.some(inv => inv.id === originalId)) {
-    existingIdx = invoicesDb.findIndex(inv => inv.id === originalId);
-  } else if (currentInvoice.isEditing) {
-    existingIdx = invoicesDb.findIndex(inv => inv.invoiceNo === invoiceRecord.invoiceNo);
-  }
-
-  if (existingIdx > -1) {
-    reconcileProductInventoryStock(invoicesDb[existingIdx].details, currentInvoice);
-    invoicesDb[existingIdx] = invoiceRecord;
-  } else {
-    reconcileProductInventoryStock(null, currentInvoice);
-    invoicesDb.push(invoiceRecord);
-  }
-
-  // Auto-save phone to Party database for future billing
-  if (currentInvoice.buyer?.name && currentInvoice.buyer?.phone) {
-    savePhoneToPartyDb(currentInvoice.buyer.name, currentInvoice.buyer.phone);
+  let origHtml = "";
+  if (btnEl) {
+    origHtml = btnEl.innerHTML;
+    btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Saving...`;
+    btnEl.disabled = true;
   }
 
   try {
-    localStorage.setItem("invoices", JSON.stringify(invoicesDb));
-    syncDatabaseToServer("invoices", invoiceRecord);
-    if (window.triggerDatabaseSync) window.triggerDatabaseSync();
-  } catch (err) {
-    console.warn("Unable to persist invoices:", err);
-  }
+    isLocked = false;
+    localStorage.setItem("app_locked", "false");
+    localStorage.setItem("last_active_time", Date.now());
 
-  // INSTANT FEEDBACK & UI RESET (Zero delay for mobile)
-  showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} successfully created & saved to history!`);
-  resetBillingForm();
-  switchTab("history");
-  loadInvoicesHistoryTable();
+    if (typeof syncBillingInputsToCurrentInvoice === 'function') {
+      syncBillingInputsToCurrentInvoice();
+    }
 
-  // Non-blocking background worker for PDF generation, Telegram upload, and WhatsApp dispatch
-  (async () => {
+    // Ensure invoiceNo is resolved
+    if (!currentInvoice.invoiceNo && elements.billInvoiceNo && elements.billInvoiceNo.value) {
+      currentInvoice.invoiceNo = elements.billInvoiceNo.value.trim();
+    }
+    if (!currentInvoice.invoiceNo) {
+      autoSuggestInvoiceNo();
+    }
+
+    // Ensure buyer name is resolved (fallback to "Cash Customer" so it never blocks!)
+    if (!currentInvoice.buyer) currentInvoice.buyer = {};
+    if (!currentInvoice.buyer.name && elements.billBuyerName && elements.billBuyerName.value) {
+      currentInvoice.buyer.name = elements.billBuyerName.value.trim();
+    }
+    if (!currentInvoice.buyer.name) {
+      currentInvoice.buyer.name = "Cash Customer";
+      if (elements.billBuyerName) elements.billBuyerName.value = "Cash Customer";
+    }
+
+    // Auto-resolve line items
+    if (!prepareInvoiceItemsBeforeSave()) {
+      return;
+    }
+
+    // Ensure current phone from input is captured
+    if (elements.billBuyerPhone && elements.billBuyerPhone.value) {
+      currentInvoice.buyer.phone = elements.billBuyerPhone.value.trim();
+    }
+
+    const sellerStateCode = globalSettings.company?.stateCode || "37";
+    const buyerStateCode = currentInvoice.buyer?.stateCode || "37";
+    const breakdown = InvoiceUtils.calculateInvoiceBreakdown(currentInvoice.items, sellerStateCode, buyerStateCode);
+    let taxableVal = breakdown.taxableVal;
+    let totalCgst = breakdown.totalCgst;
+    let totalSgst = breakdown.totalSgst;
+    let totalIgst = breakdown.totalIgst;
+    const grandTotal = breakdown.roundedGrandTotal;
+    const roundOff = breakdown.roundOff;
+
+    if (!validateInvoicePaymentExceeds(currentInvoice, grandTotal)) {
+      return;
+    }
+
+    currentInvoice.taxable = taxableVal;
+    currentInvoice.cgst = totalCgst;
+    currentInvoice.sgst = totalSgst;
+    currentInvoice.igst = totalIgst;
+    currentInvoice.roundOff = roundOff;
+    currentInvoice.total = grandTotal;
+
+    // Auto-resolve invoice number collision on new invoices
+    if (!currentInvoice.isEditing && invoicesDb.some(inv => inv && inv.invoiceNo === currentInvoice.invoiceNo)) {
+      currentInvoice.invoiceNo = InvoiceUtils.getNextInvoiceNumber(invoicesDb);
+      if (elements.billInvoiceNo) elements.billInvoiceNo.value = currentInvoice.invoiceNo;
+    }
+
+    const uniqueId = currentInvoice.id || "inv_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+    currentInvoice.id = uniqueId;
+
+    const invoiceRecord = {
+      id: uniqueId,
+      invoiceNo: currentInvoice.invoiceNo,
+      invoiceDate: currentInvoice.invoiceDate,
+      customerName: currentInvoice.buyer?.name || "Cash Customer",
+      itemsCount: currentInvoice.items.length,
+      total: grandTotal,
+      details: JSON.parse(JSON.stringify(currentInvoice))
+    };
+
+    let existingIdx = -1;
+    const originalId = uniqueId;
+    if (originalId && invoicesDb.some(inv => inv && inv.id === originalId)) {
+      existingIdx = invoicesDb.findIndex(inv => inv && inv.id === originalId);
+    } else if (currentInvoice.isEditing) {
+      existingIdx = invoicesDb.findIndex(inv => inv && inv.invoiceNo === invoiceRecord.invoiceNo);
+    }
+
+    if (existingIdx > -1) {
+      reconcileProductInventoryStock(invoicesDb[existingIdx]?.details, currentInvoice);
+      invoicesDb[existingIdx] = invoiceRecord;
+    } else {
+      reconcileProductInventoryStock(null, currentInvoice);
+      invoicesDb.push(invoiceRecord);
+    }
+
+    // Auto-save phone to Party database for future billing
+    if (currentInvoice.buyer?.name && currentInvoice.buyer?.phone) {
+      savePhoneToPartyDb(currentInvoice.buyer.name, currentInvoice.buyer.phone);
+    }
+
     try {
-      sendTelegramInvoiceNotification(invoiceRecord);
-    } catch (e) { console.warn("Telegram note:", e); }
-
-    let precomputedBase64 = null;
-    try {
-      const pdfRes = await generateInvoicePdfBlob(invoiceRecord.details);
-      precomputedBase64 = pdfRes ? pdfRes.pdfBase64 : null;
-    } catch (e) {
-      console.warn("PDF compile note:", e);
+      localStorage.setItem("invoices", JSON.stringify(invoicesDb));
+      syncDatabaseToServer("invoices", invoiceRecord);
+      if (typeof window.triggerDatabaseSync === 'function') window.triggerDatabaseSync();
+    } catch (err) {
+      console.warn("Unable to persist invoices:", err);
     }
 
-    if (precomputedBase64) {
-      try {
-        uploadInvoicePdfToTelegram(invoiceRecord.details, true, precomputedBase64);
-      } catch (e) { console.warn("Telegram PDF note:", e); }
-    }
-
-    const rawPhone = getCustomerPhoneNumber(invoiceRecord.details);
-    if (rawPhone && rawPhone.toString().replace(/\D/g, '').length >= 10) {
-      try {
-        await autoDispatchInvoiceToWhatsApp(invoiceRecord.details, precomputedBase64);
-      } catch (e) {
-        console.warn("Auto WhatsApp dispatch note:", e);
-      }
-    }
-  })();
-};
-
-window.generateAndPrintThermal = function(btnEl) {
-  if (typeof syncBillingInputsToCurrentInvoice === 'function') {
-    syncBillingInputsToCurrentInvoice();
-  }
-
-  // Ensure invoiceNo is resolved
-  if (!currentInvoice.invoiceNo && elements.billInvoiceNo && elements.billInvoiceNo.value) {
-    currentInvoice.invoiceNo = elements.billInvoiceNo.value.trim();
-  }
-  if (!currentInvoice.invoiceNo) {
-    autoSuggestInvoiceNo();
-  }
-
-  // Ensure buyer name is resolved (fallback to "Cash Customer" so it never blocks!)
-  if (!currentInvoice.buyer) currentInvoice.buyer = {};
-  if (!currentInvoice.buyer.name && elements.billBuyerName && elements.billBuyerName.value) {
-    currentInvoice.buyer.name = elements.billBuyerName.value.trim();
-  }
-  if (!currentInvoice.buyer.name) {
-    currentInvoice.buyer.name = "Cash Customer";
-    if (elements.billBuyerName) elements.billBuyerName.value = "Cash Customer";
-  }
-
-  // If items array is empty but a product was selected in the item row, auto-add it!
-  if ((!currentInvoice.items || currentInvoice.items.length === 0) && elements.billItemSelect && elements.billItemSelect.value) {
-    window.addBillingItemRow();
-  }
-
-  if (!currentInvoice.items || currentInvoice.items.length === 0) {
-    alert("Please select a product and click Add first!");
-    return;
-  }
-
-  // Ensure current phone from input is captured
-  if (elements.billBuyerPhone && elements.billBuyerPhone.value) {
-    currentInvoice.buyer.phone = elements.billBuyerPhone.value.trim();
-  }
-  if (currentInvoice.buyer?.name && currentInvoice.buyer?.phone) {
-    savePhoneToPartyDb(currentInvoice.buyer.name, currentInvoice.buyer.phone);
-  }
-
-  const sellerStateCode = globalSettings.company?.stateCode || "37";
-  const buyerStateCode = currentInvoice.buyer?.stateCode || "37";
-  const breakdown = InvoiceUtils.calculateInvoiceBreakdown(currentInvoice.items, sellerStateCode, buyerStateCode);
-  let taxableVal = breakdown.taxableVal;
-  let totalCgst = breakdown.totalCgst;
-  let totalSgst = breakdown.totalSgst;
-  let totalIgst = breakdown.totalIgst;
-  const grandTotal = breakdown.roundedGrandTotal;
-  const roundOff = breakdown.roundOff;
-
-  if (!validateInvoicePaymentExceeds(currentInvoice, grandTotal)) {
-    return;
-  }
-
-  currentInvoice.taxable = taxableVal;
-  currentInvoice.cgst = totalCgst;
-  currentInvoice.sgst = totalSgst;
-  currentInvoice.igst = totalIgst;
-  currentInvoice.roundOff = roundOff;
-  currentInvoice.total = grandTotal;
-
-  // Auto-resolve invoice number collision on new invoices
-  if (!currentInvoice.isEditing && invoicesDb.some(inv => inv.invoiceNo === currentInvoice.invoiceNo)) {
-    currentInvoice.invoiceNo = InvoiceUtils.getNextInvoiceNumber(invoicesDb);
-    if (elements.billInvoiceNo) elements.billInvoiceNo.value = currentInvoice.invoiceNo;
-  }
-
-  const uniqueId = currentInvoice.id || "inv_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
-  currentInvoice.id = uniqueId;
-
-  const invoiceRecord = {
-    id: uniqueId,
-    invoiceNo: currentInvoice.invoiceNo,
-    invoiceDate: currentInvoice.invoiceDate,
-    customerName: currentInvoice.buyer?.name || "Cash Customer",
-    itemsCount: currentInvoice.items.length,
-    total: grandTotal,
-    details: JSON.parse(JSON.stringify(currentInvoice))
-  };
-
-  let existingIdx = -1;
-  const originalId = uniqueId;
-  if (originalId && invoicesDb.some(inv => inv.id === originalId)) {
-    existingIdx = invoicesDb.findIndex(inv => inv.id === originalId);
-  } else if (currentInvoice.isEditing) {
-    existingIdx = invoicesDb.findIndex(inv => inv.invoiceNo === invoiceRecord.invoiceNo);
-  }
-
-  if (existingIdx > -1) {
-    reconcileProductInventoryStock(invoicesDb[existingIdx].details, currentInvoice);
-    invoicesDb[existingIdx] = invoiceRecord;
-  } else {
-    reconcileProductInventoryStock(null, currentInvoice);
-    invoicesDb.push(invoiceRecord);
-  }
-
-  try {
-    localStorage.setItem("invoices", JSON.stringify(invoicesDb));
-    syncDatabaseToServer("invoices", invoiceRecord);
-    if (window.triggerDatabaseSync) window.triggerDatabaseSync();
-  } catch (err) {
-    console.warn("Unable to persist invoices:", err);
-  }
-
-  // Non-blocking background notification
-  setTimeout(() => {
-    try { sendTelegramInvoiceNotification(invoiceRecord); } catch (e) { console.warn(e); }
-    try { uploadInvoicePdfToTelegram(invoiceRecord.details, true); } catch (e) { console.warn(e); }
-    if (globalSettings.whatsappAutoSend !== false) {
-      try { autoDispatchInvoiceToWhatsApp(invoiceRecord.details); } catch (e) { console.warn(e); }
-    }
-  }, 10);
-
-  // Trigger POS Thermal Print dialog
-  try { populateThermalPrintOverlay(invoiceRecord.details); } catch (e) { console.warn(e); }
-  document.body.classList.add("printing-thermal");
-  showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} saved! Opening Thermal print...`);
-
-  setTimeout(() => {
-    window.print();
-    document.body.classList.remove("printing-thermal");
+    // INSTANT FEEDBACK & UI RESET (Zero delay for mobile)
+    showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} successfully created & saved to history!`);
     resetBillingForm();
     switchTab("history");
     loadInvoicesHistoryTable();
-  }, 100);
+
+    // Non-blocking background worker for PDF generation, Telegram upload, and WhatsApp dispatch
+    (async () => {
+      try {
+        sendTelegramInvoiceNotification(invoiceRecord);
+      } catch (e) { console.warn("Telegram note:", e); }
+
+      let precomputedBase64 = null;
+      try {
+        const pdfRes = await generateInvoicePdfBlob(invoiceRecord.details);
+        precomputedBase64 = pdfRes ? pdfRes.pdfBase64 : null;
+      } catch (e) {
+        console.warn("PDF compile note:", e);
+      }
+
+      if (precomputedBase64) {
+        try {
+          uploadInvoicePdfToTelegram(invoiceRecord.details, true, precomputedBase64);
+        } catch (e) { console.warn("Telegram PDF note:", e); }
+      }
+
+      const rawPhone = getCustomerPhoneNumber(invoiceRecord.details);
+      if (rawPhone && rawPhone.toString().replace(/\D/g, '').length >= 10) {
+        try {
+          await autoDispatchInvoiceToWhatsApp(invoiceRecord.details, precomputedBase64);
+        } catch (e) {
+          console.warn("Auto WhatsApp dispatch note:", e);
+        }
+      }
+    })();
+  } catch (err) {
+    console.error("Save & Generate Invoice error:", err);
+    if (typeof showFloatingToast === 'function') {
+      showFloatingToast("❌ Error saving invoice: " + (err.message || err), "warning");
+    } else {
+      alert("Error saving invoice: " + (err.message || err));
+    }
+  } finally {
+    if (btnEl) {
+      setTimeout(() => {
+        btnEl.innerHTML = origHtml;
+        btnEl.disabled = false;
+      }, 400);
+    }
+    setTimeout(() => {
+      isSavingInvoice = false;
+    }, 500);
+  }
+};
+
+window.generateAndPrintThermal = function(btnEl) {
+  if (isSavingInvoice) return;
+  isSavingInvoice = true;
+
+  let origHtml = "";
+  if (btnEl) {
+    origHtml = btnEl.innerHTML;
+    btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Saving...`;
+    btnEl.disabled = true;
+  }
+
+  try {
+    isLocked = false;
+    localStorage.setItem("app_locked", "false");
+    localStorage.setItem("last_active_time", Date.now());
+
+    if (typeof syncBillingInputsToCurrentInvoice === 'function') {
+      syncBillingInputsToCurrentInvoice();
+    }
+
+    // Ensure invoiceNo is resolved
+    if (!currentInvoice.invoiceNo && elements.billInvoiceNo && elements.billInvoiceNo.value) {
+      currentInvoice.invoiceNo = elements.billInvoiceNo.value.trim();
+    }
+    if (!currentInvoice.invoiceNo) {
+      autoSuggestInvoiceNo();
+    }
+
+    // Ensure buyer name is resolved (fallback to "Cash Customer" so it never blocks!)
+    if (!currentInvoice.buyer) currentInvoice.buyer = {};
+    if (!currentInvoice.buyer.name && elements.billBuyerName && elements.billBuyerName.value) {
+      currentInvoice.buyer.name = elements.billBuyerName.value.trim();
+    }
+    if (!currentInvoice.buyer.name) {
+      currentInvoice.buyer.name = "Cash Customer";
+      if (elements.billBuyerName) elements.billBuyerName.value = "Cash Customer";
+    }
+
+    // Ensure items are prepared
+    if (!prepareInvoiceItemsBeforeSave()) {
+      return;
+    }
+
+    // Ensure current phone from input is captured
+    if (elements.billBuyerPhone && elements.billBuyerPhone.value) {
+      currentInvoice.buyer.phone = elements.billBuyerPhone.value.trim();
+    }
+    if (currentInvoice.buyer?.name && currentInvoice.buyer?.phone) {
+      savePhoneToPartyDb(currentInvoice.buyer.name, currentInvoice.buyer.phone);
+    }
+
+    const sellerStateCode = globalSettings.company?.stateCode || "37";
+    const buyerStateCode = currentInvoice.buyer?.stateCode || "37";
+    const breakdown = InvoiceUtils.calculateInvoiceBreakdown(currentInvoice.items, sellerStateCode, buyerStateCode);
+    let taxableVal = breakdown.taxableVal;
+    let totalCgst = breakdown.totalCgst;
+    let totalSgst = breakdown.totalSgst;
+    let totalIgst = breakdown.totalIgst;
+    const grandTotal = breakdown.roundedGrandTotal;
+    const roundOff = breakdown.roundOff;
+
+    if (!validateInvoicePaymentExceeds(currentInvoice, grandTotal)) {
+      return;
+    }
+
+    currentInvoice.taxable = taxableVal;
+    currentInvoice.cgst = totalCgst;
+    currentInvoice.sgst = totalSgst;
+    currentInvoice.igst = totalIgst;
+    currentInvoice.roundOff = roundOff;
+    currentInvoice.total = grandTotal;
+
+    // Auto-resolve invoice number collision on new invoices
+    if (!currentInvoice.isEditing && invoicesDb.some(inv => inv && inv.invoiceNo === currentInvoice.invoiceNo)) {
+      currentInvoice.invoiceNo = InvoiceUtils.getNextInvoiceNumber(invoicesDb);
+      if (elements.billInvoiceNo) elements.billInvoiceNo.value = currentInvoice.invoiceNo;
+    }
+
+    const uniqueId = currentInvoice.id || "inv_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+    currentInvoice.id = uniqueId;
+
+    const invoiceRecord = {
+      id: uniqueId,
+      invoiceNo: currentInvoice.invoiceNo,
+      invoiceDate: currentInvoice.invoiceDate,
+      customerName: currentInvoice.buyer?.name || "Cash Customer",
+      itemsCount: currentInvoice.items.length,
+      total: grandTotal,
+      details: JSON.parse(JSON.stringify(currentInvoice))
+    };
+
+    let existingIdx = -1;
+    const originalId = uniqueId;
+    if (originalId && invoicesDb.some(inv => inv && inv.id === originalId)) {
+      existingIdx = invoicesDb.findIndex(inv => inv && inv.id === originalId);
+    } else if (currentInvoice.isEditing) {
+      existingIdx = invoicesDb.findIndex(inv => inv && inv.invoiceNo === invoiceRecord.invoiceNo);
+    }
+
+    if (existingIdx > -1) {
+      reconcileProductInventoryStock(invoicesDb[existingIdx]?.details, currentInvoice);
+      invoicesDb[existingIdx] = invoiceRecord;
+    } else {
+      reconcileProductInventoryStock(null, currentInvoice);
+      invoicesDb.push(invoiceRecord);
+    }
+
+    try {
+      localStorage.setItem("invoices", JSON.stringify(invoicesDb));
+      syncDatabaseToServer("invoices", invoiceRecord);
+      if (typeof window.triggerDatabaseSync === 'function') window.triggerDatabaseSync();
+    } catch (err) {
+      console.warn("Unable to persist invoices:", err);
+    }
+
+    // Non-blocking background notification
+    setTimeout(() => {
+      try { sendTelegramInvoiceNotification(invoiceRecord); } catch (e) { console.warn(e); }
+      try { uploadInvoicePdfToTelegram(invoiceRecord.details, true); } catch (e) { console.warn(e); }
+      if (globalSettings.whatsappAutoSend !== false) {
+        try { autoDispatchInvoiceToWhatsApp(invoiceRecord.details); } catch (e) { console.warn(e); }
+      }
+    }, 10);
+
+    // Trigger POS Thermal Print dialog
+    try { populateThermalPrintOverlay(invoiceRecord.details); } catch (e) { console.warn(e); }
+    document.body.classList.add("printing-thermal");
+    showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} saved! Opening Thermal print...`);
+
+    setTimeout(() => {
+      window.print();
+      document.body.classList.remove("printing-thermal");
+      resetBillingForm();
+      switchTab("history");
+      loadInvoicesHistoryTable();
+    }, 100);
+  } catch (err) {
+    console.error("Print Thermal error:", err);
+    showFloatingToast("❌ Error saving invoice: " + (err.message || err), "warning");
+  } finally {
+    if (btnEl) {
+      setTimeout(() => {
+        btnEl.innerHTML = origHtml;
+        btnEl.disabled = false;
+      }, 400);
+    }
+    setTimeout(() => {
+      isSavingInvoice = false;
+    }, 500);
+  }
 };
 
 // --- POPULATE PRINT VIEW CANVAS (A4) ---
