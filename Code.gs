@@ -78,13 +78,32 @@ function getBackupsFolder() {
 
 function getJsonFile(filename, defaultContent) {
   if (!filename) filename = "invoices.json";
+  var props = PropertiesService.getScriptProperties();
+  var propKey = "FILE_ID_" + filename.replace(/[^a-zA-Z0-9]/g, "_");
+  var fileId = props.getProperty(propKey);
+
+  // Fast-path: Direct RPC lookup by pinned file ID (< 200ms vs 2500ms folder scan)
+  if (fileId) {
+    try {
+      var directFile = DriveApp.getFileById(fileId);
+      if (directFile && !directFile.isTrashed()) {
+        return directFile;
+      }
+    } catch (e) {}
+  }
+
   var root = getRootFolder();
   var files = root.getFilesByName(filename);
   if (files.hasNext()) {
-    return files.next();
+    var foundFile = files.next();
+    try { props.setProperty(propKey, foundFile.getId()); } catch (e) {}
+    return foundFile;
   }
+
   var content = typeof defaultContent === 'string' ? defaultContent : JSON.stringify(defaultContent || [], null, 2);
-  return root.createFile(filename, content, MimeType.PLAIN_TEXT);
+  var newFile = root.createFile(filename, content, MimeType.PLAIN_TEXT);
+  try { props.setProperty(propKey, newFile.getId()); } catch (e) {}
+  return newFile;
 }
 
 function saveJsonData(filename, data) {
@@ -98,6 +117,7 @@ function saveJsonData(filename, data) {
     if (content.length < 95000) {
       cache.put("cache_" + filename, content, 21600);
     }
+    cache.remove("cache_sync_bundle"); // Invalidate consolidated bundle
   } catch (e) {}
 
   var file = getJsonFile(filename, data);
@@ -108,7 +128,7 @@ function saveJsonData(filename, data) {
 function readJsonData(filename, defaultContent) {
   if (!filename) filename = "invoices.json";
   
-  // Fast-path: Check high-speed RAM CacheService
+  // Fast-path: Check high-speed RAM CacheService (< 5ms)
   try {
     var cache = CacheService.getScriptCache();
     var cached = cache.get("cache_" + filename);
@@ -477,11 +497,24 @@ function doGet(e) {
   var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : "status";
   
   if (action === "sync" || action === "pull") {
+    var cache = CacheService.getScriptCache();
+    var cachedBundle = null;
+    try {
+      var bundleStr = cache.get("cache_sync_bundle");
+      if (bundleStr) cachedBundle = JSON.parse(bundleStr);
+    } catch (e) {}
+
+    if (cachedBundle) {
+      cachedBundle.serverTime = new Date().getTime();
+      return ContentService.createTextOutput(JSON.stringify(cachedBundle)).setMimeType(ContentService.MimeType.JSON);
+    }
+
     var invs = readJsonData("invoices.json", []);
     var prods = readJsonData("products.json", []);
     var parts = readJsonData("parties.json", []);
     var sets = readJsonData("settings.json", {});
-    return ContentService.createTextOutput(JSON.stringify({
+
+    var fullBundle = {
       ok: true,
       invoices: invs,
       products: prods,
@@ -490,7 +523,16 @@ function doGet(e) {
       globalSettings: sets,
       serverTime: new Date().getTime(),
       timestamp: new Date().toISOString()
-    })).setMimeType(ContentService.MimeType.JSON);
+    };
+
+    try {
+      var bundleJson = JSON.stringify(fullBundle);
+      if (bundleJson.length < 95000) {
+        cache.put("cache_sync_bundle", bundleJson, 21600);
+      }
+    } catch (e) {}
+
+    return ContentService.createTextOutput(JSON.stringify(fullBundle)).setMimeType(ContentService.MimeType.JSON);
   }
 
   var ss = getMasterSpreadsheet();

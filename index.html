@@ -163,7 +163,7 @@
             <i class="fa-solid fa-triangle-exclamation"></i>
             <span id="low-stock-count-text">0 Low Stock</span>
           </div>
-          <div id="live-cloud-sync-badge" class="cloud-sync-pill synced" title="Real-time Cloud Database Sync Status">
+          <div id="live-cloud-sync-badge" class="cloud-sync-pill synced cursor-pointer" onclick="openDatabaseTelemetryModal()" title="Real-time Cloud Database Sync Status (Click for Telemetry HUD)">
             <span class="sync-dot"></span>
             <span id="sync-status-text">Cloud Synced</span>
           </div>
@@ -2159,6 +2159,79 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=138"></script>
+  <!-- DATABASE TURBO TELEMETRY MODAL -->
+  <div id="database-telemetry-modal" class="modal-overlay hidden" onclick="closeDatabaseTelemetryModal(event)" style="display: none; align-items: center; justify-content: center; z-index: 99999;">
+    <div class="modal-card" style="max-width: 540px; width: 92%; background: #ffffff; border-radius: 14px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); border: 1px solid #e2e8f0; overflow: hidden; animation: popIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);">
+      <div class="modal-header" style="background: linear-gradient(135deg, #0a4b5c, #06b6d4); color: #ffffff; padding: 18px 22px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <i class="fa-solid fa-gauge-high" style="font-size: 20px;"></i>
+          <div>
+            <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #ffffff;">Database Engine &amp; Cloud Telemetry</h3>
+            <p style="margin: 2px 0 0 0; font-size: 12px; color: #ccfbf1;">Ultra-fast multi-tier storage &amp; real-time sync</p>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeDatabaseTelemetryModal()" style="background: rgba(255,255,255,0.2); border: none; color: #ffffff; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      
+      <div class="modal-body" style="padding: 20px; font-size: 13px; color: #334155;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+          
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px;">
+            <span style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">Cloud Ping Latency</span>
+            <div id="telemetry-ping-ms" style="font-size: 14px; font-weight: 700; margin-top: 4px; color: #0f172a;">
+              <i class="fa-solid fa-spinner fa-spin"></i> Checking...
+            </div>
+          </div>
+
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px;">
+            <span style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">Outbox Write Queue</span>
+            <div id="telemetry-outbox-count" style="font-size: 14px; font-weight: 700; margin-top: 4px; color: #10b981;">
+              0 pending operations
+            </div>
+          </div>
+
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+            <i class="fa-solid fa-memory text-teal"></i>
+            <strong style="color: #0a4b5c;">In-Memory Snapshot:</strong>
+          </div>
+          <p id="telemetry-ram-count" style="margin: 0; font-size: 12.5px; color: #475569;">Calculating local items...</p>
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+            <i class="fa-solid fa-database text-teal"></i>
+            <strong style="color: #0a4b5c;">IndexedDB Client Storage:</strong>
+          </div>
+          <p id="telemetry-storage-quota" style="margin: 0; font-size: 12.5px; color: #475569;">IndexedDB High-Capacity Storage Ready</p>
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 16px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+            <i class="fa-solid fa-network-wired text-teal"></i>
+            <strong style="color: #0a4b5c;">Inter-Tab Synchronization:</strong>
+          </div>
+          <p id="telemetry-intertab-status" style="margin: 0; font-size: 12.5px; color: #475569;">Active (BroadcastChannel)</p>
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+          <button type="button" class="btn btn-primary" onclick="forcePushDatabaseToCloud(this)" style="flex: 1; padding: 10px 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;">
+            <i class="fa-solid fa-cloud-arrow-up"></i> Force Sync with Cloud
+          </button>
+        </div>
+      </div>
+      
+      <div class="modal-footer" style="padding: 12px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 11px; color: #64748b;"><i class="fa-solid fa-bolt text-teal"></i> Zero-wait offline first engine</span>
+        <button type="button" class="btn btn-secondary" onclick="closeDatabaseTelemetryModal()" style="padding: 6px 16px; font-size: 12.5px; cursor: pointer;">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="index_v5.js?v=139"></script>
 </body>
 </html>
