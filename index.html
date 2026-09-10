@@ -39,7 +39,7 @@
     }
   </script>
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=101">
+  <link rel="stylesheet" href="index.css?v=105">
   <script src="invoice_utils_v5.js?v=96"></script>
 </head>
 <body>
@@ -2009,113 +2009,153 @@
       <div class="modal-body" style="padding: 20px; max-height: 75vh; overflow-y: auto;">
         
         <!-- STATUS BANNER -->
-        <div id="wa-modal-status-card" class="wa-status-card wa-status-disconnected" style="margin-bottom: 16px;">
+        <div id="wa-modal-status-card" class="wa-status-card wa-status-connected" style="margin-bottom: 16px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 12px 14px;">
           <div class="wa-status-indicator" style="display: flex; align-items: center; gap: 8px;">
-            <span class="wa-pulse-dot" id="wa-status-dot"></span>
-            <strong id="wa-modal-status-title" style="font-size: 13.5px;">WhatsApp Bot Disconnected</strong>
+            <span class="wa-pulse-dot" id="wa-status-dot" style="background: #16a34a;"></span>
+            <strong id="wa-modal-status-title" style="font-size: 13.5px; color: #166534;">WhatsApp 1-Click Direct Share Ready</strong>
           </div>
-          <p id="wa-modal-status-desc" style="margin: 4px 0 0 0; font-size: 12px; color: #64748b;">
-            Scan QR code once to enable automated background PDF sending.
+          <p id="wa-modal-status-desc" style="margin: 4px 0 0 0; font-size: 12px; color: #475569;">
+            Bills &amp; Google Drive PDF links open directly in customer WhatsApp with 1 click. Zero setup needed.
           </p>
         </div>
 
         <!-- TAB SWITCHER -->
         <div style="display: flex; gap: 8px; margin-bottom: 14px; background: #f1f5f9; padding: 4px; border-radius: 8px;">
-          <button id="wa-tab-btn-qr" type="button" class="btn btn-sm" onclick="switchWhatsAppPairTab('qr')" style="flex: 1; font-weight: 700; font-size: 12px; background: #ffffff; color: #0a4b5c; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: none; border-radius: 6px; padding: 8px 10px;">
-            <i class="fa-solid fa-qrcode"></i> 1. Scan QR
+          <button id="wa-tab-btn-direct" type="button" class="btn btn-sm" onclick="switchWhatsAppPairTab('direct')" style="flex: 1; font-weight: 700; font-size: 12px; background: #ffffff; color: #0a4b5c; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: none; border-radius: 6px; padding: 8px 10px;">
+            <i class="fa-solid fa-paper-plane"></i> 1. Instant 1-Click
           </button>
-          <button id="wa-tab-btn-code" type="button" class="btn btn-sm" onclick="switchWhatsAppPairTab('code')" style="flex: 1; font-weight: 600; font-size: 12px; background: transparent; color: #64748b; border: none; border-radius: 6px; padding: 8px 10px;">
-            <i class="fa-solid fa-key"></i> 2. Phone Code
+          <button id="wa-tab-btn-bot" type="button" class="btn btn-sm" onclick="switchWhatsAppPairTab('bot')" style="flex: 1; font-weight: 600; font-size: 12px; background: transparent; color: #64748b; border: none; border-radius: 6px; padding: 8px 10px;">
+            <i class="fa-solid fa-robot"></i> 2. Office PC Bot (QR)
           </button>
           <button id="wa-tab-btn-history" type="button" class="btn btn-sm" onclick="switchWhatsAppPairTab('history')" style="flex: 1; font-weight: 600; font-size: 12px; background: transparent; color: #64748b; border: none; border-radius: 6px; padding: 8px 10px;">
             <i class="fa-solid fa-clock-rotate-left"></i> 3. History
           </button>
         </div>
 
-        <!-- PAIRING QR / CODE SECTION (VISIBLE WHEN WAITING / INITIALIZING) -->
-        <div id="wa-qr-section" class="wa-section-box">
-          <!-- TAB 1: QR CODE VIEW -->
-          <div id="wa-tab-content-qr">
-            <div style="text-align: center; margin-bottom: 12px;">
-              <h4 style="margin: 0 0 4px 0; color: #0a4b5c; font-size: 13.5px;"><i class="fa-solid fa-camera"></i> Point Camera at QR Code</h4>
-              <span style="font-size: 11.5px; color: #64748b;">WhatsApp &gt; Linked Devices &gt; Link a Device</span>
+        <!-- TAB 1: 1-CLICK INSTANT SHARE VIEW -->
+        <div id="wa-tab-content-direct" style="display: block;">
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 12px;">
+            <div style="display: flex; align-items: flex-start; gap: 10px;">
+              <div style="width: 34px; height: 34px; background: #25d366; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; margin-top: 2px;">
+                <i class="fa-brands fa-whatsapp"></i>
+              </div>
+              <div>
+                <strong style="color: #0f172a; font-size: 13px;">Instant 1-Click WhatsApp Dispatch</strong>
+                <p style="margin: 3px 0 0 0; font-size: 12px; color: #475569; line-height: 1.45;">
+                  When you save an invoice or click WhatsApp in your records, the customer's chat opens with the complete bill summary, UPI payment link, and Google Drive PDF receipt ready to send.
+                </p>
+              </div>
             </div>
+          </div>
 
-            <div id="wa-qr-container" style="display: flex; justify-content: center; align-items: center; min-height: 220px; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 14px; margin-bottom: 12px; position: relative;">
-              <div id="wa-qr-loading" style="text-align: center; color: #64748b;">
+          <!-- TEST DIRECT DISPATCH FORM -->
+          <div style="background: #ffffff; border: 2px dashed #0891b2; border-radius: 12px; padding: 14px; margin-bottom: 12px;">
+            <h5 style="margin: 0 0 8px 0; font-size: 12.5px; color: #0a4b5c;">
+              <i class="fa-solid fa-paper-plane text-teal"></i> Test 1-Click WhatsApp Share to Your Mobile:
+            </h5>
+            <div style="display: flex; gap: 8px;">
+              <div style="display: flex; flex: 1; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden;">
+                <span style="background: #f1f5f9; padding: 8px 10px; font-size: 12.5px; font-weight: 700; color: #475569; border-right: 1px solid #cbd5e1;">+91</span>
+                <input type="tel" id="wa-direct-test-phone" placeholder="Enter 10-digit mobile number" maxlength="10" style="flex: 1; padding: 8px 10px; font-size: 12.5px; border: none; outline: none;">
+              </div>
+              <button type="button" class="btn btn-sm btn-primary" onclick="testDirectWhatsAppClick()" style="background: #25d366; border-color: #25d366; color: white; font-weight: 700; font-size: 12px; padding: 8px 14px; white-space: nowrap; cursor: pointer;">
+                <i class="fa-solid fa-paper-plane"></i> Send Test Bill
+              </button>
+            </div>
+            <span style="font-size: 11px; color: #64748b; margin-top: 6px; display: block;">
+              Works immediately on mobile, desktop, or tablet. No server, QR scanning, or login required!
+            </span>
+          </div>
+        </div>
+
+        <!-- TAB 2: OFFICE PC BACKGROUND BOT (QR SCAN) -->
+        <div id="wa-tab-content-bot" style="display: none;">
+          <!-- CLOUD NOTICE (Visible when on Netlify) -->
+          <div id="wa-cloud-env-banner" style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px;">
+            <div style="display: flex; align-items: flex-start; gap: 10px;">
+              <i class="fa-solid fa-laptop-code" style="font-size: 18px; color: #2563eb; margin-top: 2px;"></i>
+              <div>
+                <strong style="color: #1e40af; font-size: 12.5px;">Cloud Web Version (aaryanaqua.netlify.app)</strong>
+                <p style="margin: 3px 0 8px 0; font-size: 11.5px; color: #1e3a8a; line-height: 1.4;">
+                  A cloud website cannot run a WhatsApp Web engine directly inside the browser. For silent background sending via QR scan, run the companion on your office PC:
+                </p>
+                <div style="background: white; border: 1px solid #dbeafe; border-radius: 6px; padding: 8px 10px; font-size: 11.5px; color: #334155; line-height: 1.5;">
+                  <strong>Quick Setup on your Office PC:</strong><br>
+                  1. Open your PC folder: <code style="background: #f1f5f9; padding: 2px 5px; border-radius: 4px;">c:\Users\ADMIN\Documents\fish billing</code><br>
+                  2. Double-click <strong style="color: #0891b2;">Start_WhatsApp_Bot.bat</strong><br>
+                  3. The live QR code will appear in your browser to scan!
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- LOCAL BOT RUNNING CONTAINER (VISIBLE WHEN RUNNING ON LOCALHOST OR CONNECTED) -->
+          <div id="wa-bot-local-container">
+            <div id="wa-qr-container" style="display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 200px; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 14px; margin-bottom: 12px; text-align: center;">
+              <div id="wa-qr-placeholder" style="color: #64748b;">
+                <i class="fa-solid fa-qrcode fa-3x" style="margin-bottom: 10px; color: #94a3b8;"></i>
+                <p style="margin: 0; font-size: 13px; font-weight: 600; color: #334155;">Office PC QR Pairing</p>
+                <p style="margin: 4px 0 10px 0; font-size: 11.5px; color: #64748b;">
+                  Launch the bot on your computer to generate a live QR code.
+                </p>
+                <button type="button" class="btn btn-sm btn-primary" onclick="initiateWhatsAppConnect(false)" style="background: #0891b2; border-color: #0891b2; color: white; padding: 6px 14px; font-weight: 600; font-size: 12px;">
+                  <i class="fa-solid fa-rotate"></i> Connect Local Bot
+                </button>
+              </div>
+              <div id="wa-qr-loading" style="display: none; color: #64748b;">
                 <i class="fa-solid fa-spinner fa-spin fa-2x" style="margin-bottom: 8px; color: #0891b2;"></i>
-                <p style="margin: 0; font-size: 13px; font-weight: 500;">Starting WhatsApp Web Engine...<br><span style="font-size: 11px; color: #94a3b8;">Click below to load or refresh QR</span></p>
+                <p style="margin: 0; font-size: 13px; font-weight: 500;">Connecting to Local WhatsApp Engine...<br><span style="font-size: 11px; color: #94a3b8;">Waiting for local companion response</span></p>
               </div>
               <img id="wa-qr-image" src="" alt="WhatsApp QR Code" style="display: none; width: 220px; height: 220px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); background: white; padding: 6px;">
             </div>
 
-            <div style="display: flex; justify-content: center; gap: 8px;">
-              <button class="btn btn-sm btn-primary" onclick="initiateWhatsAppConnect(true)" style="background: #25d366; border-color: #25d366; color: white; padding: 8px 16px; font-weight: 600;">
-                <i class="fa-solid fa-rotate"></i> Refresh QR Code
-              </button>
-            </div>
-          </div>
-
-          <!-- TAB 2: PHONE PAIRING CODE VIEW -->
-          <div id="wa-tab-content-code" style="display: none;">
-            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px; margin-bottom: 12px; font-size: 12px; color: #166534;">
-              <strong>Alternative Guaranteed Pairing:</strong> If camera scan fails, generate an 8-character code and type it into WhatsApp on your phone!
-            </div>
-
-            <div style="margin-bottom: 12px;">
-              <label style="display: block; font-size: 11.5px; font-weight: 700; color: #334155; margin-bottom: 6px;">YOUR WHATSAPP PHONE NUMBER</label>
-              <div style="display: flex; gap: 8px;">
-                <span style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px; font-size: 13px; font-weight: 700; color: #475569;">+91</span>
-                <input type="tel" id="wa-pair-phone-input" placeholder="Enter 10-digit mobile number" maxlength="10" style="flex: 1; padding: 8px 12px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px;">
-                <button type="button" class="btn btn-primary" onclick="requestWhatsAppPairCode()" style="background: #0891b2; border-color: #0891b2; color: white; font-weight: 600; font-size: 12.5px; padding: 8px 14px;">
-                  <i class="fa-solid fa-key"></i> Get Code
+            <!-- PHONE PAIRING CODE ACCORDION -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <strong style="font-size: 11.5px; color: #334155;"><i class="fa-solid fa-key text-teal"></i> Alternative: Link with Phone Number Code</strong>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <span style="background: #e2e8f0; border-radius: 4px; padding: 6px 8px; font-size: 12px; font-weight: 700; color: #475569;">+91</span>
+                <input type="tel" id="wa-pair-phone-input" placeholder="Enter 10 digits" maxlength="10" style="flex: 1; padding: 6px 8px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 4px;">
+                <button type="button" class="btn btn-xs btn-primary" onclick="requestWhatsAppPairCode()" style="background: #0891b2; border: none; color: white; padding: 6px 10px; font-size: 11.5px; font-weight: 600;">
+                  Get 8-Digit Code
                 </button>
               </div>
-            </div>
-
-            <div id="wa-code-display-box" style="display: none; text-align: center; background: #f8fafc; border: 2px dashed #0891b2; border-radius: 12px; padding: 16px; margin-bottom: 12px;">
-              <span style="font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Your 8-Digit WhatsApp Linking Code</span>
-              <div id="wa-code-text" style="font-size: 28px; font-family: monospace; font-weight: 800; color: #0a4b5c; letter-spacing: 4px; margin: 8px 0;">---- ----</div>
-              <p style="font-size: 11.5px; color: #475569; margin: 0;">
-                👉 Open WhatsApp &gt; <strong>Linked Devices</strong> &gt; <strong>Link a Device</strong> &gt; Tap <strong>"Link with phone number instead"</strong> at bottom &gt; Type code above!
-              </p>
-            </div>
-          </div>
-
-          <!-- HELPFUL LINK LIMIT NOTICE -->
-          <div style="margin-top: 14px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 10px 12px; font-size: 11px; color: #92400e; display: flex; align-items: flex-start; gap: 8px;">
-            <i class="fa-solid fa-circle-info" style="font-size: 14px; margin-top: 1px; color: #d97706;"></i>
-            <span><strong>Tip:</strong> WhatsApp allows a maximum of 4 active linked devices. If you see <em>"Couldn't link device"</em> on your phone, open WhatsApp &gt; <strong>Linked Devices</strong>, tap any old inactive device, and tap <strong>Log out</strong>, then try again.</span>
-          </div>
-        </div>
-
-        <!-- CONNECTED DEVICE SECTION (VISIBLE WHEN CONNECTED) -->
-        <div id="wa-connected-section" class="wa-section-box hidden">
-          <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 10px; padding: 14px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <div style="width: 40px; height: 40px; background: #10b981; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px;">
-                <i class="fa-solid fa-check"></i>
-              </div>
-              <div>
-                <h4 style="margin: 0; color: #065f46; font-size: 14px;" id="wa-device-name">Linked WhatsApp Bot</h4>
-                <p style="margin: 2px 0 0 0; font-size: 12px; color: #047857;" id="wa-device-phone">+91 Connected</p>
+              <div id="wa-code-display-box" style="display: none; text-align: center; margin-top: 10px; background: white; border: 1px dashed #0891b2; border-radius: 6px; padding: 8px;">
+                <span style="font-size: 10.5px; color: #64748b;">Type this code into WhatsApp on your phone:</span>
+                <div id="wa-code-text" style="font-size: 22px; font-family: monospace; font-weight: 800; color: #0a4b5c; letter-spacing: 3px; margin: 4px 0;">---- ----</div>
               </div>
             </div>
-            <button class="btn btn-sm btn-rose" onclick="disconnectWhatsAppBot()" title="Log out linked phone" style="padding: 6px 12px; font-size: 12px;">
-              <i class="fa-solid fa-right-from-bracket"></i> Unlink
-            </button>
           </div>
 
-          <!-- TEST MESSAGE TOOL -->
-          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 12px;">
-            <h5 style="margin: 0 0 8px 0; font-size: 12.5px; color: #334155;"><i class="fa-solid fa-paper-plane text-teal"></i> Test Background Sending</h5>
-            <div style="display: flex; gap: 8px;">
-              <input type="text" id="wa-test-phone" placeholder="Enter 10-digit mobile number" style="flex: 1; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
-              <button class="btn btn-sm btn-primary" onclick="sendWhatsAppTestMessage()" style="font-size: 12px;">
-                <i class="fa-solid fa-paper-plane"></i> Send Test
+          <!-- CONNECTED DEVICE SECTION (VISIBLE WHEN BOT IS CONNECTED) -->
+          <div id="wa-connected-section" style="display: none;">
+            <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 10px; padding: 14px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 40px; height: 40px; background: #10b981; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px;">
+                  <i class="fa-solid fa-check"></i>
+                </div>
+                <div>
+                  <h4 style="margin: 0; color: #065f46; font-size: 14px;" id="wa-device-name">Linked WhatsApp Bot</h4>
+                  <p style="margin: 2px 0 0 0; font-size: 12px; color: #047857;" id="wa-device-phone">+91 Connected</p>
+                </div>
+              </div>
+              <button class="btn btn-sm btn-rose" onclick="disconnectWhatsAppBot()" title="Log out linked phone" style="padding: 6px 12px; font-size: 12px;">
+                <i class="fa-solid fa-right-from-bracket"></i> Unlink
               </button>
             </div>
-            <p id="wa-test-status" style="margin: 6px 0 0 0; font-size: 11px; color: #64748b;"></p>
+
+            <!-- TEST MESSAGE TOOL -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 12px;">
+              <h5 style="margin: 0 0 8px 0; font-size: 12.5px; color: #334155;"><i class="fa-solid fa-paper-plane text-teal"></i> Test Background Bot Sending</h5>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" id="wa-test-phone" placeholder="Enter 10-digit mobile number" style="flex: 1; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                <button class="btn btn-sm btn-primary" onclick="sendWhatsAppTestMessage()" style="font-size: 12px;">
+                  <i class="fa-solid fa-paper-plane"></i> Send Test
+                </button>
+              </div>
+              <p id="wa-test-status" style="margin: 6px 0 0 0; font-size: 11px; color: #64748b;"></p>
+            </div>
           </div>
         </div>
 
@@ -2229,6 +2269,6 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=142"></script>
+  <script src="index_v5.js?v=150"></script>
 </body>
 </html>

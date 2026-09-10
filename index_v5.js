@@ -3933,31 +3933,53 @@ function updateWhatsAppBotModalUI(data) {
   const statusCard = document.getElementById("wa-modal-status-card");
   const statusTitle = document.getElementById("wa-modal-status-title");
   const statusDesc = document.getElementById("wa-modal-status-desc");
-  const qrSection = document.getElementById("wa-qr-section");
-  const connectedSection = document.getElementById("wa-connected-section");
+  const qrPlaceholder = document.getElementById("wa-qr-placeholder");
   const qrLoading = document.getElementById("wa-qr-loading");
   const qrImage = document.getElementById("wa-qr-image");
+  const connectedSection = document.getElementById("wa-connected-section");
+  const localContainer = document.getElementById("wa-bot-local-container");
+  const cloudBanner = document.getElementById("wa-cloud-env-banner");
   const deviceName = document.getElementById("wa-device-name");
   const devicePhone = document.getElementById("wa-device-phone");
 
-  if (!statusCard) return;
-  statusCard.classList.remove("wa-status-connected", "wa-status-waiting", "wa-status-disconnected");
+  const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-  if (data.status === "CONNECTED") {
-    statusCard.classList.add("wa-status-connected");
-    if (statusTitle) statusTitle.textContent = "WhatsApp Background Bot Active";
-    if (statusDesc) statusDesc.textContent = "Your phone is linked. Bills & PDF documents will be delivered silently in background.";
-    if (qrSection) { qrSection.classList.add("hidden"); qrSection.style.display = "none"; }
-    if (connectedSection) { connectedSection.classList.remove("hidden"); connectedSection.style.display = "block"; }
+  if (cloudBanner) {
+    cloudBanner.style.display = isLocalHost ? "none" : "block";
+  }
+
+  if (data && data.status === "CONNECTED") {
+    if (statusCard) {
+      statusCard.style.background = "#ecfdf5";
+      statusCard.style.borderColor = "#a7f3d0";
+    }
+    if (statusTitle) {
+      statusTitle.textContent = "WhatsApp Background Bot Active";
+      statusTitle.style.color = "#065f46";
+    }
+    if (statusDesc) {
+      statusDesc.textContent = "Your phone is linked. Bills & PDF documents will be delivered silently in background.";
+      statusDesc.style.color = "#047857";
+    }
+    if (localContainer) localContainer.style.display = "none";
+    if (connectedSection) connectedSection.style.display = "block";
     if (deviceName) deviceName.textContent = data.clientInfo?.pushname || "Linked WhatsApp Account";
     if (devicePhone) devicePhone.textContent = data.clientInfo?.phone ? `+${data.clientInfo.phone} (Active)` : "Connected";
-  } else if (data.status === "CODE_READY" && data.pairingCode) {
-    statusCard.classList.add("wa-status-waiting");
-    if (statusTitle) statusTitle.textContent = "Enter 8-Digit Pairing Code on Mobile";
-    if (statusDesc) statusDesc.textContent = "Open WhatsApp on your phone > Linked Devices > Link with phone number instead > enter the code below.";
-    if (qrSection) { qrSection.classList.remove("hidden"); qrSection.style.display = "block"; }
-    if (connectedSection) { connectedSection.classList.add("hidden"); connectedSection.style.display = "none"; }
-    switchWhatsAppPairTab('code');
+  } else if (data && data.status === "CODE_READY" && data.pairingCode) {
+    if (statusCard) {
+      statusCard.style.background = "#fffbeb";
+      statusCard.style.borderColor = "#fef3c7";
+    }
+    if (statusTitle) {
+      statusTitle.textContent = "Enter 8-Digit Pairing Code on Mobile";
+      statusTitle.style.color = "#92400e";
+    }
+    if (statusDesc) {
+      statusDesc.textContent = "Open WhatsApp on phone > Linked Devices > Link with phone number instead > enter code below.";
+      statusDesc.style.color = "#b45309";
+    }
+    if (connectedSection) connectedSection.style.display = "none";
+    if (localContainer) localContainer.style.display = "block";
     const codeBox = document.getElementById("wa-code-display-box");
     const codeText = document.getElementById("wa-code-text");
     if (codeBox) codeBox.style.display = "block";
@@ -3965,53 +3987,76 @@ function updateWhatsAppBotModalUI(data) {
       const c = data.pairingCode;
       codeText.textContent = c.length === 8 ? `${c.slice(0, 4)} - ${c.slice(4)}` : c;
     }
-  } else if (data.status === "QR_READY" && data.qrCodeDataUrl) {
-    statusCard.classList.add("wa-status-waiting");
-    if (statusTitle) statusTitle.textContent = "Waiting for WhatsApp QR Scan...";
-    if (statusDesc) statusDesc.textContent = "Open WhatsApp on your phone > Linked Devices > Point camera at QR code.";
-    if (qrSection) { qrSection.classList.remove("hidden"); qrSection.style.display = "block"; }
-    if (connectedSection) { connectedSection.classList.add("hidden"); connectedSection.style.display = "none"; }
+    switchWhatsAppPairTab('bot');
+  } else if (data && data.status === "QR_READY" && data.qrCodeDataUrl) {
+    if (statusCard) {
+      statusCard.style.background = "#fffbeb";
+      statusCard.style.borderColor = "#fef3c7";
+    }
+    if (statusTitle) {
+      statusTitle.textContent = "Point Camera at QR Code to Link";
+      statusTitle.style.color = "#92400e";
+    }
+    if (statusDesc) {
+      statusDesc.textContent = "Open WhatsApp on phone > Linked Devices > Link a Device > scan the QR code below.";
+      statusDesc.style.color = "#b45309";
+    }
+    if (connectedSection) connectedSection.style.display = "none";
+    if (localContainer) localContainer.style.display = "block";
+    if (qrPlaceholder) qrPlaceholder.style.display = "none";
     if (qrLoading) qrLoading.style.display = "none";
     if (qrImage) {
       qrImage.src = data.qrCodeDataUrl;
       qrImage.style.display = "block";
     }
-  } else if (data.status === "INITIALIZING" || data.status === "AUTHENTICATING") {
-    statusCard.classList.add("wa-status-waiting");
-    if (statusTitle) statusTitle.textContent = data.status === "AUTHENTICATING" ? "Authenticating Session..." : "Starting WhatsApp Engine...";
-    if (statusDesc) statusDesc.textContent = "Please wait a moment while the local WhatsApp Web bridge initializes...";
-    if (qrSection) { qrSection.classList.remove("hidden"); qrSection.style.display = "block"; }
-    if (connectedSection) { connectedSection.classList.add("hidden"); connectedSection.style.display = "none"; }
+    switchWhatsAppPairTab('bot');
+  } else if (data && (data.status === "INITIALIZING" || data.status === "AUTHENTICATING")) {
+    if (statusCard) {
+      statusCard.style.background = "#f0fdf4";
+      statusCard.style.borderColor = "#bbf7d0";
+    }
+    if (statusTitle) {
+      statusTitle.textContent = data.status === "AUTHENTICATING" ? "Authenticating WhatsApp Session..." : "Connecting to Local Engine...";
+      statusTitle.style.color = "#166534";
+    }
+    if (statusDesc) {
+      statusDesc.textContent = "Waiting for local companion response...";
+      statusDesc.style.color = "#475569";
+    }
+    if (connectedSection) connectedSection.style.display = "none";
+    if (localContainer) localContainer.style.display = "block";
+    if (qrPlaceholder) qrPlaceholder.style.display = "none";
     if (qrLoading) qrLoading.style.display = "block";
     if (qrImage) qrImage.style.display = "none";
   } else {
-    statusCard.classList.add("wa-status-connected");
+    // Default 1-Click Direct Share Ready
+    if (statusCard) {
+      statusCard.style.background = "#f0fdf4";
+      statusCard.style.borderColor = "#bbf7d0";
+    }
     if (statusTitle) {
       statusTitle.textContent = "WhatsApp 1-Click Direct Share Ready";
       statusTitle.style.color = "#166534";
     }
     if (statusDesc) {
-      statusDesc.textContent = "1-Click WhatsApp dispatch is active. Bills open directly in WhatsApp Web or on your mobile device.";
+      statusDesc.textContent = "Bills & Google Drive PDF links open directly in customer WhatsApp with 1 click. Zero setup needed.";
       statusDesc.style.color = "#475569";
     }
-    if (qrSection) { qrSection.classList.remove("hidden"); qrSection.style.display = "block"; }
-    if (connectedSection) { connectedSection.classList.add("hidden"); connectedSection.style.display = "none"; }
+    if (connectedSection) connectedSection.style.display = "none";
+    if (localContainer) localContainer.style.display = "block";
     if (qrLoading) qrLoading.style.display = "none";
     if (qrImage) qrImage.style.display = "none";
-    const directBox = document.getElementById("wa-direct-mode-box");
-    if (directBox) directBox.style.display = "block";
+    if (qrPlaceholder) qrPlaceholder.style.display = "block";
   }
 }
 
 window.switchWhatsAppPairTab = function(tab) {
-  const qrTabBtn = document.getElementById("wa-tab-btn-qr");
-  const codeTabBtn = document.getElementById("wa-tab-btn-code");
+  const directTabBtn = document.getElementById("wa-tab-btn-direct");
+  const botTabBtn = document.getElementById("wa-tab-btn-bot");
   const historyTabBtn = document.getElementById("wa-tab-btn-history");
 
-  const qrSection = document.getElementById("wa-qr-section");
-  const connectedSection = document.getElementById("wa-connected-section");
-  const qrContent = document.getElementById("wa-tab-content-qr");
-  const codeContent = document.getElementById("wa-tab-content-code");
+  const directContent = document.getElementById("wa-tab-content-direct");
+  const botContent = document.getElementById("wa-tab-content-bot");
   const historyContent = document.getElementById("wa-tab-content-history");
 
   const setBtnStyle = (btn, active) => {
@@ -4027,31 +4072,24 @@ window.switchWhatsAppPairTab = function(tab) {
     }
   };
 
-  setBtnStyle(qrTabBtn, tab === 'qr');
-  setBtnStyle(codeTabBtn, tab === 'code');
+  setBtnStyle(directTabBtn, tab === 'direct');
+  setBtnStyle(botTabBtn, tab === 'bot' || tab === 'qr' || tab === 'code');
   setBtnStyle(historyTabBtn, tab === 'history');
 
   if (tab === 'history') {
-    if (qrSection) qrSection.style.display = "none";
-    if (connectedSection) connectedSection.style.display = "none";
+    if (directContent) directContent.style.display = "none";
+    if (botContent) botContent.style.display = "none";
     if (historyContent) historyContent.style.display = "block";
     loadWhatsAppActivityLogs();
-  } else {
+  } else if (tab === 'bot' || tab === 'qr' || tab === 'code') {
+    if (directContent) directContent.style.display = "none";
     if (historyContent) historyContent.style.display = "none";
-    if (whatsappBotStatus && whatsappBotStatus.isReady) {
-      if (connectedSection) connectedSection.style.display = "block";
-      if (qrSection) qrSection.style.display = "none";
-    } else {
-      if (connectedSection) connectedSection.style.display = "none";
-      if (qrSection) qrSection.style.display = "block";
-      if (tab === 'code') {
-        if (qrContent) qrContent.style.display = "none";
-        if (codeContent) codeContent.style.display = "block";
-      } else {
-        if (qrContent) qrContent.style.display = "block";
-        if (codeContent) codeContent.style.display = "none";
-      }
-    }
+    if (botContent) botContent.style.display = "block";
+  } else {
+    // Default direct
+    if (historyContent) historyContent.style.display = "none";
+    if (botContent) botContent.style.display = "none";
+    if (directContent) directContent.style.display = "block";
   }
 };
 
@@ -4389,6 +4427,7 @@ function _openWhatsAppBotModalActual() {
     whatsappBotStatus = { status: 'DISCONNECTED', isReady: false, webDirect: true };
     updateWhatsAppBotPillUI(whatsappBotStatus);
     updateWhatsAppBotModalUI(whatsappBotStatus);
+    switchWhatsAppPairTab('direct');
   }
 }
 
@@ -4415,17 +4454,35 @@ window.closeWhatsAppBotModal = function(e) {
 };
 
 window.initiateWhatsAppConnect = async function(forceClean = false) {
+  const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   const qrLoading = document.getElementById("wa-qr-loading");
+  const qrPlaceholder = document.getElementById("wa-qr-placeholder");
   const qrImage = document.getElementById("wa-qr-image");
+
+  if (!isLocalHost) {
+    if (qrLoading) qrLoading.style.display = "none";
+    if (qrPlaceholder) qrPlaceholder.style.display = "block";
+    switchWhatsAppPairTab('direct');
+    if (typeof showFloatingToast === 'function') {
+      showFloatingToast("ℹ️ Cloud Web App: 1-Click WhatsApp Direct Share is active! To run background bot (QR scan), launch Start_WhatsApp_Bot.bat on your PC.", 4500);
+    }
+    return;
+  }
+
+  if (qrPlaceholder) qrPlaceholder.style.display = "none";
   if (qrLoading) qrLoading.style.display = "block";
   if (qrImage) qrImage.style.display = "none";
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     const res = await fetch('/api/whatsapp/connect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ forceClean })
+      body: JSON.stringify({ forceClean }),
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
     const data = await res.json();
     if (data) {
       whatsappBotStatus = data;
@@ -4433,7 +4490,12 @@ window.initiateWhatsAppConnect = async function(forceClean = false) {
       updateWhatsAppBotModalUI(whatsappBotStatus);
     }
   } catch (e) {
-    console.error("Connect error:", e);
+    console.warn("Connect error / timeout:", e.message);
+    if (qrLoading) qrLoading.style.display = "none";
+    if (qrPlaceholder) qrPlaceholder.style.display = "block";
+    if (typeof showFloatingToast === 'function') {
+      showFloatingToast("⚠️ Local WhatsApp Bot is not running yet. Double-click Start_WhatsApp_Bot.bat to start.", 4500);
+    }
   }
 };
 
@@ -6667,15 +6729,28 @@ window.importDataBackupJSON = function(event) {
   });
 })();
 
-window.testDirectWhatsAppClick = function() {
-  const entered = prompt("📱 Enter 10-digit customer mobile number to test WhatsApp 1-Click share:", "91");
-  if (entered && entered.trim().replace(/\D/g, '').length >= 10) {
-    const cleanPhone = formatWhatsAppPhone(entered.trim());
-    const testMsg = "🐟 *Aaryan Aqua Needs* - Test notification from your billing system.\n\nWhatsApp 1-Click direct sharing is working perfectly! ✅";
+window.testDirectWhatsAppClick = function(overridePhone) {
+  let phone = overridePhone;
+  if (!phone) {
+    const input = document.getElementById("wa-direct-test-phone");
+    if (input && input.value.trim()) {
+      phone = input.value.trim();
+    }
+  }
+  if (!phone) {
+    phone = prompt("📱 Enter 10-digit mobile number to test WhatsApp 1-Click share:", "91");
+  }
+  if (phone && phone.toString().replace(/\D/g, '').length >= 10) {
+    const cleanPhone = formatWhatsAppPhone(phone.toString().trim());
+    const company = (globalSettings?.company?.name || "AARYAN AQUA NEEDS").toUpperCase();
+    const upi = (globalSettings?.upiId || "7386262139@upi").trim();
+    const testMsg = `🏛️ *${company}*\n-----------------------------------\n🔔 *WhatsApp 1-Click Notification Test*\n\n✅ 1-Click WhatsApp billing dispatch is active and ready!\nInvoices and Google Drive PDF receipts are sent instantly.\n\n💳 *UPI ID:* ${upi}\n📞 *Support:* 7386262139\n\n_Thank you for choosing ${company}!_`;
     const waUrl = launchWhatsAppWebOrApp(cleanPhone, testMsg);
     openWhatsAppDirect(waUrl);
     if (typeof showFloatingToast === 'function') {
       showFloatingToast("📲 WhatsApp 1-Click test launched successfully!", 3500);
     }
+  } else if (phone !== null) {
+    alert("Please enter a valid 10-digit mobile number.");
   }
 };
