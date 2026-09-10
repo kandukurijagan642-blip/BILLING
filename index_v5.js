@@ -1021,6 +1021,7 @@ function seedDatabasesIfEmpty() {
         rate: 3600.00,
         gstRate: 5,
         discount: 42.50,
+        stock: 100,
         updatedAt: new Date().toISOString()
       },
       {
@@ -1032,6 +1033,7 @@ function seedDatabasesIfEmpty() {
         rate: 850.00,
         gstRate: 5,
         discount: 10.00,
+        stock: 100,
         updatedAt: new Date().toISOString()
       },
       {
@@ -1043,6 +1045,7 @@ function seedDatabasesIfEmpty() {
         rate: 450.00,
         gstRate: 12,
         discount: 5.00,
+        stock: 100,
         updatedAt: new Date().toISOString()
       }
     ];
@@ -1170,6 +1173,20 @@ function loadAllDatabases() {
     localStorage.setItem("parties", JSON.stringify(partiesDb));
   }
 
+  // Ensure all products have valid default stock if undefined, null or empty
+  let updatedProductsStock = false;
+  productsDb.forEach(p => {
+    if (p.stock === undefined || p.stock === null || p.stock === "") {
+      p.stock = 100;
+      updatedProductsStock = true;
+    }
+  });
+  if (updatedProductsStock) {
+    try {
+      localStorage.setItem("products", JSON.stringify(productsDb));
+    } catch (e) {}
+  }
+
   let updatedInvoices = false;
   invoicesDb.forEach(inv => {
     if (inv.buyer && inv.buyer.address && inv.buyer.address.includes("GUNTURU")) {
@@ -1238,7 +1255,9 @@ function validateInvoiceStockAvailability(newItems, oldItems = []) {
   
   const tempStockMap = {};
   productsDb.forEach(p => {
-    tempStockMap[p.description] = p.stock !== undefined ? parseInt(p.stock, 10) : 0;
+    if (p.stock !== undefined && p.stock !== null && p.stock !== "" && !isNaN(parseInt(p.stock, 10))) {
+      tempStockMap[p.description] = parseInt(p.stock, 10);
+    }
   });
 
   if (oldItems) {
@@ -1250,10 +1269,12 @@ function validateInvoiceStockAvailability(newItems, oldItems = []) {
   }
 
   for (let newItem of newItems) {
-    const availableTempStock = tempStockMap[newItem.description] !== undefined ? tempStockMap[newItem.description] : 0;
-    if (parseInt(newItem.quantity, 10) > availableTempStock) {
-      alert(`❌ Error: Insufficient stock for ${newItem.description}!\nAvailable stock: ${availableTempStock}\nRequested: ${newItem.quantity}\n\nInvoice generation cancelled!`);
-      return false;
+    if (tempStockMap[newItem.description] !== undefined) {
+      const availableTempStock = tempStockMap[newItem.description];
+      if (parseInt(newItem.quantity, 10) > availableTempStock) {
+        alert(`❌ Error: Insufficient stock for ${newItem.description}!\nAvailable stock: ${availableTempStock}\nRequested: ${newItem.quantity}\n\nInvoice generation cancelled!`);
+        return false;
+      }
     }
   }
   return true;
@@ -1600,6 +1621,45 @@ function bindBillingFormInputs() {
     });
   });
 
+  window.syncBillingInputsToCurrentInvoice = function() {
+    if (!currentInvoice) currentInvoice = {};
+    if (elements.billInvoiceNo && elements.billInvoiceNo.value) currentInvoice.invoiceNo = elements.billInvoiceNo.value.trim();
+    if (elements.billInvoiceDate && elements.billInvoiceDate.value) currentInvoice.invoiceDate = elements.billInvoiceDate.value;
+    if (elements.billInvoiceType && elements.billInvoiceType.value) currentInvoice.invoiceType = elements.billInvoiceType.value;
+    if (elements.billHeaderLogo && elements.billHeaderLogo.value) currentInvoice.headerLogo = elements.billHeaderLogo.value;
+    if (elements.billBuyerOrderNo && elements.billBuyerOrderNo.value) currentInvoice.buyerOrderNo = elements.billBuyerOrderNo.value.trim();
+    if (elements.billBuyerOrderDate && elements.billBuyerOrderDate.value) currentInvoice.buyerOrderDate = elements.billBuyerOrderDate.value;
+    if (elements.billTransportMode && elements.billTransportMode.value) currentInvoice.transportMode = elements.billTransportMode.value;
+    if (elements.billDestination && elements.billDestination.value) {
+      currentInvoice.destination = elements.billDestination.value;
+      currentInvoice.supplyPlace = elements.billDestination.value;
+    }
+    if (elements.billSupplyStateCode && elements.billSupplyStateCode.value) currentInvoice.supplyStateCode = elements.billSupplyStateCode.value;
+    if (elements.billPaymentStatus && elements.billPaymentStatus.value) currentInvoice.paymentStatus = elements.billPaymentStatus.value;
+    if (elements.billPaymentMode && elements.billPaymentMode.value) currentInvoice.paymentMode = elements.billPaymentMode.value;
+    if (elements.billPaidAmount && elements.billPaidAmount.value !== "") currentInvoice.paidAmount = parseFloat(elements.billPaidAmount.value) || 0;
+    if (elements.billBalancePaid && elements.billBalancePaid.value !== "") currentInvoice.balancePaid = parseFloat(elements.billBalancePaid.value) || 0;
+    if (elements.billPaymentDate && elements.billPaymentDate.value) currentInvoice.paymentDate = elements.billPaymentDate.value;
+
+    if (!currentInvoice.buyer) currentInvoice.buyer = {};
+    if (elements.billBuyerName && elements.billBuyerName.value) currentInvoice.buyer.name = elements.billBuyerName.value.trim();
+    if (elements.billBuyerAddress && elements.billBuyerAddress.value) currentInvoice.buyer.address = elements.billBuyerAddress.value.trim();
+    if (elements.billBuyerGstin && elements.billBuyerGstin.value) currentInvoice.buyer.gstin = elements.billBuyerGstin.value.trim();
+    if (elements.billBuyerPhone && elements.billBuyerPhone.value) currentInvoice.buyer.phone = elements.billBuyerPhone.value.trim();
+    if (elements.billBuyerState && elements.billBuyerState.value) currentInvoice.buyer.state = elements.billBuyerState.value;
+    if (elements.billBuyerStateCode && elements.billBuyerStateCode.value) currentInvoice.buyer.stateCode = elements.billBuyerStateCode.value;
+
+    if (!currentInvoice.consignee) currentInvoice.consignee = {};
+    if (elements.billConsigneeName && elements.billConsigneeName.value) currentInvoice.consignee.name = elements.billConsigneeName.value.trim();
+    if (elements.billConsigneeAddress && elements.billConsigneeAddress.value) currentInvoice.consignee.address = elements.billConsigneeAddress.value.trim();
+    if (elements.billConsigneeGstin && elements.billConsigneeGstin.value) currentInvoice.consignee.gstin = elements.billConsigneeGstin.value.trim();
+    if (elements.billConsigneePhone && elements.billConsigneePhone.value) currentInvoice.consignee.phone = elements.billConsigneePhone.value.trim();
+    if (elements.billConsigneeState && elements.billConsigneeState.value) currentInvoice.consignee.state = elements.billConsigneeState.value;
+    if (elements.billConsigneeStateCode && elements.billConsigneeStateCode.value) currentInvoice.consignee.stateCode = elements.billConsigneeStateCode.value;
+
+    if (!Array.isArray(currentInvoice.items)) currentInvoice.items = [];
+  };
+
   window.calculateBillingItemNetVal = function() {
     const rate = parseFloat(elements.billItemRate ? elements.billItemRate.value : 0) || 0;
     const discount = parseFloat(elements.billItemDiscount ? elements.billItemDiscount.value : 0) || 0;
@@ -1717,12 +1777,16 @@ function populateBillingSelectors() {
 }
 
 window.copyBuyerToConsignee = function() {
-  currentInvoice.consignee = { ...currentInvoice.buyer };
-  elements.billConsigneeName.value = currentInvoice.consignee.name;
-  elements.billConsigneeAddress.value = currentInvoice.consignee.address;
-  elements.billConsigneeGstin.value = currentInvoice.consignee.gstin;
-  elements.billConsigneeState.value = currentInvoice.consignee.state;
-  elements.billConsigneeStateCode.value = currentInvoice.consignee.stateCode;
+  if (typeof syncBillingInputsToCurrentInvoice === 'function') {
+    syncBillingInputsToCurrentInvoice();
+  }
+  currentInvoice.consignee = { ...(currentInvoice.buyer || {}) };
+  if (elements.billConsigneeName) elements.billConsigneeName.value = currentInvoice.consignee.name || "";
+  if (elements.billConsigneeAddress) elements.billConsigneeAddress.value = currentInvoice.consignee.address || "";
+  if (elements.billConsigneeGstin) elements.billConsigneeGstin.value = currentInvoice.consignee.gstin || "";
+  if (elements.billConsigneePhone) elements.billConsigneePhone.value = currentInvoice.consignee.phone || "";
+  if (elements.billConsigneeState) elements.billConsigneeState.value = currentInvoice.consignee.state || "Andhra Pradesh";
+  if (elements.billConsigneeStateCode) elements.billConsigneeStateCode.value = currentInvoice.consignee.stateCode || "37";
   
   calculateSummaryAndTable();
 };
@@ -1782,6 +1846,9 @@ window.handlePaymentStatusChange = function() {
 
 // --- ADD BILLING ROW CONTROLLER ---
 window.addBillingItemRow = function() {
+  if (!currentInvoice) currentInvoice = {};
+  if (!Array.isArray(currentInvoice.items)) currentInvoice.items = [];
+
   const prodId = elements.billItemSelect.value;
   let desc = "";
   const prod = productsDb.find(p => p.id === prodId);
@@ -1808,16 +1875,18 @@ window.addBillingItemRow = function() {
     return;
   }
 
-  // Hard stock block check
-  if (prod) {
-    const currentInCart = currentInvoice.items
-      .filter(item => item.description === prod.description)
-      .reduce((sum, item) => sum + item.quantity, 0);
-    const totalRequested = currentInCart + qty;
-    const availableStock = prod.stock !== undefined ? parseInt(prod.stock, 10) : 0;
-    if (totalRequested > availableStock) {
-      alert(`❌ Error: Insufficient stock for ${prod.description}!\nAvailable stock: ${availableStock}\nRequested in invoice: ${totalRequested}`);
-      return;
+  // Hard stock block check (only for items with tracked stock)
+  if (prod && prod.stock !== undefined && prod.stock !== null && prod.stock !== "") {
+    const availableStock = parseInt(prod.stock, 10);
+    if (!isNaN(availableStock)) {
+      const currentInCart = currentInvoice.items
+        .filter(item => item.description === prod.description)
+        .reduce((sum, item) => sum + item.quantity, 0);
+      const totalRequested = currentInCart + qty;
+      if (totalRequested > availableStock) {
+        alert(`❌ Error: Insufficient stock for ${prod.description}!\nAvailable stock: ${availableStock}\nRequested in invoice: ${totalRequested}`);
+        return;
+      }
     }
   }
 
@@ -1865,6 +1934,9 @@ window.deleteBillingItemRow = function(id) {
 
 // --- CALCULATE SUMMARY & TABLE ---
 function calculateSummaryAndTable() {
+  if (!currentInvoice) currentInvoice = {};
+  if (!Array.isArray(currentInvoice.items)) currentInvoice.items = [];
+
   elements.billingItemsTbody.innerHTML = "";
   
   if (currentInvoice.items.length === 0) {
@@ -1875,7 +1947,7 @@ function calculateSummaryAndTable() {
 
   let totalQty = 0;
   const sellerStateCode = globalSettings.company?.stateCode || "37";
-  const buyerStateCode = currentInvoice.buyer.stateCode || "37";
+  const buyerStateCode = currentInvoice.buyer?.stateCode || "37";
   const breakdown = InvoiceUtils.calculateInvoiceBreakdown(currentInvoice.items, sellerStateCode, buyerStateCode);
   let taxableVal = breakdown.taxableVal;
   let totalCgst = breakdown.totalCgst;
@@ -2048,16 +2120,36 @@ function resetBillingForm() {
 }
 
 // --- GENERATE INVOICE CONTROLLER ---
-window.generateAndPrintInvoice = function() {
+window.generateAndPrintInvoice = function(btnEl) {
+  if (typeof syncBillingInputsToCurrentInvoice === 'function') {
+    syncBillingInputsToCurrentInvoice();
+  }
+
+  // Ensure invoiceNo is resolved
+  if (!currentInvoice.invoiceNo && elements.billInvoiceNo && elements.billInvoiceNo.value) {
+    currentInvoice.invoiceNo = elements.billInvoiceNo.value.trim();
+  }
   if (!currentInvoice.invoiceNo) {
-    alert("Please provide an Invoice Number!");
-    return;
+    autoSuggestInvoiceNo();
+  }
+
+  // Ensure buyer name is resolved
+  if (!currentInvoice.buyer) currentInvoice.buyer = {};
+  if (!currentInvoice.buyer.name && elements.billBuyerName && elements.billBuyerName.value) {
+    currentInvoice.buyer.name = elements.billBuyerName.value.trim();
   }
   if (!currentInvoice.buyer.name) {
     alert("Please provide a Buyer Customer Name!");
+    if (elements.billBuyerName) elements.billBuyerName.focus();
     return;
   }
-  if (currentInvoice.items.length === 0) {
+
+  // If items array is empty but a product was selected in the item row, auto-add it!
+  if ((!currentInvoice.items || currentInvoice.items.length === 0) && elements.billItemSelect && elements.billItemSelect.value) {
+    window.addBillingItemRow();
+  }
+
+  if (!currentInvoice.items || currentInvoice.items.length === 0) {
     alert("Please add at least one line item!");
     return;
   }
@@ -2077,7 +2169,7 @@ window.generateAndPrintInvoice = function() {
   }
 
   const sellerStateCode = globalSettings.company?.stateCode || "37";
-  const buyerStateCode = currentInvoice.buyer.stateCode || "37";
+  const buyerStateCode = currentInvoice.buyer?.stateCode || "37";
   const breakdown = InvoiceUtils.calculateInvoiceBreakdown(currentInvoice.items, sellerStateCode, buyerStateCode);
   let taxableVal = breakdown.taxableVal;
   let totalCgst = breakdown.totalCgst;
@@ -2104,7 +2196,7 @@ window.generateAndPrintInvoice = function() {
     id: uniqueId,
     invoiceNo: currentInvoice.invoiceNo,
     invoiceDate: currentInvoice.invoiceDate,
-    customerName: currentInvoice.buyer.name,
+    customerName: currentInvoice.buyer?.name || "Customer",
     itemsCount: currentInvoice.items.length,
     total: grandTotal,
     details: JSON.parse(JSON.stringify(currentInvoice))
@@ -2137,11 +2229,11 @@ window.generateAndPrintInvoice = function() {
   } catch (err) {
     console.warn("Unable to persist invoices:", err);
   }
-  sendTelegramInvoiceNotification(invoiceRecord);
-  populateA4PrintOverlay(invoiceRecord.details);
-  uploadInvoicePdfToTelegram(invoiceRecord.details, true);
+  try { sendTelegramInvoiceNotification(invoiceRecord); } catch (e) { console.warn(e); }
+  try { populateA4PrintOverlay(invoiceRecord.details); } catch (e) { console.warn(e); }
+  try { uploadInvoicePdfToTelegram(invoiceRecord.details, true); } catch (e) { console.warn(e); }
   if (globalSettings.whatsappAutoSend !== false) {
-    autoDispatchInvoiceToWhatsApp(invoiceRecord.details);
+    try { autoDispatchInvoiceToWhatsApp(invoiceRecord.details); } catch (e) { console.warn(e); }
   }
 
   setTimeout(() => {
@@ -2153,15 +2245,35 @@ window.generateAndPrintInvoice = function() {
 };
 
 window.saveAndGenerateInvoiceOnly = async function(btnEl) {
+  if (typeof syncBillingInputsToCurrentInvoice === 'function') {
+    syncBillingInputsToCurrentInvoice();
+  }
+
+  // Ensure invoiceNo is resolved
+  if (!currentInvoice.invoiceNo && elements.billInvoiceNo && elements.billInvoiceNo.value) {
+    currentInvoice.invoiceNo = elements.billInvoiceNo.value.trim();
+  }
   if (!currentInvoice.invoiceNo) {
-    alert("Please provide an Invoice Number!");
-    return;
+    autoSuggestInvoiceNo();
+  }
+
+  // Ensure buyer name is resolved
+  if (!currentInvoice.buyer) currentInvoice.buyer = {};
+  if (!currentInvoice.buyer.name && elements.billBuyerName && elements.billBuyerName.value) {
+    currentInvoice.buyer.name = elements.billBuyerName.value.trim();
   }
   if (!currentInvoice.buyer.name) {
     alert("Please provide a Buyer Customer Name!");
+    if (elements.billBuyerName) elements.billBuyerName.focus();
     return;
   }
-  if (currentInvoice.items.length === 0) {
+
+  // If items array is empty but a product was selected in the item row, auto-add it!
+  if ((!currentInvoice.items || currentInvoice.items.length === 0) && elements.billItemSelect && elements.billItemSelect.value) {
+    window.addBillingItemRow();
+  }
+
+  if (!currentInvoice.items || currentInvoice.items.length === 0) {
     alert("Please add at least one line item!");
     return;
   }
@@ -2178,7 +2290,7 @@ window.saveAndGenerateInvoiceOnly = async function(btnEl) {
   }
 
   const sellerStateCode = globalSettings.company?.stateCode || "37";
-  const buyerStateCode = currentInvoice.buyer.stateCode || "37";
+  const buyerStateCode = currentInvoice.buyer?.stateCode || "37";
   const breakdown = InvoiceUtils.calculateInvoiceBreakdown(currentInvoice.items, sellerStateCode, buyerStateCode);
   let taxableVal = breakdown.taxableVal;
   let totalCgst = breakdown.totalCgst;
@@ -2205,7 +2317,7 @@ window.saveAndGenerateInvoiceOnly = async function(btnEl) {
     id: uniqueId,
     invoiceNo: currentInvoice.invoiceNo,
     invoiceDate: currentInvoice.invoiceDate,
-    customerName: currentInvoice.buyer.name,
+    customerName: currentInvoice.buyer?.name || "Customer",
     itemsCount: currentInvoice.items.length,
     total: grandTotal,
     details: JSON.parse(JSON.stringify(currentInvoice))
@@ -2232,7 +2344,7 @@ window.saveAndGenerateInvoiceOnly = async function(btnEl) {
   }
 
   // Auto-save phone to Party database for future billing
-  if (currentInvoice.buyer.name && currentInvoice.buyer.phone) {
+  if (currentInvoice.buyer?.name && currentInvoice.buyer?.phone) {
     savePhoneToPartyDb(currentInvoice.buyer.name, currentInvoice.buyer.phone);
   }
 
@@ -2247,16 +2359,18 @@ window.saveAndGenerateInvoiceOnly = async function(btnEl) {
   let origBtnHtml = "";
   if (btnEl && btnEl.tagName) {
     origBtnHtml = btnEl.innerHTML;
-    btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Generating PDF & Dispatching...`;
+    btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Saving Invoice...`;
     btnEl.disabled = true;
   }
 
   // Live rotating state on top header pill
-  updateWhatsAppBotPillUI({
-    ...whatsappBotStatus,
-    isDispatching: true,
-    dispatchingDetails: { filename: `Invoice #${invoiceRecord.invoiceNo}`, phone: currentInvoice.buyer.phone }
-  });
+  try {
+    updateWhatsAppBotPillUI({
+      ...whatsappBotStatus,
+      isDispatching: true,
+      dispatchingDetails: { filename: `Invoice #${invoiceRecord.invoiceNo}`, phone: currentInvoice.buyer?.phone }
+    });
+  } catch (e) {}
 
   // 1. Generate PDF once cleanly and store to disk & cloud
   let precomputedBase64 = null;
@@ -2268,29 +2382,37 @@ window.saveAndGenerateInvoiceOnly = async function(btnEl) {
   }
 
   // 2. Telegram Notifications in background
-  sendTelegramInvoiceNotification(invoiceRecord);
-  if (precomputedBase64) {
-    uploadInvoicePdfToTelegram(invoiceRecord.details, true, precomputedBase64);
+  try {
+    sendTelegramInvoiceNotification(invoiceRecord);
+    if (precomputedBase64) {
+      uploadInvoicePdfToTelegram(invoiceRecord.details, true, precomputedBase64);
+    }
+  } catch (e) {
+    console.warn("Telegram notification note:", e);
   }
 
   // 3. Direct WhatsApp dispatch to the customer's phone number
   const rawPhone = getCustomerPhoneNumber(invoiceRecord.details);
   let sentViaWa = false;
-  if (rawPhone && rawPhone.toString().replace(/\D/g, '').length >= 10) {
-    sentViaWa = await autoDispatchInvoiceToWhatsApp(invoiceRecord.details, precomputedBase64);
+  try {
+    if (rawPhone && rawPhone.toString().replace(/\D/g, '').length >= 10) {
+      sentViaWa = await autoDispatchInvoiceToWhatsApp(invoiceRecord.details, precomputedBase64);
+    }
+  } catch (e) {
+    console.warn("Auto WhatsApp dispatch note:", e);
   }
 
   // Restore status pill after dispatch
-  updateWhatsAppBotPillUI(whatsappBotStatus);
+  try { updateWhatsAppBotPillUI(whatsappBotStatus); } catch (e) {}
 
   if (btnEl && btnEl.tagName) {
-    btnEl.innerHTML = `<i class="fa-solid fa-check text-success"></i> Saved & Sent!`;
+    btnEl.innerHTML = `<i class="fa-solid fa-check text-success"></i> Saved & Done!`;
   }
 
   if (sentViaWa) {
     showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} generated & sent directly to +${formatWhatsAppPhone(rawPhone)} via WhatsApp!`);
-  } else if (!rawPhone || rawPhone.toString().replace(/\D/g, '').length < 10) {
-    showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} saved to history! (No phone number entered)`);
+  } else {
+    showFloatingToast(`✅ Invoice #${invoiceRecord.invoiceNo} successfully generated & saved to history!`);
   }
 
   setTimeout(() => {
@@ -2305,15 +2427,35 @@ window.saveAndGenerateInvoiceOnly = async function(btnEl) {
 };
 
 window.generateAndPrintThermal = function(btnEl) {
+  if (typeof syncBillingInputsToCurrentInvoice === 'function') {
+    syncBillingInputsToCurrentInvoice();
+  }
+
+  // Ensure invoiceNo is resolved
+  if (!currentInvoice.invoiceNo && elements.billInvoiceNo && elements.billInvoiceNo.value) {
+    currentInvoice.invoiceNo = elements.billInvoiceNo.value.trim();
+  }
   if (!currentInvoice.invoiceNo) {
-    alert("Please provide an Invoice Number!");
-    return;
+    autoSuggestInvoiceNo();
+  }
+
+  // Ensure buyer name is resolved
+  if (!currentInvoice.buyer) currentInvoice.buyer = {};
+  if (!currentInvoice.buyer.name && elements.billBuyerName && elements.billBuyerName.value) {
+    currentInvoice.buyer.name = elements.billBuyerName.value.trim();
   }
   if (!currentInvoice.buyer.name) {
     alert("Please provide a Buyer Customer Name!");
+    if (elements.billBuyerName) elements.billBuyerName.focus();
     return;
   }
-  if (currentInvoice.items.length === 0) {
+
+  // If items array is empty but a product was selected in the item row, auto-add it!
+  if ((!currentInvoice.items || currentInvoice.items.length === 0) && elements.billItemSelect && elements.billItemSelect.value) {
+    window.addBillingItemRow();
+  }
+
+  if (!currentInvoice.items || currentInvoice.items.length === 0) {
     alert("Please add at least one line item!");
     return;
   }
@@ -2333,7 +2475,7 @@ window.generateAndPrintThermal = function(btnEl) {
   }
 
   const sellerStateCode = globalSettings.company?.stateCode || "37";
-  const buyerStateCode = currentInvoice.buyer.stateCode || "37";
+  const buyerStateCode = currentInvoice.buyer?.stateCode || "37";
   const breakdown = InvoiceUtils.calculateInvoiceBreakdown(currentInvoice.items, sellerStateCode, buyerStateCode);
   let taxableVal = breakdown.taxableVal;
   let totalCgst = breakdown.totalCgst;
@@ -2360,7 +2502,7 @@ window.generateAndPrintThermal = function(btnEl) {
     id: uniqueId,
     invoiceNo: currentInvoice.invoiceNo,
     invoiceDate: currentInvoice.invoiceDate,
-    customerName: currentInvoice.buyer.name,
+    customerName: currentInvoice.buyer?.name || "Customer",
     itemsCount: currentInvoice.items.length,
     total: grandTotal,
     details: JSON.parse(JSON.stringify(currentInvoice))
@@ -2393,14 +2535,14 @@ window.generateAndPrintThermal = function(btnEl) {
   } catch (err) {
     console.warn("Unable to persist invoices:", err);
   }
-  sendTelegramInvoiceNotification(invoiceRecord);
-  uploadInvoicePdfToTelegram(invoiceRecord.details, true);
+  try { sendTelegramInvoiceNotification(invoiceRecord); } catch (e) { console.warn(e); }
+  try { uploadInvoicePdfToTelegram(invoiceRecord.details, true); } catch (e) { console.warn(e); }
   if (globalSettings.whatsappAutoSend !== false) {
-    autoDispatchInvoiceToWhatsApp(invoiceRecord.details);
+    try { autoDispatchInvoiceToWhatsApp(invoiceRecord.details); } catch (e) { console.warn(e); }
   }
 
   // Trigger POS Thermal Print dialog
-  populateThermalPrintOverlay(invoiceRecord.details);
+  try { populateThermalPrintOverlay(invoiceRecord.details); } catch (e) { console.warn(e); }
   document.body.classList.add("printing-thermal");
   setTimeout(() => {
     window.print();
@@ -2732,9 +2874,18 @@ window.printSavedInvoiceThermal = function(id) {
 
 // --- HIGH-FIDELITY PDF EXPORTER & SHARE ENGINE ---
 window.downloadInvoicePdf = function(invoiceData, btnEl = null) {
+  if (!invoiceData && typeof syncBillingInputsToCurrentInvoice === 'function') {
+    syncBillingInputsToCurrentInvoice();
+  }
+  if (!invoiceData) {
+    if (!currentInvoice.invoiceNo) autoSuggestInvoiceNo();
+    if ((!currentInvoice.items || currentInvoice.items.length === 0) && elements.billItemSelect && elements.billItemSelect.value) {
+      window.addBillingItemRow();
+    }
+  }
   const details = invoiceData || currentInvoice;
   if (!details.invoiceNo || !details.buyer?.name || !details.items || details.items.length === 0) {
-    alert("Please fill invoice details and add items before exporting PDF!");
+    alert("Please fill invoice details and add at least one line item before exporting PDF!");
     return;
   }
 
@@ -3804,8 +3955,12 @@ async function generateInvoicePdfBlob(details) {
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
 
-  const blob = await html2pdf().set(opt).from(printWrapper).outputPdf('blob');
-  printWrapper.style.display = "none";
+  let blob = null;
+  try {
+    blob = await html2pdf().set(opt).from(printWrapper).outputPdf('blob');
+  } finally {
+    printWrapper.style.display = "none";
+  }
 
   const reader = new FileReader();
   const pdfBase64 = await new Promise((resolve) => {
@@ -3916,13 +4071,8 @@ async function autoDispatchInvoiceToWhatsApp(details, precomputedBase64 = null) 
       console.warn("Auto WhatsApp dispatch notice:", err);
     }
   } else {
-    // If bot is offline, but phone is present, open 1-click WhatsApp fallback
-    if (globalSettings.whatsappFallback1Click !== false) {
-      const waUrl = launchWhatsAppWebOrApp(cleanPhone, text);
-      window.open(waUrl, "_blank");
-      showFloatingToast(`📱 WhatsApp Bot offline: Opened 1-Click WhatsApp for +${cleanPhone}`);
-      return true;
-    }
+    // When bot is offline, do NOT trigger popups on mobile during background auto-dispatch
+    console.log("WhatsApp Bot is offline. Automatic silent background dispatch skipped.");
   }
   return false;
 }
