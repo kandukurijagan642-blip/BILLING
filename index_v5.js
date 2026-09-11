@@ -277,6 +277,7 @@ function processRealtimeSyncMessage(msg, source = 'mesh') {
       if (window.AaryanDB && window.AaryanDB.isReady) AaryanDB.deleteInvoice(msg.id);
       if (typeof loadInvoicesHistoryTable === 'function') loadInvoicesHistoryTable();
       if (typeof updateDashboardOverview === 'function') updateDashboardOverview();
+      if (typeof autoSuggestInvoiceNo === 'function') autoSuggestInvoiceNo(true, msg.invoiceNo);
     } else if (msg.recordType === 'product') {
       productsDb = productsDb.filter(p => p && p.id !== msg.id);
       try { localStorage.setItem("products", JSON.stringify(productsDb)); } catch (e) {}
@@ -913,6 +914,12 @@ function deletePartyFromServer(id) {
   window.lastSyncETag = null;
   broadcastInterTabEvent('record_deleted', { recordType: 'party', id });
   pushDirectToGoogleDatabase("delete_record", { type: "party", id });
+}
+
+function deleteInvoiceFromServer(id, invoiceNo) {
+  window.lastSyncETag = null;
+  broadcastInterTabEvent('record_deleted', { recordType: 'invoice', id, invoiceNo });
+  pushDirectToGoogleDatabase("delete_record", { type: "invoice", id, invoiceNo });
 }
 
 // ============================================================================
@@ -3657,16 +3664,59 @@ window.updatePrintTitleHeader = function() {
   }
 };
 
-function autoSuggestInvoiceNo(force = false) {
-  if (currentInvoice && currentInvoice.isEditing && !force) return;
-  const nextStr = InvoiceUtils.getNextInvoiceNumber(invoicesDb);
-  const isTyping = elements.billInvoiceNo && document.activeElement === elements.billInvoiceNo;
-  const isCollisionWithSync = invoicesDb.some(inv => inv && String(inv.invoiceNo).trim() === String(elements.billInvoiceNo?.value || "").trim());
+function triggerInvoiceNumberRollbackEffect(oldVal, newVal) {
+  try {
+    if (!elements.billInvoiceNo) return;
+    elements.billInvoiceNo.classList.remove('invoice-no-rollback-active');
+    void elements.billInvoiceNo.offsetWidth;
+    elements.billInvoiceNo.classList.add('invoice-no-rollback-active');
+    setTimeout(() => {
+      if (elements.billInvoiceNo) elements.billInvoiceNo.classList.remove('invoice-no-rollback-active');
+    }, 2500);
 
-  if (force || !currentInvoice.invoiceNo || !elements.billInvoiceNo || !elements.billInvoiceNo.value || (!isTyping && isCollisionWithSync)) {
+    if (typeof showFloatingToast === 'function' && oldVal && oldVal !== newVal) {
+      showFloatingToast(`🔄 Sequence updated: Invoice #${newVal} auto-assigned (freed from deleted #${oldVal})`, "info");
+    }
+  } catch (err) {
+    console.warn("Invoice rollback effect notice:", err);
+  }
+}
+
+function autoSuggestInvoiceNo(force = false, preferInvoiceNo = null) {
+  if (currentInvoice && currentInvoice.isEditing && !force) return;
+  const nextStr = InvoiceUtils.getNextInvoiceNumber(invoicesDb, { preferInvoiceNo });
+  const currentVal = elements.billInvoiceNo ? String(elements.billInvoiceNo.value || "").trim() : "";
+  const isTyping = elements.billInvoiceNo && document.activeElement === elements.billInvoiceNo;
+  const isCollisionWithSync = invoicesDb.some(inv => inv && String(inv.invoiceNo || (inv.details && inv.details.invoiceNo) || "").trim() === currentVal);
+
+  // Advanced sequence rollback detection:
+  // If the invoice number on screen is higher than the calculated next sequence (e.g. 0008 vs 0007),
+  // detect the gap/overshoot caused by an invoice deletion and directly roll back!
+  let isSequenceOvershoot = false;
+  const currentNumMatch = currentVal.match(/\d+$/);
+  const nextNumMatch = nextStr.match(/\d+$/);
+  if (currentNumMatch && nextNumMatch) {
+    const curNum = parseInt(currentNumMatch[0], 10);
+    const nxtNum = parseInt(nextNumMatch[0], 10);
+    if (curNum > nxtNum) {
+      isSequenceOvershoot = true;
+    }
+  }
+
+  const shouldUpdate = force || 
+                       !currentInvoice.invoiceNo || 
+                       !elements.billInvoiceNo || 
+                       !elements.billInvoiceNo.value || 
+                       (!isTyping && (isCollisionWithSync || isSequenceOvershoot));
+
+  if (shouldUpdate) {
+    const oldVal = currentVal || currentInvoice.invoiceNo;
     currentInvoice.invoiceNo = nextStr;
-    if (elements.billInvoiceNo && !isTyping) {
+    if (elements.billInvoiceNo && (!isTyping || force)) {
       elements.billInvoiceNo.value = currentInvoice.invoiceNo;
+      if (oldVal && oldVal !== nextStr && (isSequenceOvershoot || force)) {
+        triggerInvoiceNumberRollbackEffect(oldVal, nextStr);
+      }
     }
   }
 
@@ -3676,6 +3726,11 @@ function autoSuggestInvoiceNo(force = false) {
   }
   if (elements.billInvoiceDate && !elements.billInvoiceDate.value) {
     elements.billInvoiceDate.value = today;
+  }
+
+  const invNoEl = document.getElementById("p-bill-invoice-no");
+  if (invNoEl && elements.billInvoiceNo) {
+    invNoEl.textContent = "#" + (elements.billInvoiceNo.value || "0000");
   }
 }
 
@@ -7129,8 +7184,11 @@ window.printSavedInvoice = function(id) {
 };
 
 window.deleteSavedInvoice = function(id) {
-  if (confirm("Delete this invoice record from history?")) {
-    const inv = invoicesDb.find(i => i.id === id);
+  const inv = invoicesDb.find(i => i && i.id === id);
+  const invNo = inv ? (inv.invoiceNo || (inv.details && inv.details.invoiceNo) || "") : "";
+  const displayNo = invNo ? `#${invNo}` : "this";
+
+  if (confirm(`Delete ${displayNo} invoice record from history?\n\nSequence will automatically roll back directly to this invoice number.`)) {
     if (inv) {
       reconcileProductInventoryStock(inv.details, null);
     }
@@ -7147,16 +7205,29 @@ window.deleteSavedInvoice = function(id) {
       localStorage.setItem("deleted_invoice_ids", JSON.stringify(deletedIds));
     }
 
-    invoicesDb = invoicesDb.filter(inv => inv.id !== id);
+    invoicesDb = invoicesDb.filter(inv => inv && inv.id !== id);
     localStorage.setItem("invoices", JSON.stringify(invoicesDb));
     if (window.AaryanDB && typeof window.AaryanDB.deleteInvoice === 'function') {
       window.AaryanDB.deleteInvoice(id);
     }
-    AaryanDB.enqueueOutbox("invoice", "delete_record", { type: "invoice", id });
-    AaryanDB.drainOutbox();
+
+    // Direct cross-browser & inter-tab broadcast (<30ms)
+    window.lastSyncETag = null;
+    broadcastInterTabEvent('record_deleted', { recordType: 'invoice', id, invoiceNo: invNo });
+
+    // High-speed direct Google Cloud push
+    if (typeof pushDirectToGoogleDatabase === 'function') {
+      pushDirectToGoogleDatabase("delete_record", { type: "invoice", id, invoiceNo: invNo });
+    }
+
+    // Offline outbox queue fallback
+    if (window.AaryanDB && typeof window.AaryanDB.enqueueOutbox === 'function') {
+      AaryanDB.enqueueOutbox("invoice", "delete_record", { type: "invoice", id, invoiceNo: invNo });
+      AaryanDB.drainOutbox();
+    }
     
-    // Automatically recalculate next invoice number sequence
-    autoSuggestInvoiceNo();
+    // DIRECTLY AND IMMEDIATELY roll back invoice sequence on screen!
+    autoSuggestInvoiceNo(true, invNo);
     
     updateDashboardOverview();
     if (!elements.historyInvoicesBody.closest('.content-view').classList.contains('hidden')) {

@@ -79,19 +79,77 @@
     };
   }
 
-  function getNextInvoiceNumber(existingInvoices = []) {
-    let maxNo = 0;
+  function getNextInvoiceNumber(existingInvoices = [], options = {}) {
+    const { fillGaps = true, preferInvoiceNo = null } = (typeof options === 'object' && options !== null) ? options : {};
+    
+    const parsedNums = [];
+    const numSet = new Set();
+    let detectedPrefix = '';
+    let maxPadding = 4;
 
     (existingInvoices || []).forEach((inv) => {
       const rawStr = String(inv?.invoiceNo || (inv?.details && inv?.details.invoiceNo) || '').trim();
-      const num = parseInt(rawStr, 10);
-      if (!Number.isNaN(num) && num > maxNo) {
-        maxNo = num;
+      if (!rawStr) return;
+      
+      const match = rawStr.match(/^(.*?)(\d+)$/);
+      if (match) {
+        const prefix = match[1];
+        const num = parseInt(match[2], 10);
+        const padLen = match[2].length;
+        if (!Number.isNaN(num) && num > 0) {
+          parsedNums.push(num);
+          numSet.add(num);
+          if (prefix && !detectedPrefix) detectedPrefix = prefix;
+          if (padLen > maxPadding) maxPadding = padLen;
+        }
+      } else {
+        const num = parseInt(rawStr, 10);
+        if (!Number.isNaN(num) && num > 0) {
+          parsedNums.push(num);
+          numSet.add(num);
+        }
       }
     });
 
-    const nextNum = maxNo > 0 ? maxNo + 1 : 1;
-    return nextNum.toString().padStart(4, '0');
+    // If a preferred invoice number was suggested (e.g. specifically deleted invoice number)
+    // and that number is now free, directly prioritize it!
+    if (preferInvoiceNo) {
+      const prefMatch = String(preferInvoiceNo).trim().match(/^(.*?)(\d+)$/);
+      if (prefMatch) {
+        const prefNum = parseInt(prefMatch[2], 10);
+        if (!Number.isNaN(prefNum) && !numSet.has(prefNum)) {
+          const prefPrefix = prefMatch[1] || detectedPrefix;
+          const prefPad = Math.max(prefMatch[2].length, maxPadding);
+          return prefPrefix + prefNum.toString().padStart(prefPad, '0');
+        }
+      }
+    }
+
+    if (parsedNums.length === 0) {
+      return detectedPrefix + (1).toString().padStart(maxPadding, '0');
+    }
+
+    const sortedNums = Array.from(numSet).sort((a, b) => a - b);
+    const minNum = sortedNums[0];
+    const maxNum = sortedNums[sortedNums.length - 1];
+
+    const startNum = (minNum > 50) ? minNum : 1;
+    let nextNum = null;
+
+    if (fillGaps) {
+      for (let i = startNum; i <= maxNum; i++) {
+        if (!numSet.has(i)) {
+          nextNum = i;
+          break;
+        }
+      }
+    }
+
+    if (nextNum === null) {
+      nextNum = maxNum + 1;
+    }
+
+    return detectedPrefix + nextNum.toString().padStart(maxPadding, '0');
   }
 
   global.InvoiceUtils = {
