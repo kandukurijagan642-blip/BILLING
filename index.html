@@ -42,7 +42,7 @@
     }
   </script>
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=175">
+  <link rel="stylesheet" href="index.css?v=180">
   <script src="invoice_utils_v5.js?v=96"></script>
 </head>
 <body>
@@ -227,7 +227,7 @@
             </div>
             <div class="stat-details">
               <span class="stat-label">TOTAL INVOICES</span>
-              <h3 id="stat-total-invoices">0</h3>
+              <h3 id="stat-total-invoices">3</h3>
               <span class="stat-trend text-teal"><i class="fa-solid fa-arrow-trend-up"></i> Live Invoices</span>
             </div>
           </div>
@@ -238,7 +238,7 @@
             </div>
             <div class="stat-details">
               <span class="stat-label">TOTAL BILLING VOLUME</span>
-              <h3 id="stat-total-amount">₹ 0.00</h3>
+              <h3 id="stat-total-amount">₹ 85,725.00</h3>
               <span class="stat-trend text-green"><i class="fa-solid fa-circle-check"></i> Gross Sales</span>
             </div>
           </div>
@@ -249,7 +249,7 @@
             </div>
             <div class="stat-details">
               <span class="stat-label">ACTIVE PRODUCTS</span>
-              <h3 id="stat-total-products">0</h3>
+              <h3 id="stat-total-products">3</h3>
               <span class="stat-trend text-cyan"><i class="fa-solid fa-boxes-stacked"></i> Catalog Items</span>
             </div>
           </div>
@@ -260,7 +260,7 @@
             </div>
             <div class="stat-details">
               <span class="stat-label">SAVED PARTIES</span>
-              <h3 id="stat-total-parties">0</h3>
+              <h3 id="stat-total-parties">1</h3>
               <span class="stat-trend text-purple"><i class="fa-solid fa-user-check"></i> Registered Clients</span>
             </div>
           </div>
@@ -311,7 +311,52 @@
               </thead>
               <tbody id="dashboard-recent-invoices-body">
                 <tr>
-                  <td colspan="7" class="text-center text-muted">No invoices generated yet.</td>
+                  <td style="font-weight: 700; color: var(--primary-teal);">#0003</td>
+                  <td>11-Sept-2026</td>
+                  <td style="font-weight: 600;">DEVI FISHERIES LIMITED</td>
+                  <td class="text-center">2</td>
+                  <td style="text-align: right; font-weight: 700;">₹ 62,730.00</td>
+                  <td class="text-center"><span class="badge-status badge-unpaid">Unpaid</span></td>
+                  <td class="actions-cell">
+                    <button class="action-btn edit" onclick="editSavedInvoice('inv_1789124481510_975')" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
+                    <button class="action-btn print" onclick="printSavedInvoice('inv_1789124481510_975')" title="Print A4"><i class="fa-solid fa-print"></i></button>
+                    <button class="action-btn print" onclick="printSavedInvoiceThermal('inv_1789124481510_975')" title="Print Thermal POS"><i class="fa-solid fa-receipt"></i></button>
+                    <button class="action-btn share btn-whatsapp" onclick="shareInvoiceToWhatsApp('inv_1789124481510_975', this)" title="Share PDF via WhatsApp"><i class="fa-brands fa-whatsapp" style="color: #16a34a;"></i></button>
+                    <button class="action-btn share btn-telegram" onclick="shareInvoiceToTelegram('inv_1789124481510_975', this)" title="Share PDF to Telegram"><i class="fa-brands fa-telegram" style="color: #0284c7;"></i></button>
+                    <button class="action-btn delete" onclick="deleteSavedInvoice('inv_1789124481510_975')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 700; color: var(--primary-teal);">#0002</td>
+                  <td>11-Sept-2026</td>
+                  <td style="font-weight: 600;">DEVI FISHERIES LIMITED</td>
+                  <td class="text-center">2</td>
+                  <td style="text-align: right; font-weight: 700;">₹ 10,395.00</td>
+                  <td class="text-center"><span class="badge-status badge-unpaid">Unpaid</span></td>
+                  <td class="actions-cell">
+                    <button class="action-btn edit" onclick="editSavedInvoice('inv_1789115952504_350')" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
+                    <button class="action-btn print" onclick="printSavedInvoice('inv_1789115952504_350')" title="Print A4"><i class="fa-solid fa-print"></i></button>
+                    <button class="action-btn print" onclick="printSavedInvoiceThermal('inv_1789115952504_350')" title="Print Thermal POS"><i class="fa-solid fa-receipt"></i></button>
+                    <button class="action-btn share btn-whatsapp" onclick="shareInvoiceToWhatsApp('inv_1789115952504_350', this)" title="Share PDF via WhatsApp"><i class="fa-brands fa-whatsapp" style="color: #16a34a;"></i></button>
+                    <button class="action-btn share btn-telegram" onclick="shareInvoiceToTelegram('inv_1789115952504_350', this)" title="Share PDF to Telegram"><i class="fa-brands fa-telegram" style="color: #0284c7;"></i></button>
+                    <button class="action-btn delete" onclick="deleteSavedInvoice('inv_1789115952504_350')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 700; color: var(--primary-teal);">#0001</td>
+                  <td>11-Sept-2026</td>
+                  <td style="font-weight: 600;">DEVI FISHERIES LIMITED</td>
+                  <td class="text-center">1</td>
+                  <td style="text-align: right; font-weight: 700;">₹ 12,600.00</td>
+                  <td class="text-center"><span class="badge-status badge-partial">Partial</span></td>
+                  <td class="actions-cell">
+                    <button class="action-btn edit" onclick="editSavedInvoice('inv_1789114669169_340')" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
+                    <button class="action-btn print" onclick="printSavedInvoice('inv_1789114669169_340')" title="Print A4"><i class="fa-solid fa-print"></i></button>
+                    <button class="action-btn print" onclick="printSavedInvoiceThermal('inv_1789114669169_340')" title="Print Thermal POS"><i class="fa-solid fa-receipt"></i></button>
+                    <button class="action-btn share btn-whatsapp" onclick="shareInvoiceToWhatsApp('inv_1789114669169_340', this)" title="Share PDF via WhatsApp"><i class="fa-brands fa-whatsapp" style="color: #16a34a;"></i></button>
+                    <button class="action-btn share btn-telegram" onclick="shareInvoiceToTelegram('inv_1789114669169_340', this)" title="Share PDF to Telegram"><i class="fa-brands fa-telegram" style="color: #0284c7;"></i></button>
+                    <button class="action-btn delete" onclick="deleteSavedInvoice('inv_1789114669169_340')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -840,7 +885,7 @@
       <section id="view-history" class="content-view hidden">
         <div class="card-box">
           <div class="card-box-header" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
-            <h3>Invoice History (<span id="history-count"><i class="fa-solid fa-spinner fa-spin" style="font-size: 11px;"></i></span>)</h3>
+            <h3>Invoice History (<span id="history-count">3</span>)</h3>
             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
               <select id="filter-history-status" onchange="filterInvoicesByStatus()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--card-bg, #0f172a); color: var(--text-color, #f8fafc); font-size: 13px; cursor: pointer;">
                 <option value="all">All Payment Statuses</option>
@@ -872,11 +917,51 @@
               </thead>
               <tbody id="history-invoices-body">
                 <tr>
-                  <td colspan="7" class="text-center" style="padding: 40px 16px; color: #64748b;">
-                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;">
-                      <i class="fa-solid fa-circle-notch fa-spin fa-2x" style="color: #0284c7;"></i>
-                      <div style="font-weight: 600; font-size: 14px; color: #334155;">Loading Invoices...</div>
-                    </div>
+                  <td style="font-weight: 700; color: var(--primary-teal);">#0003</td>
+                  <td>11-Sept-2026</td>
+                  <td style="font-weight: 600;">DEVI FISHERIES LIMITED</td>
+                  <td class="text-center">2</td>
+                  <td style="text-align: right; font-weight: 700;">₹ 62,730.00</td>
+                  <td class="text-center"><span class="badge-status badge-unpaid">Unpaid</span></td>
+                  <td class="actions-cell">
+                    <button class="action-btn edit" onclick="editSavedInvoice('inv_1789124481510_975')" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
+                    <button class="action-btn print" onclick="printSavedInvoice('inv_1789124481510_975')" title="Print A4"><i class="fa-solid fa-print"></i></button>
+                    <button class="action-btn print" onclick="printSavedInvoiceThermal('inv_1789124481510_975')" title="Print Thermal POS"><i class="fa-solid fa-receipt"></i></button>
+                    <button class="action-btn share btn-whatsapp" onclick="shareInvoiceToWhatsApp('inv_1789124481510_975', this)" title="Share PDF via WhatsApp"><i class="fa-brands fa-whatsapp" style="color: #16a34a;"></i></button>
+                    <button class="action-btn share btn-telegram" onclick="shareInvoiceToTelegram('inv_1789124481510_975', this)" title="Share PDF to Telegram"><i class="fa-brands fa-telegram" style="color: #0284c7;"></i></button>
+                    <button class="action-btn delete" onclick="deleteSavedInvoice('inv_1789124481510_975')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 700; color: var(--primary-teal);">#0002</td>
+                  <td>11-Sept-2026</td>
+                  <td style="font-weight: 600;">DEVI FISHERIES LIMITED</td>
+                  <td class="text-center">2</td>
+                  <td style="text-align: right; font-weight: 700;">₹ 10,395.00</td>
+                  <td class="text-center"><span class="badge-status badge-unpaid">Unpaid</span></td>
+                  <td class="actions-cell">
+                    <button class="action-btn edit" onclick="editSavedInvoice('inv_1789115952504_350')" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
+                    <button class="action-btn print" onclick="printSavedInvoice('inv_1789115952504_350')" title="Print A4"><i class="fa-solid fa-print"></i></button>
+                    <button class="action-btn print" onclick="printSavedInvoiceThermal('inv_1789115952504_350')" title="Print Thermal POS"><i class="fa-solid fa-receipt"></i></button>
+                    <button class="action-btn share btn-whatsapp" onclick="shareInvoiceToWhatsApp('inv_1789115952504_350', this)" title="Share PDF via WhatsApp"><i class="fa-brands fa-whatsapp" style="color: #16a34a;"></i></button>
+                    <button class="action-btn share btn-telegram" onclick="shareInvoiceToTelegram('inv_1789115952504_350', this)" title="Share PDF to Telegram"><i class="fa-brands fa-telegram" style="color: #0284c7;"></i></button>
+                    <button class="action-btn delete" onclick="deleteSavedInvoice('inv_1789115952504_350')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 700; color: var(--primary-teal);">#0001</td>
+                  <td>11-Sept-2026</td>
+                  <td style="font-weight: 600;">DEVI FISHERIES LIMITED</td>
+                  <td class="text-center">1</td>
+                  <td style="text-align: right; font-weight: 700;">₹ 12,600.00</td>
+                  <td class="text-center"><span class="badge-status badge-partial">Partial</span></td>
+                  <td class="actions-cell">
+                    <button class="action-btn edit" onclick="editSavedInvoice('inv_1789114669169_340')" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
+                    <button class="action-btn print" onclick="printSavedInvoice('inv_1789114669169_340')" title="Print A4"><i class="fa-solid fa-print"></i></button>
+                    <button class="action-btn print" onclick="printSavedInvoiceThermal('inv_1789114669169_340')" title="Print Thermal POS"><i class="fa-solid fa-receipt"></i></button>
+                    <button class="action-btn share btn-whatsapp" onclick="shareInvoiceToWhatsApp('inv_1789114669169_340', this)" title="Share PDF via WhatsApp"><i class="fa-brands fa-whatsapp" style="color: #16a34a;"></i></button>
+                    <button class="action-btn share btn-telegram" onclick="shareInvoiceToTelegram('inv_1789114669169_340', this)" title="Share PDF to Telegram"><i class="fa-brands fa-telegram" style="color: #0284c7;"></i></button>
+                    <button class="action-btn delete" onclick="deleteSavedInvoice('inv_1789114669169_340')" title="Delete"><i class="fa-solid fa-trash"></i></button>
                   </td>
                 </tr>
               </tbody>
@@ -2671,6 +2756,6 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=175"></script>
+  <script src="index_v5.js?v=180"></script>
 </body>
 </html>

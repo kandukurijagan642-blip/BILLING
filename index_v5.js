@@ -972,15 +972,15 @@ function initializeApp() {
     });
   }
 
-  // Hard Safety Fallback: Never allow initial loading spinners to hang for more than 10s
+  // Safety Fallback: Only clear spinners if sync is not actively running
   setTimeout(() => {
-    if (!window.isInitialSyncDone) {
-      console.warn("Initial sync timeout safety triggered — clearing loading spinners");
+    if (!window.isInitialSyncDone && !isSyncing) {
+      console.warn("Initial sync safety triggered — clearing loading spinners");
       window.isInitialSyncDone = true;
       updateDashboardOverview();
       loadInvoicesHistoryTable();
     }
-  }, 10000);
+  }, 25000);
 
   setupRouting();
   bindBillingFormInputs();
@@ -1281,10 +1281,15 @@ function initializeApp() {
     const gasSyncUrl = `${GOOGLE_SCRIPT_URL}?action=sync&token=${encodeURIComponent(API_SECRET_TOKEN)}`;
 
     return fetch(gasSyncUrl, { signal: controller.signal, redirect: 'follow' })
-      .then(res => {
+      .then(async res => {
         clearTimeout(timeoutId);
         if (!res.ok) throw new Error("HTTP sync error " + res.status);
-        return res.json();
+        const text = await res.text();
+        if (!text || (!text.trim().startsWith('{') && !text.trim().startsWith('['))) {
+          console.warn("Google Apps Script sync returned non-JSON/HTML challenge response. Retaining local cache.");
+          return null;
+        }
+        return JSON.parse(text);
       })
       .catch((err) => {
         clearTimeout(timeoutId);
@@ -1292,7 +1297,7 @@ function initializeApp() {
         throw err;
       })
       .then(data => {
-        if (!data) return; // 304 Not Modified
+        if (!data) return; // 304 Not Modified or HTML response
         updateCloudSyncBadge("synced");
 
         if (data.serverTime) {
@@ -1564,9 +1569,9 @@ function initializeApp() {
     if (multiUserSyncTimer) clearTimeout(multiUserSyncTimer);
 
     const isHidden = document.hidden || document.visibilityState === "hidden";
-    // Jitter (0 to 1500ms) prevents 50 users from pinging Google Apps Script at the exact same millisecond
-    const jitter = Math.floor(Math.random() * 1500);
-    const interval = isHidden ? (30000 + jitter) : (5000 + jitter);
+    // Jitter (0 to 3000ms) prevents concurrent users from pinging Google Apps Script at the exact same second
+    const jitter = Math.floor(Math.random() * 3000);
+    const interval = isHidden ? (60000 + jitter) : (35000 + jitter);
 
     multiUserSyncTimer = setTimeout(async () => {
       try {
@@ -1580,8 +1585,7 @@ function initializeApp() {
     }, interval);
   }
 
-  // Run initial database sync & start the adaptive multi-user poller
-  window.triggerDatabaseSync(true);
+  // Start background multi-user poller (initial sync was triggered on startup)
   scheduleNextRealtimeSync();
 
   // Keep HUD elapsed timer updated every 3s
@@ -1591,35 +1595,25 @@ function initializeApp() {
     }
   }, 3000);
 
-  // Sync automatically when window/tab is focused or returned to
+  // Sync automatically when window/tab is focused or returned to (throttled to 20s)
   window.addEventListener("focus", () => {
     const now = Date.now();
-    if (now - (window.lastSyncTimeMs || 0) > 3500) {
+    if (now - (window.lastSyncTimeMs || 0) > 20000) {
       window.triggerDatabaseSync();
       scheduleNextRealtimeSync();
     }
   });
 
-  // Sync automatically when tab becomes visible
+  // Sync automatically when tab becomes visible (throttled to 20s)
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       const now = Date.now();
-      if (now - (window.lastSyncTimeMs || 0) > 3500) {
+      if (now - (window.lastSyncTimeMs || 0) > 20000) {
         window.triggerDatabaseSync();
         scheduleNextRealtimeSync();
       }
     }
   });
-
-  // Throttled sync on user screen interaction
-  let lastTouchSync = 0;
-  document.addEventListener("touchstart", () => {
-    const now = Date.now();
-    if (now - lastTouchSync > 1200) {
-      lastTouchSync = now;
-      window.triggerDatabaseSync();
-    }
-  }, { passive: true });
 
   // Smart Enterprise Session Persistence calculation on page load
   const isRemembered = localStorage.getItem("remember_me") === "true";
@@ -1831,8 +1825,245 @@ function seedDatabasesIfEmpty() {
     localStorage.setItem("settings", JSON.stringify(defaultSettings));
   }
 
-  if (!localStorage.getItem("invoices")) {
-    localStorage.setItem("invoices", JSON.stringify([]));
+  const existingInvoicesStr = localStorage.getItem("invoices");
+  let existingInvoices = null;
+  try { existingInvoices = JSON.parse(existingInvoicesStr); } catch (e) {}
+  if (!Array.isArray(existingInvoices) || existingInvoices.length === 0) {
+    const sampleInvoices = [
+      {
+        id: "inv_1789114669169_340",
+        invoiceNo: "0001",
+        invoiceDate: "2026-09-11",
+        customerName: "DEVI FISHERIES LIMITED",
+        itemsCount: 1,
+        total: 12600,
+        details: {
+          id: "inv_1789114669169_340",
+          invoiceType: "Bill of Supply",
+          headerLogo: "ganesha",
+          invoiceNo: "0001",
+          invoiceDate: "2026-09-11",
+          buyerOrderNo: "65tgyhj",
+          buyerOrderDate: "2026-09-11",
+          transportMode: "tyguhj",
+          destination: "Andhra Pradesh",
+          supplyStateCode: "37",
+          paymentStatus: "Partial",
+          paymentMode: "UPI / QR",
+          paidAmount: 1000,
+          balanceDue: 11600,
+          buyer: {
+            name: "DEVI FISHERIES LIMITED",
+            address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTUR\nAndhra Pradesh - 522264, India",
+            gstin: "37AAACD7852Q1ZZ",
+            state: "Andhra Pradesh",
+            stateCode: "37",
+            phone: "8367047947"
+          },
+          consignee: {
+            name: "DEVI FISHERIES LIMITED",
+            address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTUR\nAndhra Pradesh - 522264, India",
+            gstin: "37AAACD7852Q1ZZ",
+            state: "Andhra Pradesh",
+            stateCode: "37",
+            phone: "08367047947"
+          },
+          items: [
+            {
+              id: "1789114629262_738",
+              productId: "prod-1",
+              baleNo: "1",
+              description: "RALLIMIN ADV + 15 KGs",
+              hsn: "23099090",
+              packSize: "15 KG",
+              quantity: 5,
+              unit: "Bucket",
+              rate: 3600,
+              gstRate: 5,
+              discount: 30,
+              amount: 12600
+            }
+          ],
+          balancePaid: 0,
+          supplyPlace: "Andhra Pradesh",
+          taxable: 12600,
+          cgst: 0,
+          sgst: 0,
+          igst: 0,
+          roundOff: 0,
+          total: 12600
+        }
+      },
+      {
+        id: "inv_1789115952504_350",
+        invoiceNo: "0002",
+        invoiceDate: "2026-09-11",
+        customerName: "DEVI FISHERIES LIMITED",
+        itemsCount: 2,
+        total: 10395,
+        details: {
+          id: "inv_1789115952504_350",
+          invoiceType: "Bill of Supply",
+          headerLogo: "ganesha",
+          invoiceNo: "0002",
+          invoiceDate: "2026-09-11",
+          buyerOrderNo: "",
+          buyerOrderDate: "",
+          transportMode: "",
+          destination: "Andhra Pradesh",
+          supplyStateCode: "37",
+          paymentStatus: "Unpaid",
+          paymentMode: "UPI / QR",
+          paidAmount: 0,
+          balanceDue: 10395,
+          buyer: {
+            name: "DEVI FISHERIES LIMITED",
+            address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTUR\nAndhra Pradesh - 522264, India",
+            gstin: "37AAACD7852Q1ZZ",
+            state: "Andhra Pradesh",
+            stateCode: "37",
+            phone: "8367047947"
+          },
+          consignee: {
+            name: "DEVI FISHERIES LIMITED",
+            address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTUR\nAndhra Pradesh - 522264, India",
+            gstin: "37AAACD7852Q1ZZ",
+            state: "Andhra Pradesh",
+            stateCode: "37",
+            phone: "8688572332"
+          },
+          items: [
+            {
+              id: "1789115925427_204",
+              productId: "prod-2",
+              baleNo: "1",
+              description: "AQUA PROBIOTIC FEED SUPPLEMENT 1KG",
+              hsn: "23099090",
+              packSize: "1 KG",
+              quantity: 11,
+              unit: "Can",
+              rate: 850,
+              gstRate: 5,
+              discount: 10,
+              amount: 8415
+            },
+            {
+              id: "1789115942418_641",
+              productId: "prod-1",
+              baleNo: "2",
+              description: "RALLIMIN ADV + 15 KGs",
+              hsn: "23099090",
+              packSize: "15 KG",
+              quantity: 1,
+              unit: "Bucket",
+              rate: 3600,
+              gstRate: 5,
+              discount: 45,
+              amount: 1980
+            }
+          ],
+          balancePaid: 0,
+          supplyPlace: "Andhra Pradesh",
+          taxable: 10395,
+          cgst: 0,
+          sgst: 0,
+          igst: 0,
+          roundOff: 0,
+          total: 10395
+        }
+      },
+      {
+        id: "inv_1789124481510_975",
+        invoiceNo: "0003",
+        invoiceDate: "2026-09-11",
+        customerName: "DEVI FISHERIES LIMITED",
+        itemsCount: 2,
+        total: 62730,
+        details: {
+          id: "inv_1789124481510_975",
+          invoiceType: "Bill of Supply",
+          headerLogo: "ganesha",
+          invoiceNo: "0003",
+          invoiceDate: "2026-09-11",
+          buyerOrderNo: "",
+          buyerOrderDate: "",
+          transportMode: "",
+          destination: "Andhra Pradesh",
+          supplyStateCode: "37",
+          paymentStatus: "Unpaid",
+          paymentMode: "UPI / QR",
+          paidAmount: 0,
+          balanceDue: 62730,
+          buyer: {
+            name: "DEVI FISHERIES LIMITED",
+            address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTUR\nAndhra Pradesh - 522264, India",
+            gstin: "37AAACD7852Q1ZZ",
+            state: "Andhra Pradesh",
+            stateCode: "37",
+            phone: "8367047947"
+          },
+          consignee: {
+            name: "DEVI FISHERIES LIMITED",
+            address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTUR\nAndhra Pradesh - 522264, India",
+            gstin: "37AAACD7852Q1ZZ",
+            state: "Andhra Pradesh",
+            stateCode: "37",
+            phone: "8688572332"
+          },
+          items: [
+            {
+              id: "1789124391603_264",
+              productId: "prod-2",
+              baleNo: "1",
+              description: "AQUA PROBIOTIC FEED SUPPLEMENT 1KG",
+              hsn: "23099090",
+              packSize: "1 KG",
+              quantity: 81,
+              unit: "Can",
+              rate: 850,
+              gstRate: 5,
+              discount: 10,
+              amount: 61965
+            },
+            {
+              id: "1789124472954_119",
+              productId: "prod-2",
+              baleNo: "2",
+              description: "AQUA PROBIOTIC FEED SUPPLEMENT 1KG",
+              hsn: "23099090",
+              packSize: "1 KG",
+              quantity: 1,
+              unit: "Can",
+              rate: 850,
+              gstRate: 5,
+              discount: 10,
+              amount: 765
+            }
+          ],
+          balancePaid: 0,
+          supplyPlace: "Andhra Pradesh",
+          taxable: 62730,
+          cgst: 0,
+          sgst: 0,
+          igst: 0,
+          roundOff: 0,
+          total: 62730
+        }
+      }
+    ];
+    localStorage.setItem("invoices", JSON.stringify(sampleInvoices));
+  }
+
+  if (!localStorage.getItem("deleted_invoice_ids")) {
+    const initialDeletedIds = [
+      "0009", "0007", "0005", "0006", "0008", "9999", "0012",
+      "test_check_1789026128766", "inv_1789022651338_929", "inv_1788969299973_728",
+      "inv_1788979067280_919", "inv_1788975524151_277", "inv_1789026099436_409",
+      "inv_test_verify", "inv_live_test_1789043577981", "inv_1789047516965_428",
+      "inv_1788969452505_13", "inv_1789047384849_421", "inv_1789047955981_151",
+      "inv_1789060416686_725"
+    ];
+    localStorage.setItem("deleted_invoice_ids", JSON.stringify(initialDeletedIds));
   }
 }
 
@@ -1865,7 +2096,7 @@ function loadAllDatabases() {
       invoicesDb.sort((a, b) => String(a.invoiceNo || "").localeCompare(String(b.invoiceNo || "")));
     } else if (invoicesDb && invoicesDb.length > 0) {
       try { localStorage.setItem("invoices", JSON.stringify(invoicesDb)); } catch (e) {}
-    } else if (Array.isArray(localInvoices)) {
+    } else if (Array.isArray(localInvoices) && (!invoicesDb || invoicesDb.length === 0)) {
       invoicesDb = localInvoices;
     }
 

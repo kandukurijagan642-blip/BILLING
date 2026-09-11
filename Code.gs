@@ -452,7 +452,10 @@ function getMasterSpreadsheet() {
     } catch (pe) {}
   }
 
-  setupSpreadsheetTabs(ss);
+  // Only run setupSpreadsheetTabs if Invoices sheet is missing
+  if (!ss.getSheetByName("Invoices")) {
+    setupSpreadsheetTabs(ss);
+  }
   return ss;
 }
 
