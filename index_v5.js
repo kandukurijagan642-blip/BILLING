@@ -3966,12 +3966,27 @@ window.saveCurrentInvoiceRecord = async function(actionType = 'save_only', btnEl
       return null;
     }
 
-    // Ensure current phone from input is captured
+    // Ensure current phones & names from inputs are strictly captured
+    if (!currentInvoice.buyer) currentInvoice.buyer = {};
+    if (elements.billBuyerName && elements.billBuyerName.value) {
+      currentInvoice.buyer.name = elements.billBuyerName.value.trim();
+    }
     if (elements.billBuyerPhone && elements.billBuyerPhone.value) {
       currentInvoice.buyer.phone = elements.billBuyerPhone.value.trim();
     }
     if (currentInvoice.buyer?.name && currentInvoice.buyer?.phone) {
-      savePhoneToPartyDb(currentInvoice.buyer.name, currentInvoice.buyer.phone);
+      savePhoneToPartyDb(currentInvoice.buyer.name, currentInvoice.buyer.phone, 'receiver');
+    }
+
+    if (!currentInvoice.consignee) currentInvoice.consignee = {};
+    if (elements.billConsigneeName && elements.billConsigneeName.value) {
+      currentInvoice.consignee.name = elements.billConsigneeName.value.trim();
+    }
+    if (elements.billConsigneePhone && elements.billConsigneePhone.value) {
+      currentInvoice.consignee.phone = elements.billConsigneePhone.value.trim();
+    }
+    if (currentInvoice.consignee?.name && currentInvoice.consignee?.phone) {
+      savePhoneToPartyDb(currentInvoice.consignee.name, currentInvoice.consignee.phone, 'consignee');
     }
 
     const sellerStateCode = globalSettings.company?.stateCode || "37";
@@ -4022,11 +4037,15 @@ window.saveCurrentInvoiceRecord = async function(actionType = 'save_only', btnEl
     const uniqueId = currentInvoice.id || "inv_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
     currentInvoice.id = uniqueId;
 
+    const consigneeDisplayName = (currentInvoice.consignee?.name || '').trim();
+    const buyerDisplayName = (currentInvoice.buyer?.name || '').trim();
+    const primaryCustomerDisplay = consigneeDisplayName || buyerDisplayName || "Cash Customer";
+
     const invoiceRecord = {
       id: uniqueId,
       invoiceNo: currentInvoice.invoiceNo,
       invoiceDate: currentInvoice.invoiceDate,
-      customerName: currentInvoice.buyer?.name || "Cash Customer",
+      customerName: primaryCustomerDisplay,
       itemsCount: currentInvoice.items.length,
       total: grandTotal,
       details: JSON.parse(JSON.stringify(currentInvoice))
@@ -4181,7 +4200,22 @@ window.openInvoiceSuccessModal = function(invoiceRecord) {
   const invNoEl = document.getElementById("modal-success-inv-no");
   if (invNoEl) invNoEl.textContent = `#${invoiceRecord.invoiceNo || ''}`;
   const custEl = document.getElementById("modal-success-customer");
-  if (custEl) custEl.textContent = invoiceRecord.customerName || 'Cash Customer';
+  if (custEl) {
+    const consignee = invoiceRecord.details?.consignee;
+    const buyer = invoiceRecord.details?.buyer;
+    let label = '';
+    if (consignee?.name) {
+      label = `📦 ${consignee.name}${consignee.phone ? ' (' + consignee.phone + ')' : ''}`;
+      if (buyer?.name && buyer.name !== consignee.name) {
+        label += ` | 👤 ${buyer.name}${buyer.phone ? ' (' + buyer.phone + ')' : ''}`;
+      }
+    } else if (buyer?.name) {
+      label = `👤 ${buyer.name}${buyer.phone ? ' (' + buyer.phone + ')' : ''}`;
+    } else {
+      label = invoiceRecord.customerName || 'Cash Customer';
+    }
+    custEl.textContent = label;
+  }
   const totEl = document.getElementById("modal-success-total");
   if (totEl) totEl.textContent = `₹ ${formatCurrency(invoiceRecord.total || 0)}`;
   modal.classList.remove("hidden");
@@ -4863,22 +4897,29 @@ function savePartiesDb() {
 }
 window.savePartiesDb = savePartiesDb;
 
-function savePhoneToPartyDb(customerName, phone) {
+function savePhoneToPartyDb(customerName, phone, partyType = 'receiver') {
   try {
     if (!customerName || !phone || !Array.isArray(partiesDb)) return;
     const nameLower = customerName.trim().toLowerCase();
-    const party = partiesDb.find(p => p && p.name && p.name.trim().toLowerCase() === nameLower);
+    let party = partiesDb.find(p => p && p.name && p.name.trim().toLowerCase() === nameLower);
     if (party) {
-      party.phone = phone.trim();
-      party.updatedAt = new Date().toISOString();
-      savePartiesDb();
-      try {
-        if (typeof sendPartyTelegramReport === 'function') {
-          sendPartyTelegramReport(party, false);
-        }
-      } catch (e) {
-        console.warn("Telegram party report note:", e);
+      if (party.phone !== phone.trim()) {
+        party.phone = phone.trim();
+        party.updatedAt = new Date().toISOString();
+        savePartiesDb();
       }
+    } else if (customerName.trim().length >= 2 && phone.trim().replace(/\D/g, '').length >= 10) {
+      party = {
+        id: 'pty_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+        name: customerName.trim(),
+        type: partyType,
+        phone: phone.trim(),
+        state: 'Andhra Pradesh',
+        stateCode: '37',
+        createdAt: new Date().toISOString()
+      };
+      partiesDb.push(party);
+      savePartiesDb();
     }
   } catch (err) {
     console.warn("savePhoneToPartyDb safe catch:", err);
@@ -4938,9 +4979,25 @@ function generateWhatsAppInvoiceMessage(details) {
   let msg = `🏛️ *${companyName}*\n`;
   msg += `-----------------------------------\n`;
   msg += `📄 *Tax Invoice:* #${details.invoiceNo || 'INV'}\n`;
-  msg += `👤 *Customer:* ${details.buyer?.name || details.customerName || 'Customer'}\n`;
-  if (details.buyer?.phone) {
-    msg += `📱 *Phone:* ${details.buyer.phone}\n`;
+
+  const consigneeName = (details.consignee?.name || '').trim();
+  const consigneePhone = (details.consignee?.phone || '').trim();
+  const buyerName = (details.buyer?.name || details.customerName || '').trim();
+  const buyerPhone = (details.buyer?.phone || '').trim();
+
+  if (consigneeName) {
+    msg += `📦 *Shipped To (Consignee):* ${consigneeName}\n`;
+  }
+  if (consigneePhone) {
+    msg += `📱 *Consignee Phone:* ${consigneePhone}\n`;
+  }
+  if (buyerName && buyerName !== consigneeName) {
+    msg += `👤 *Billed To (Receiver):* ${buyerName}\n`;
+  } else if (!consigneeName && buyerName) {
+    msg += `👤 *Customer:* ${buyerName}\n`;
+  }
+  if (buyerPhone && buyerPhone !== consigneePhone) {
+    msg += `📞 *Receiver Phone:* ${buyerPhone}\n`;
   }
   msg += `📅 *Date:* ${details.invoiceDate || (typeof formatInputDateString === 'function' ? formatInputDateString(new Date()) : '')}\n`;
   msg += `-----------------------------------\n`;
@@ -5002,23 +5059,87 @@ function generateWhatsAppInvoiceMessage(details) {
 
 let pendingWaMsg = "";
 
+// --- ADVANCED REALTIME INVOICE RECIPIENTS RESOLVER ---
+function getInvoiceRecipients(details) {
+  let consigneePhone = "";
+  let buyerPhone = "";
+  const consigneeName = (details?.consignee?.name || "").trim();
+  const buyerName = (details?.buyer?.name || details?.customerName || "").trim();
+
+  // 1. Resolve CONSIGNEE | SHIPPED TO phone (TOP PRIORITY: goods delivery alerts go to consignee)
+  if (details?.consignee?.phone && details.consignee.phone.toString().trim().replace(/\D/g, '').length >= 10) {
+    consigneePhone = details.consignee.phone.toString().trim();
+  }
+  if (!consigneePhone && typeof elements !== 'undefined' && elements.billConsigneePhone && elements.billConsigneePhone.value) {
+    const val = elements.billConsigneePhone.value.trim();
+    if (val.replace(/\D/g, '').length >= 10) consigneePhone = val;
+  }
+  if (!consigneePhone && consigneeName && Array.isArray(partiesDb)) {
+    const p = partiesDb.find(party => party && party.name && party.name.trim().toLowerCase() === consigneeName.toLowerCase() && party.phone);
+    if (p && p.phone && p.phone.toString().replace(/\D/g, '').length >= 10) consigneePhone = p.phone.toString().trim();
+  }
+
+  // 2. Resolve RECEIVER | BILLED TO phone
+  if (details?.buyer?.phone && details.buyer.phone.toString().trim().replace(/\D/g, '').length >= 10) {
+    buyerPhone = details.buyer.phone.toString().trim();
+  }
+  if (!buyerPhone && typeof elements !== 'undefined' && elements.billBuyerPhone && elements.billBuyerPhone.value) {
+    const val = elements.billBuyerPhone.value.trim();
+    if (val.replace(/\D/g, '').length >= 10) buyerPhone = val;
+  }
+  if (!buyerPhone && buyerName && Array.isArray(partiesDb)) {
+    const p = partiesDb.find(party => party && party.name && party.name.trim().toLowerCase() === buyerName.toLowerCase() && party.phone);
+    if (p && p.phone && p.phone.toString().replace(/\D/g, '').length >= 10) buyerPhone = p.phone.toString().trim();
+  }
+
+  // 3. Primary phone strictly prioritizes CONSIGNEE | SHIPPED TO
+  const primaryPhone = consigneePhone || buyerPhone || "";
+
+  // 4. Collect all distinct clean recipient numbers for multi-party notifications
+  const allRecipients = [];
+  const seenClean = new Set();
+
+  if (consigneePhone) {
+    const clean = formatWhatsAppPhone(consigneePhone);
+    if (clean && !seenClean.has(clean)) {
+      seenClean.add(clean);
+      allRecipients.push({
+        type: 'consignee',
+        label: 'Consignee (Shipped To)',
+        name: consigneeName || 'Consignee',
+        raw: consigneePhone,
+        clean: clean
+      });
+    }
+  }
+
+  if (buyerPhone) {
+    const clean = formatWhatsAppPhone(buyerPhone);
+    if (clean && !seenClean.has(clean)) {
+      seenClean.add(clean);
+      allRecipients.push({
+        type: 'buyer',
+        label: 'Receiver (Billed To)',
+        name: buyerName || 'Customer',
+        raw: buyerPhone,
+        clean: clean
+      });
+    }
+  }
+
+  return {
+    primaryPhone,
+    consigneePhone,
+    buyerPhone,
+    consigneeName,
+    buyerName,
+    allRecipients
+  };
+}
+
 function getCustomerPhoneNumber(details) {
-  let phone = "";
-  if (details && details.buyer && details.buyer.phone) {
-    phone = details.buyer.phone;
-  }
-  if (!phone && elements.billBuyerPhone && elements.billBuyerPhone.value) {
-    phone = elements.billBuyerPhone.value;
-  }
-  if (!phone && details && details.consignee && details.consignee.phone) {
-    phone = details.consignee.phone;
-  }
-  if (!phone && details && details.buyer && details.buyer.name && partiesDb && partiesDb.length > 0) {
-    const custNameLower = details.buyer.name.trim().toLowerCase();
-    const p = partiesDb.find(party => party.name && party.name.trim().toLowerCase() === custNameLower && party.phone);
-    if (p) phone = p.phone;
-  }
-  return phone;
+  const info = getInvoiceRecipients(details);
+  return info.primaryPhone;
 }
 
 // --- WHATSAPP BOT STATE & CONTROLLER ---
@@ -5844,7 +5965,26 @@ function formatInvoiceWhatsAppSummary(details) {
   let text = `🏛️ *${globalSettings.company?.name || 'AARYAN AQUA NEEDS'}*\n`;
   text += `-----------------------------------\n`;
   text += `📄 *Tax Invoice #:* #${details.invoiceNo} (${details.invoiceType || 'Tax Invoice'})\n`;
-  text += `👤 *Customer:* ${details.buyer?.name || 'Customer'}\n`;
+
+  const consigneeName = (details.consignee?.name || '').trim();
+  const consigneePhone = (details.consignee?.phone || '').trim();
+  const buyerName = (details.buyer?.name || details.customerName || 'Customer').trim();
+  const buyerPhone = (details.buyer?.phone || '').trim();
+
+  if (consigneeName) {
+    text += `📦 *Shipped To (Consignee):* ${consigneeName}\n`;
+  }
+  if (consigneePhone) {
+    text += `📱 *Consignee Phone:* ${consigneePhone}\n`;
+  }
+  if (buyerName && buyerName !== consigneeName) {
+    text += `👤 *Billed To (Receiver):* ${buyerName}\n`;
+  } else if (!consigneeName) {
+    text += `👤 *Customer:* ${buyerName}\n`;
+  }
+  if (buyerPhone && buyerPhone !== consigneePhone) {
+    text += `📞 *Receiver Phone:* ${buyerPhone}\n`;
+  }
   text += `📅 *Date:* ${details.invoiceDate || ''}\n`;
   text += `💰 *Grand Total:* ₹ ${formatCurrency(total)}\n`;
 
@@ -5918,17 +6058,19 @@ async function generateInvoicePdfBlob(details) {
 // Automatic Silent WhatsApp Dispatch upon bill generation (100% Automated Backend Process, NO Browser Redirect)
 async function autoDispatchInvoiceToWhatsApp(details, precomputedBase64 = null) {
   if (!details || !details.invoiceNo) return false;
-  let rawPhone = getCustomerPhoneNumber(details);
-  if (!rawPhone || rawPhone.toString().replace(/\D/g, '').length < 10) {
+  const recipientsInfo = typeof getInvoiceRecipients === 'function'
+    ? getInvoiceRecipients(details)
+    : { allRecipients: [{ clean: formatWhatsAppPhone(getCustomerPhoneNumber(details)), label: 'Consignee', type: 'consignee' }] };
+
+  if (!recipientsInfo.allRecipients || recipientsInfo.allRecipients.length === 0) {
     console.log("No valid phone number for auto WhatsApp dispatch");
     return false;
   }
-  const cleanPhone = formatWhatsAppPhone(rawPhone);
 
   const text = typeof generateWhatsAppInvoiceMessage === 'function'
     ? generateWhatsAppInvoiceMessage(details)
     : formatInvoiceWhatsAppSummary(details);
-  const custName = details.buyer?.name || details.customerName || 'Customer';
+  const custName = details.consignee?.name || details.buyer?.name || details.customerName || 'Customer';
   const customerClean = custName.replace(/[^a-zA-Z0-9]/g, '_');
   const filename = `Invoice_${details.invoiceNo}_${customerClean}.pdf`;
 
@@ -5958,32 +6100,44 @@ async function autoDispatchInvoiceToWhatsApp(details, precomputedBase64 = null) 
     }
   }
 
-  if (isBotReady && cleanPhone) {
-    try {
-      const res = await fetch(getWhatsAppApiEndpoint('/api/whatsapp/send-invoice'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: cleanPhone,
-          text,
-          filename,
-          pdfBase64
-        })
-      });
-      const data = await res.json();
-      if (data && data.ok) {
-        if (typeof playSuccessChime === 'function') playSuccessChime();
-        console.log(`✅ Automated WhatsApp Invoice sent to +${cleanPhone}`);
-        showFloatingToast(`🚀 Invoice #${details.invoiceNo} & PDF sent silently to ${custName} (+${cleanPhone}) via WhatsApp Bot!`, 5000);
-        return true;
-      } else {
-        console.warn("Auto WhatsApp dispatch response:", data);
+  if (isBotReady) {
+    let anySent = false;
+    const dispatchedList = [];
+
+    // Prioritize Consignee first, then Receiver
+    for (const rec of recipientsInfo.allRecipients) {
+      if (!rec.clean) continue;
+      try {
+        const res = await fetch(getWhatsAppApiEndpoint('/api/whatsapp/send-invoice'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: rec.clean,
+            text,
+            filename,
+            pdfBase64
+          })
+        });
+        const data = await res.json();
+        if (data && data.ok) {
+          anySent = true;
+          dispatchedList.push(`${rec.label} (+${rec.clean})`);
+          console.log(`✅ Automated WhatsApp Invoice sent to ${rec.label} (+${rec.clean})`);
+        } else {
+          console.warn(`Auto WhatsApp dispatch response for +${rec.clean}:`, data);
+        }
+      } catch (err) {
+        console.warn(`Auto WhatsApp dispatch network error for +${rec.clean}:`, err);
       }
-    } catch (err) {
-      console.warn("Auto WhatsApp dispatch notice:", err);
+    }
+
+    if (anySent) {
+      if (typeof playSuccessChime === 'function') playSuccessChime();
+      showFloatingToast(`🚀 Invoice #${details.invoiceNo} & PDF dispatched via WhatsApp to ${dispatchedList.join(" & ")}!`, 6000);
+      return true;
     }
   } else {
-    // When bot is offline, do NOT trigger redirects during background auto-dispatch
+    // When bot is offline, log notice without interrupting cashier
     console.log("WhatsApp Bot is offline. Automatic silent background dispatch completed without browser redirect.");
   }
   return false;
@@ -5998,25 +6152,34 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
     return;
   }
 
-  let rawPhone = getCustomerPhoneNumber(details);
+  const recipientsInfo = typeof getInvoiceRecipients === 'function'
+    ? getInvoiceRecipients(details)
+    : { primaryPhone: getCustomerPhoneNumber(details), consigneeName: details.consignee?.name, buyerName: details.buyer?.name, allRecipients: [] };
+
+  let rawPhone = recipientsInfo.primaryPhone;
   let cleanPhone = "";
+  const primaryName = recipientsInfo.consigneeName || recipientsInfo.buyerName || 'Consignee / Customer';
+
   if (rawPhone && rawPhone.toString().replace(/\D/g, '').length >= 10) {
     cleanPhone = formatWhatsAppPhone(rawPhone);
   } else {
-    // If not entered in billing form, prompt user for phone number
-    const custName = details.buyer?.name || details.customerName || 'Customer';
-    const entered = prompt(`📱 Enter 10-digit WhatsApp number for ${custName}:`, "");
+    // If not entered in billing form, prompt user specifically for Consignee / Customer phone number
+    const entered = prompt(`📱 Enter 10-digit WhatsApp number for Consignee | Shipped To (${primaryName}):`, "");
     if (entered && entered.trim().replace(/\D/g, '').length >= 10) {
       cleanPhone = formatWhatsAppPhone(entered.trim());
-      if (details.buyer) details.buyer.phone = entered.trim();
-      savePhoneToPartyDb(custName, entered.trim());
+      if (!details.consignee) details.consignee = {};
+      details.consignee.phone = entered.trim();
+      if (typeof elements !== 'undefined' && elements.billConsigneePhone) {
+        elements.billConsigneePhone.value = entered.trim();
+      }
+      savePhoneToPartyDb(primaryName, entered.trim(), 'consignee');
     }
   }
 
   const fullShareText = typeof generateWhatsAppInvoiceMessage === 'function'
     ? generateWhatsAppInvoiceMessage(details)
     : formatInvoiceWhatsAppSummary(details);
-  const custName = details.buyer?.name || details.customerName || 'Customer';
+  const custName = details.consignee?.name || details.buyer?.name || details.customerName || 'Customer';
   const customerClean = custName.replace(/[^a-zA-Z0-9]/g, '_');
   const filename = `Invoice_${details.invoiceNo}_${customerClean}.pdf`;
 
@@ -6048,7 +6211,7 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
       btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Sending via Bot...`;
       btnEl.disabled = true;
     }
-    showFloatingToast(`🤖 Sending invoice #${details.invoiceNo} & PDF silently via WhatsApp Bot...`, 3000);
+    showFloatingToast(`🤖 Sending invoice #${details.invoiceNo} & PDF silently to Consignee (+${cleanPhone}) via WhatsApp Bot...`, 3000);
 
     try {
       let pdfBase64 = precomputedBase64;
@@ -6061,13 +6224,29 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
         }
       }
 
-      const fastRes = await fetch(getWhatsAppApiEndpoint('/api/whatsapp/send-invoice'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: cleanPhone, text: fullShareText, filename, pdfBase64 })
-      });
-      const fastData = await fastRes.json();
-      if (fastData && fastData.ok) {
+      // Send to Consignee first, and if Receiver also has a distinct phone, send to Receiver as well!
+      const targetsToSend = (recipientsInfo.allRecipients && recipientsInfo.allRecipients.length > 0)
+        ? recipientsInfo.allRecipients
+        : [{ clean: cleanPhone, label: 'Consignee' }];
+
+      let sentCount = 0;
+      const sentLabels = [];
+
+      for (const rec of targetsToSend) {
+        if (!rec.clean) continue;
+        const fastRes = await fetch(getWhatsAppApiEndpoint('/api/whatsapp/send-invoice'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: rec.clean, text: fullShareText, filename, pdfBase64 })
+        });
+        const fastData = await fastRes.json();
+        if (fastData && fastData.ok) {
+          sentCount++;
+          sentLabels.push(`${rec.label} (+${rec.clean})`);
+        }
+      }
+
+      if (sentCount > 0) {
         if (typeof playSuccessChime === 'function') playSuccessChime();
         if (btnEl && btnEl.tagName) {
           btnEl.innerHTML = `<i class="fa-solid fa-circle-check text-success"></i> Sent via Bot!`;
@@ -6076,10 +6255,10 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
             btnEl.disabled = false;
           }, 2500);
         }
-        showFloatingToast(`🚀 Invoice #${details.invoiceNo} & PDF sent automatically to +${cleanPhone} via WhatsApp Bot!`, 5000);
+        showFloatingToast(`🚀 Invoice #${details.invoiceNo} & PDF sent automatically to ${sentLabels.join(" & ")} via WhatsApp Bot!`, 5000);
         return true;
       } else {
-        throw new Error(fastData?.error || 'Failed to dispatch');
+        throw new Error('Failed to dispatch to recipient(s)');
       }
     } catch (fastErr) {
       console.warn("Background bot dispatch failed:", fastErr);
@@ -6094,7 +6273,7 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
 
   // If Bot is offline: ask user before opening WhatsApp Web
   if (!force1Click) {
-    const userChoice = confirm(`⚠️ WhatsApp Bot is offline.\n\nTo send invoices automatically in background without opening WhatsApp, make sure Start_WhatsApp_Bot.bat is running on port 3001.\n\nDo you want to open WhatsApp Web manually instead?`);
+    const userChoice = confirm(`⚠️ WhatsApp Bot is offline.\n\nTo send invoices automatically in background without opening WhatsApp, make sure Start_WhatsApp_Bot.bat is running on port 3001.\n\nDo you want to open WhatsApp Web manually for Consignee (+${cleanPhone})?`);
     if (!userChoice) {
       if (btnEl && btnEl.tagName) {
         btnEl.innerHTML = origHtml;
@@ -6104,7 +6283,7 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
     }
   }
 
-  // Fallback: 1-click WhatsApp Web/App only when confirmed
+  // Fallback: 1-click WhatsApp Web/App directly to Consignee (+${cleanPhone})
   const waUrl = launchWhatsAppWebOrApp(cleanPhone, fullShareText);
   openWhatsAppDirect(waUrl);
 
@@ -6116,7 +6295,7 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
     }, 2000);
   }
 
-  showFloatingToast(cleanPhone ? `📲 Opening WhatsApp chat for +${cleanPhone}...` : `📲 Opening WhatsApp to choose customer contact...`, 4000);
+  showFloatingToast(cleanPhone ? `📲 Opening WhatsApp chat for Consignee (+${cleanPhone})...` : `📲 Opening WhatsApp to choose contact...`, 4000);
 
   // Optional background non-blocking PDF download / upload to Google Drive
   setTimeout(async () => {
@@ -6163,6 +6342,8 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
       console.warn("Background PDF generation note:", bgErr);
     }
   }, 200);
+
+  return true;
 };
 
 window.openWhatsappWebChat = function() {
@@ -6545,11 +6726,16 @@ function renderHistoryTableRows(records) {
       `;
     }
 
+    const consigneeDisplay = (details.consignee?.name) ? details.consignee.name : (inv.customerName || 'Cash Customer');
+    const subBuyerText = (details.consignee?.name && details.buyer?.name && details.consignee.name !== details.buyer.name)
+      ? `<div style="font-size: 11px; color: #64748b; font-weight: 500;">Billed: ${details.buyer.name}</div>`
+      : '';
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td style="font-weight: 700; color: var(--primary-teal);">#${inv.invoiceNo}</td>
       <td>${formatInputDateString(inv.invoiceDate)}</td>
-      <td style="font-weight: 600;">${inv.customerName}</td>
+      <td style="font-weight: 600;">${consigneeDisplay}${subBuyerText}</td>
       <td class="text-center">${inv.itemsCount}</td>
       <td style="text-align: right; font-weight: 700;">₹ ${formatCurrency(inv.total)}</td>
       <td class="text-center"><span class="badge-status ${badgeClass}">${status}</span></td>
