@@ -767,9 +767,9 @@ window.forcePushDatabaseToCloud = async function(btnEl) {
 // Lock screen credentials state
 let activeUsername = "Aaryanaqua";
 let activePassword = "Aaryan@2024";
-let lockTimerSeconds = 300; // 5 mins
-let isLocked = true;
-let autolockInterval;
+let lockTimerSeconds = 1800; // 30 mins default enterprise duration (or 0 for disabled)
+let isLocked = false;
+let autolockInterval = null;
 
 // --- NUMBER TO WORDS ENGINE (INDIAN RUPEES SYSTEM) ---
 function convertNumberToWords(num) {
@@ -1488,17 +1488,42 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }, { passive: true });
 
-  // Session Persistence calculation on page load
-  const lastActiveTime = parseInt(localStorage.getItem("last_active_time") || "0", 10);
-  const wasLocked = localStorage.getItem("app_locked") !== "false";
+  // Smart Enterprise Session Persistence calculation on page load
+  const isRemembered = localStorage.getItem("remember_me") === "true";
+  const appAuthenticated = localStorage.getItem("app_authenticated") === "true" || sessionStorage.getItem("session_authenticated") === "true";
+  const storedLockState = localStorage.getItem("app_locked"); // "true", "false", or null
+  const lastActiveTime = parseInt(localStorage.getItem("last_active_time") || `${Date.now()}`, 10);
   const elapsedSeconds = (Date.now() - lastActiveTime) / 1000;
 
-  if (wasLocked || elapsedSeconds > lockTimerSeconds) {
+  // Intelligent Lock Decision:
+  // 1. If user intentionally clicked manual lock (storedLockState === "true"), respect it.
+  // 2. If auto-lock timer is enabled (>0) and elapsed inactivity exceeds timer, lock it.
+  // 3. If fresh browser profile with neither prior authentication nor remembered credentials, lock it.
+  // In all other active or remembered sessions, keep system smoothly unlocked.
+  let shouldLock = false;
+  if (storedLockState === "true") {
+    shouldLock = true;
+  } else if (lockTimerSeconds > 0 && elapsedSeconds > lockTimerSeconds) {
+    shouldLock = true;
+  } else if (!appAuthenticated && !isRemembered && storedLockState !== "false") {
+    shouldLock = true;
+  }
+
+  if (shouldLock) {
     isLocked = true;
-    document.getElementById("lock-screen-overlay").classList.remove("hidden");
+    localStorage.setItem("app_locked", "true");
+    const overlay = document.getElementById("lock-screen-overlay");
+    if (overlay) overlay.classList.remove("hidden");
+    const wrapper = document.querySelector('.dashboard-wrapper');
+    if (wrapper) wrapper.classList.add("blur-dashboard-wrapper");
   } else {
     isLocked = false;
-    document.getElementById("lock-screen-overlay").classList.add("hidden");
+    localStorage.setItem("app_locked", "false");
+    localStorage.setItem("app_authenticated", "true");
+    sessionStorage.setItem("session_authenticated", "true");
+    localStorage.setItem("last_active_time", Date.now());
+    const overlay = document.getElementById("lock-screen-overlay");
+    if (overlay) overlay.classList.add("hidden");
     const wrapper = document.querySelector('.dashboard-wrapper');
     if (wrapper) wrapper.classList.remove("blur-dashboard-wrapper");
   }
@@ -1508,8 +1533,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Reset lock timer on activity
   resetAutolockTimer();
-  ['mousemove', 'mousedown', 'keypress', 'touchstart', 'scroll'].forEach(evt => {
-    document.addEventListener(evt, resetAutolockTimer, true);
+  ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'wheel'].forEach(evt => {
+    document.addEventListener(evt, resetAutolockTimer, { passive: true, capture: true });
   });
 
   // Default suggestions
@@ -1884,9 +1909,9 @@ function loadAllDatabases() {
 
   activeUsername = globalSettings.security?.username || "Aaryanaqua";
   activePassword = globalSettings.security?.password || globalSettings.security?.pin || "Aaryan@2024";
-  lockTimerSeconds = parseInt(globalSettings.security?.autolock || "300", 10);
+  lockTimerSeconds = parseInt(globalSettings.security?.autolock !== undefined ? globalSettings.security.autolock : "1800", 10);
   if (Number.isNaN(lockTimerSeconds)) {
-    lockTimerSeconds = 300;
+    lockTimerSeconds = 1800;
   }
 }
 
@@ -2067,6 +2092,7 @@ window.switchTab = function(tabName) {
   elements.views.forEach(view => {
     if (view.id === `view-${tabName}`) {
       view.classList.remove("hidden");
+      view.scrollTop = 0;
     } else {
       view.classList.add("hidden");
     }
@@ -7696,7 +7722,7 @@ function loadSettingsFields() {
     }
   }
 
-  elements.setAutolockTimer.value = globalSettings.security?.autolock || "300";
+  elements.setAutolockTimer.value = globalSettings.security?.autolock !== undefined ? globalSettings.security.autolock : "1800";
   elements.setLoginUsername.value = globalSettings.security?.username || "Aaryanaqua";
   elements.setLoginPassword.value = globalSettings.security?.password || globalSettings.security?.pin || "Aaryan@2024";
 
@@ -8041,14 +8067,21 @@ async function sendTelegramInvoiceNotification(invoice) {
 }
 
 // --- ACTIVITY AUTO-LOCK CONTROLLER ---
+let lastActivityRecordTime = 0;
 function resetAutolockTimer() {
   if (isLocked) return;
 
-  localStorage.setItem("last_active_time", Date.now());
-  localStorage.setItem("app_locked", "false");
+  const now = Date.now();
+  if (now - lastActivityRecordTime > 5000) {
+    lastActivityRecordTime = now;
+    try {
+      localStorage.setItem("last_active_time", now);
+      localStorage.setItem("app_locked", "false");
+    } catch (_) {}
+  }
 
   clearTimeout(autolockInterval);
-  if (lockTimerSeconds === 0) return;
+  if (!lockTimerSeconds || lockTimerSeconds <= 0) return;
 
   autolockInterval = setTimeout(triggerLockOverlay, lockTimerSeconds * 1000);
 }
@@ -8078,6 +8111,7 @@ function triggerLockOverlay() {
     lockWhatsAppSession(false);
   }
   localStorage.setItem("app_locked", "true");
+  sessionStorage.removeItem("session_authenticated");
   document.getElementById("login-form").reset();
   document.getElementById("login-error-message").classList.add("hidden");
   
@@ -8086,7 +8120,8 @@ function triggerLockOverlay() {
 
   const wrapper = document.querySelector('.dashboard-wrapper');
   if (wrapper) wrapper.classList.add("blur-dashboard-wrapper");
-  document.getElementById("lock-screen-overlay").classList.remove("hidden");
+  const overlay = document.getElementById("lock-screen-overlay");
+  if (overlay) overlay.classList.remove("hidden");
 }
 
 window.toggleLoginPasswordVisibility = function() {
@@ -8136,6 +8171,8 @@ window.submitUnlockLogin = function(e) {
     if (userText === activeUsername && pwdText === activePassword) {
       isLocked = false;
       localStorage.setItem("app_locked", "false");
+      localStorage.setItem("app_authenticated", "true");
+      sessionStorage.setItem("session_authenticated", "true");
       localStorage.setItem("last_active_time", Date.now());
       
       const rememberBox = document.getElementById("login-remember-me");

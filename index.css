@@ -491,6 +491,7 @@ body {
   overflow: hidden;
   position: relative;
   min-width: 0;
+  min-height: 0;
   background-color: var(--slate-50, #f8fafc);
 }
 
@@ -713,6 +714,8 @@ body {
   overflow: hidden;
   position: relative;
   height: 100vh;
+  min-height: 0;
+  min-width: 0;
 }
 
 .content-header {
@@ -817,11 +820,20 @@ body {
 }
 
 .content-view {
-  flex: 1;
-  padding: 14px 20px !important;
-  overflow-y: auto;
+  flex: 1 1 auto;
+  padding: 16px 20px 48px 20px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  height: calc(100vh - 54px);
+  max-height: calc(100vh - 54px);
+  box-sizing: border-box;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
 }
 
 .hidden {
@@ -1033,7 +1045,9 @@ body {
 .table-responsive {
   width: 100%;
   overflow-x: auto;
+  overflow-y: visible;
   border-radius: 12px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .dashboard-table {
@@ -2255,12 +2269,12 @@ body {
   visibility: visible;
 }
 
-/* Specific override to allow opacity transition when hidden */
+/* Strict hidden state ensures no pointer-events or layout interception */
 .lock-overlay.hidden {
-  display: flex !important;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 .login-card {
@@ -3791,6 +3805,14 @@ body {
 
   .main-content {
     height: calc(100vh - 60px);
+    min-height: 0;
+    min-width: 0;
+  }
+
+  .content-view {
+    height: calc(100vh - 114px);
+    max-height: calc(100vh - 114px);
+    overflow-y: auto !important;
   }
 
   .stats-grid {
@@ -3801,7 +3823,7 @@ body {
   .billing-page-container {
     flex-direction: column;
     gap: 20px;
-    overflow-y: auto;
+    overflow-y: visible;
   }
 
   .billing-form-wrapper {
@@ -4321,6 +4343,8 @@ body {
 .products-table-responsive {
   width: 100%;
   overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
 }
 
 .products-table {
