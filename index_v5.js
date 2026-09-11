@@ -2276,6 +2276,187 @@ function bindBillingFormInputs() {
     }
   };
 
+  window.updateBillingStockTelemetry = function(prod) {
+    const stockPill = document.getElementById("bill-stock-pill");
+    const stockPillText = document.getElementById("bill-stock-pill-text");
+    const hiddenInput = document.getElementById("bill-item-stock-qty");
+    const restockBtn = document.getElementById("btn-quick-inward-billing");
+
+    if (!prod) {
+      if (stockPill) stockPill.className = "stock-indicator-pill neutral";
+      if (stockPillText) stockPillText.textContent = "—";
+      if (hiddenInput) hiddenInput.value = "—";
+      if (restockBtn) restockBtn.classList.add("hidden");
+      if (typeof window.handleBillingQtyInput === 'function') window.handleBillingQtyInput();
+      return;
+    }
+
+    const stockVal = prod.stock !== undefined ? parseInt(prod.stock, 10) : 0;
+    if (hiddenInput) hiddenInput.value = stockVal;
+    if (restockBtn) restockBtn.classList.remove("hidden");
+
+    if (stockPill && stockPillText) {
+      if (stockVal === 0) {
+        stockPill.className = "stock-indicator-pill out";
+        stockPillText.textContent = "0 Out of Stock";
+      } else if (stockVal <= 10) {
+        stockPill.className = "stock-indicator-pill low";
+        stockPillText.textContent = `${stockVal} Low Stock`;
+      } else {
+        stockPill.className = "stock-indicator-pill instock";
+        stockPillText.textContent = `${stockVal} in stock`;
+      }
+    }
+
+    if (typeof window.handleBillingQtyInput === 'function') window.handleBillingQtyInput();
+  };
+
+  window.handleBillingQtyInput = function() {
+    const qtyInput = elements.billItemQty || document.getElementById("bill-item-qty");
+    const warningBox = document.getElementById("qty-stock-warning");
+    const warningText = document.getElementById("qty-warning-text");
+    const maxCountSpan = document.getElementById("qty-max-count");
+    const addBtn = document.querySelector(".btn-add-row");
+
+    if (!qtyInput) return;
+
+    const prodId = elements.billItemSelect ? elements.billItemSelect.value : "";
+    let prod = productsDb.find(p => p && p.id === prodId);
+    if (!prod && prodId && prodId !== '__custom__') {
+      prod = productsDb.find(p => p && p.description === prodId);
+    }
+    if (!prod && elements.billItemName && elements.billItemName.value) {
+      prod = productsDb.find(p => p && (p.description || "").trim().toLowerCase() === elements.billItemName.value.trim().toLowerCase());
+    }
+
+    if (!prod || prod.stock === undefined || prod.stock === null || prod.stock === "") {
+      if (warningBox) warningBox.classList.add("hidden");
+      qtyInput.classList.remove("qty-input-warning");
+      qtyInput.classList.remove("qty-input-valid");
+      if (addBtn) {
+        addBtn.disabled = false;
+        addBtn.innerHTML = `<i class="fa-solid fa-plus"></i> Add Item`;
+      }
+      return;
+    }
+
+    const availableStock = Math.max(0, parseInt(prod.stock, 10) || 0);
+
+    let previouslyInvoicedQty = 0;
+    if (currentInvoice && currentInvoice.isEditing && currentInvoice.id) {
+      const origInv = invoicesDb.find(inv => inv && inv.id === currentInvoice.id);
+      if (origInv && origInv.details && Array.isArray(origInv.details.items)) {
+        const matchingOld = origInv.details.items.find(it => 
+          (it.productId && prod.id && it.productId === prod.id) ||
+          (it.description && prod.description && it.description.trim().toLowerCase() === prod.description.trim().toLowerCase())
+        );
+        if (matchingOld) previouslyInvoicedQty = parseFloat(matchingOld.quantity) || 0;
+      }
+    }
+
+    const effectiveAvailable = availableStock + previouslyInvoicedQty;
+
+    const currentInCart = (currentInvoice?.items || [])
+      .filter(item => 
+        (item.productId && prod.id && item.productId === prod.id) ||
+        (item.description && prod.description && item.description.trim().toLowerCase() === prod.description.trim().toLowerCase())
+      )
+      .reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
+
+    const remainingCanAdd = Math.max(0, effectiveAvailable - currentInCart);
+    const requestedQty = parseFloat(qtyInput.value) || 0;
+
+    if (effectiveAvailable <= 0 || remainingCanAdd <= 0) {
+      qtyInput.classList.add("qty-input-warning");
+      qtyInput.classList.remove("qty-input-valid");
+      if (warningBox && warningText) {
+        warningBox.classList.remove("hidden");
+        warningText.innerHTML = `<i class="fa-solid fa-circle-xmark" style="color: #ef4444;"></i> Out of stock (0 available)`;
+        if (maxCountSpan) maxCountSpan.textContent = "0";
+      }
+      if (addBtn) {
+        addBtn.disabled = true;
+        addBtn.innerHTML = `<i class="fa-solid fa-ban"></i> Out of Stock`;
+      }
+    } else if (requestedQty > remainingCanAdd) {
+      qtyInput.classList.add("qty-input-warning");
+      qtyInput.classList.remove("qty-input-valid");
+      if (warningBox && warningText) {
+        warningBox.classList.remove("hidden");
+        warningText.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b;"></i> Exceeds stock (Only ${remainingCanAdd} left)`;
+        if (maxCountSpan) maxCountSpan.textContent = remainingCanAdd;
+      }
+      if (addBtn) {
+        addBtn.disabled = true;
+        addBtn.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Max ${remainingCanAdd}`;
+      }
+    } else {
+      qtyInput.classList.remove("qty-input-warning");
+      qtyInput.classList.add("qty-input-valid");
+      if (warningBox) warningBox.classList.add("hidden");
+      if (addBtn) {
+        addBtn.disabled = false;
+        addBtn.innerHTML = `<i class="fa-solid fa-plus"></i> Add Item`;
+      }
+    }
+  };
+
+  window.setMaxAvailableQty = function() {
+    const qtyInput = elements.billItemQty || document.getElementById("bill-item-qty");
+    const maxCountSpan = document.getElementById("qty-max-count");
+    if (qtyInput && maxCountSpan) {
+      const maxVal = parseInt(maxCountSpan.textContent, 10) || 1;
+      qtyInput.value = Math.max(1, maxVal);
+      handleBillingQtyInput();
+      if (typeof calculateBillingItemNetVal === 'function') calculateBillingItemNetVal();
+    }
+  };
+
+  window.triggerQuickInwardFromBilling = function() {
+    const prodId = elements.billItemSelect ? elements.billItemSelect.value : "";
+    let prod = productsDb.find(p => p && p.id === prodId);
+    if (!prod && prodId && prodId !== '__custom__') {
+      prod = productsDb.find(p => p && p.description === prodId);
+    }
+    if (!prod && elements.billItemName && elements.billItemName.value) {
+      prod = productsDb.find(p => p && (p.description || "").trim().toLowerCase() === elements.billItemName.value.trim().toLowerCase());
+    }
+
+    if (!prod) {
+      showFloatingToast("⚠️ Please choose a product from the catalog to restock.", "warning");
+      return;
+    }
+
+    const currentStock = Math.max(0, parseInt(prod.stock, 10) || 0);
+    const unit = prod.unit || "Buckets";
+    
+    const promptVal = prompt(`📦 QUICK INWARD RESTOCK: "${prod.description}"\n\nCurrent Warehouse Stock: ${currentStock} ${unit}\n\nEnter new shipment quantity received from supplier to ADD:`, "20");
+    if (promptVal === null) return;
+    
+    const addQty = parseInt(promptVal.trim(), 10);
+    if (isNaN(addQty) || addQty <= 0) {
+      showFloatingToast("⚠️ Please enter a valid quantity greater than 0.", "warning");
+      return;
+    }
+
+    const newStock = currentStock + addQty;
+    prod.stock = newStock;
+    prod.updatedAt = new Date().toISOString();
+
+    localStorage.setItem("products", JSON.stringify(productsDb));
+    syncDatabaseToServer("products", productsDb);
+    if (window.triggerDatabaseSync) window.triggerDatabaseSync();
+    populateBillingSelectors();
+
+    if (elements.billItemSelect) {
+      elements.billItemSelect.value = prod.id;
+    }
+    updateBillingStockTelemetry(prod);
+
+    showFloatingToast(`📦 Inward Stock Added! +${addQty} ${unit} added to "${prod.description}". Live stock is now ${newStock} ${unit}.`, 4000);
+    sendStockTelegramReport(prod, `Quick Billing Inward Restock (+${addQty} ${unit})`, currentStock, newStock);
+  };
+
   elements.billItemSelect.addEventListener("change", (e) => {
     const prodId = e.target.value;
     if (!prodId) {
@@ -2287,7 +2468,7 @@ function bindBillingFormInputs() {
       if (elements.billItemPack) elements.billItemPack.value = "";
       elements.billItemGstRate.value = "0";
       elements.billItemDiscount.value = "0";
-      if (elements.billItemStockQty) elements.billItemStockQty.value = "—";
+      updateBillingStockTelemetry(null);
       calculateBillingItemNetVal();
       return;
     }
@@ -2304,7 +2485,7 @@ function bindBillingFormInputs() {
       if (elements.billItemPack) elements.billItemPack.value = "";
       elements.billItemGstRate.value = "0";
       elements.billItemDiscount.value = "0";
-      if (elements.billItemStockQty) elements.billItemStockQty.value = "—";
+      updateBillingStockTelemetry(null);
       calculateBillingItemNetVal();
       return;
     }
@@ -2318,9 +2499,7 @@ function bindBillingFormInputs() {
       if (elements.billItemPack) elements.billItemPack.value = prod.packSize || "";
       elements.billItemGstRate.value = prod.gstRate || "0";
       elements.billItemDiscount.value = prod.discount || "0";
-      if (elements.billItemStockQty) {
-        elements.billItemStockQty.value = prod.stock !== undefined ? prod.stock : "—";
-      }
+      updateBillingStockTelemetry(prod);
       calculateBillingItemNetVal();
     }
   });
@@ -2334,6 +2513,8 @@ function bindBillingFormInputs() {
           elements.billItemSelect.value = "";
         }
       }
+      const matchedProd = productsDb.find(p => p && (p.description || "").trim().toLowerCase() === typed);
+      updateBillingStockTelemetry(matchedProd || null);
     });
   }
 
@@ -2409,7 +2590,24 @@ function populateBillingSelectors() {
     opt.value = p.id;
     const packStr = p.packSize ? ` [${p.packSize}]` : '';
     const unitStr = p.unit ? ` (${p.unit})` : '';
-    opt.textContent = `${p.description}${packStr}${unitStr} - ₹${formatCurrency(p.rate)}`;
+    
+    let stockBadge = '';
+    if (p.stock !== undefined && p.stock !== null && p.stock !== '') {
+      const sVal = parseInt(p.stock, 10) || 0;
+      if (sVal <= 0) {
+        stockBadge = ` • 🚫 (OUT OF STOCK)`;
+        opt.style.color = '#ef4444';
+        opt.style.fontWeight = '600';
+      } else if (sVal <= 10) {
+        stockBadge = ` • ⚠️ (${sVal} Left)`;
+        opt.style.color = '#d97706';
+      } else {
+        stockBadge = ` • (${sVal} in stock)`;
+        opt.style.color = '#059669';
+      }
+    }
+
+    opt.textContent = `${p.description}${packStr}${unitStr} - ₹${formatCurrency(p.rate)}${stockBadge}`;
     elements.billItemSelect.appendChild(opt);
   });
 }
@@ -2645,6 +2843,8 @@ window.addBillingItemRow = function() {
     if (elements.billItemDiscount) elements.billItemDiscount.value = "0";
     if (elements.billItemRate) elements.billItemRate.value = "0";
     if (typeof calculateBillingItemNetVal === 'function') calculateBillingItemNetVal();
+    if (typeof updateBillingStockTelemetry === 'function') updateBillingStockTelemetry(null);
+    if (typeof handleBillingQtyInput === 'function') handleBillingQtyInput();
 
     calculateSummaryAndTable();
     return true;
@@ -2660,6 +2860,7 @@ window.deleteBillingItemRow = function(id) {
     item.baleNo = (index + 1).toString();
   });
   calculateSummaryAndTable();
+  if (typeof handleBillingQtyInput === 'function') handleBillingQtyInput();
 };
 
 // --- CALCULATE SUMMARY & TABLE ---
@@ -2688,6 +2889,31 @@ function calculateSummaryAndTable() {
   currentInvoice.items.forEach(item => {
     totalQty += item.quantity;
 
+    // Remaining warehouse stock after this cart commitment
+    let remStockBadge = '';
+    const prod = productsDb.find(p => (item.productId && p.id === item.productId) || ((p.description || '').trim().toLowerCase() === (item.description || '').trim().toLowerCase()));
+    if (prod && prod.stock !== undefined && prod.stock !== null && prod.stock !== '') {
+      const liveStock = parseInt(prod.stock, 10) || 0;
+      const totalInCartForProd = currentInvoice.items
+        .filter(it => (it.productId && prod.id && it.productId === prod.id) || ((it.description || '').trim().toLowerCase() === (prod.description || '').trim().toLowerCase()))
+        .reduce((sum, it) => sum + (parseFloat(it.quantity) || 0), 0);
+      
+      let previouslyInvoicedQty = 0;
+      if (currentInvoice && currentInvoice.isEditing && currentInvoice.id) {
+        const origInv = invoicesDb.find(inv => inv && inv.id === currentInvoice.id);
+        if (origInv && origInv.details && Array.isArray(origInv.details.items)) {
+          const matchingOld = origInv.details.items.find(it => 
+            (it.productId && prod.id && it.productId === prod.id) ||
+            (it.description && prod.description && it.description.trim().toLowerCase() === prod.description.trim().toLowerCase())
+          );
+          if (matchingOld) previouslyInvoicedQty = parseFloat(matchingOld.quantity) || 0;
+        }
+      }
+      const remAfterCart = (liveStock + previouslyInvoicedQty) - totalInCartForProd;
+      const remColor = remAfterCart <= 0 ? '#ef4444' : (remAfterCart <= 10 ? '#d97706' : '#059669');
+      remStockBadge = `<div style="font-size: 10px; color: ${remColor}; font-weight: 600; white-space: nowrap;">(${remAfterCart} left)</div>`;
+    }
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td style="font-weight: 700; color: var(--primary-teal);">${item.baleNo}</td>
@@ -2696,7 +2922,10 @@ function calculateSummaryAndTable() {
         ${item.packSize && item.packSize !== '—' ? `<div style="font-size: 11px; color: #64748b; font-weight: 500;">Pack: ${item.packSize}</div>` : ''}
       </td>
       <td>${item.hsn || "—"}</td>
-      <td>${item.quantity}</td>
+      <td>
+        <div style="font-weight: 700;">${item.quantity}</div>
+        ${remStockBadge}
+      </td>
       <td>${item.unit || "Bucket"}</td>
       <td style="text-align: right; font-weight: 600;">₹ ${formatCurrency(item.rate)}</td>
       <td style="text-align: right; font-weight: 600;">${item.discount ? item.discount.toFixed(2) + '%' : '0.00%'}</td>

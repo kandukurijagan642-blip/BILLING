@@ -39,7 +39,7 @@
     }
   </script>
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=107">
+  <link rel="stylesheet" href="index.css?v=108">
   <script src="invoice_utils_v5.js?v=96"></script>
 </head>
 <body>
@@ -479,17 +479,32 @@
                     <input type="text" id="bill-item-name" placeholder="Or type item description here..." style="width: 100%;">
                   </div>
                 </div>
-                <div class="form-group flex-item-stock" style="opacity: 0.85;">
-                  <label>STOCK</label>
-                  <input type="text" id="bill-item-stock-qty" readonly value="—" style="background-color: #e2e8f0; text-align: center; font-weight: bold; color: var(--primary-teal); border: 1px solid #cbd5e1;">
+                <div class="form-group flex-item-stock">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <label style="margin: 0;">STOCK</label>
+                    <button type="button" id="btn-quick-inward-billing" class="btn-micro-restock hidden" onclick="triggerQuickInwardFromBilling()" title="Quick 1-Click Restock (Inward)">
+                      <i class="fa-solid fa-plus"></i> Restock
+                    </button>
+                  </div>
+                  <div class="live-stock-pill-wrapper">
+                    <div id="bill-stock-pill" class="stock-indicator-pill neutral" title="Live Available Warehouse Stock">
+                      <span class="pill-dot"></span>
+                      <span id="bill-stock-pill-text">—</span>
+                    </div>
+                    <input type="hidden" id="bill-item-stock-qty" value="—">
+                  </div>
                 </div>
                 <div class="form-group flex-item-hsn">
                   <label>HSN</label>
                   <input type="text" id="bill-item-hsn" placeholder="HSN (e.g. 23099090)">
                 </div>
-                <div class="form-group flex-item-qty">
+                <div class="form-group flex-item-qty" style="position: relative;">
                   <label>QTY</label>
-                  <input type="number" id="bill-item-qty" value="1" min="1" step="1">
+                  <input type="number" id="bill-item-qty" value="1" min="1" step="1" oninput="handleBillingQtyInput()">
+                  <div id="qty-stock-warning" class="qty-warning-bubble hidden">
+                    <span id="qty-warning-text"><i class="fa-solid fa-triangle-exclamation"></i> Exceeds stock!</span>
+                    <button type="button" class="btn-set-max-stock" onclick="setMaxAvailableQty()">Set to Max (<span id="qty-max-count">0</span>)</button>
+                  </div>
                 </div>
                 <div class="form-group flex-item-unit">
                   <label>UNIT</label>
@@ -2472,6 +2487,6 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=156"></script>
+  <script src="index_v5.js?v=157"></script>
 </body>
 </html>
