@@ -82,8 +82,21 @@ async function initClient(options = {}) {
       } catch (e) {}
     }
 
-    const lockFile = path.join(authPath, 'session', 'SingletonLock');
-    try { if (fs.existsSync(lockFile)) fs.unlinkSync(lockFile); } catch (e) {}
+    function cleanChromiumLocks(dir) {
+      try {
+        if (!fs.existsSync(dir)) return;
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            cleanChromiumLocks(fullPath);
+          } else if (entry.name.startsWith('Singleton')) {
+            try { fs.unlinkSync(fullPath); } catch (e) {}
+          }
+        }
+      } catch (e) {}
+    }
+    cleanChromiumLocks(authPath);
 
     if (client) {
       try { await client.destroy(); } catch (e) {}
@@ -177,6 +190,8 @@ async function initClient(options = {}) {
       clientInfo = null;
       isInitializing = false;
       logActivity({ type: 'STATUS', status: 'DISCONNECTED', desc: reason });
+      console.log('🔄 Attempting automatic reconnection in 5 seconds...');
+      setTimeout(() => initClient(), 5000);
     });
 
     await client.initialize();
