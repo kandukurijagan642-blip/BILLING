@@ -39,7 +39,7 @@
     }
   </script>
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=106">
+  <link rel="stylesheet" href="index.css?v=107">
   <script src="invoice_utils_v5.js?v=96"></script>
 </head>
 <body>
@@ -1391,20 +1391,90 @@
           <label for="modal-prod-discount">Default Discount (%)</label>
           <input type="number" step="0.01" id="modal-prod-discount" value="0" oninput="calculateProductModalValues()">
         </div>
-        <div class="form-group col-12">
-          <label for="modal-prod-stock">Current Stock Quantity</label>
-          <input type="number" id="modal-prod-stock" value="0" min="0" required placeholder="e.g. 50" oninput="calculateProductModalValues()">
-        </div>
-
-        <!-- Live Discount & Product Valuation Summary Card -->
-        <div class="col-12" style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; padding: 12px 16px; margin-top: 4px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 12.5px;">
-            <span style="color: #475569;"><i class="fa-solid fa-tag text-emerald"></i> Product Value After Discount:</span>
-            <strong id="modal-preview-val-after-disc" style="color: #15803d; font-size: 14px;">₹ 0.00</strong>
+        <!-- Real-World Business Stock Management System -->
+        <div id="modal-stock-section" class="col-12 stock-management-card">
+          <!-- NEW PRODUCT MODE: Initial Opening Stock -->
+          <div id="modal-new-stock-group" class="form-group col-12" style="margin-bottom: 0;">
+            <label for="modal-prod-stock">Initial Opening Stock Quantity</label>
+            <input type="number" id="modal-prod-stock" value="0" min="0" required placeholder="e.g. 50" oninput="calculateProductModalValues()">
+            <small class="text-muted" style="font-size: 11px; margin-top: 3px; display: block;">Initial quantity available in warehouse.</small>
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; border-top: 1px dashed #bbf7d0; padding-top: 6px;">
-            <span style="color: #475569;"><i class="fa-solid fa-calculator text-teal"></i> Total Value of Product (Stock × Net Price):</span>
-            <strong id="modal-preview-total-val" style="color: #0f172a; font-size: 15px; font-weight: 800;">₹ 0.00</strong>
+
+          <!-- EDIT PRODUCT MODE: Real-World Inward & Stock Reconciliation HUD -->
+          <div id="modal-edit-stock-group" class="hidden">
+            <!-- Existing Stock Display Banner -->
+            <div class="existing-stock-hud">
+              <div class="hud-left">
+                <i class="fa-solid fa-warehouse text-teal" style="font-size: 20px;"></i>
+                <div>
+                  <span class="hud-title">CURRENT WAREHOUSE STOCK</span>
+                  <div class="hud-stock-val">
+                    <strong id="modal-existing-stock-display">0</strong>
+                    <span id="modal-existing-unit" style="font-size: 13px; color: #64748b; font-weight: 600; margin-left: 4px;">Buckets</span>
+                  </div>
+                </div>
+              </div>
+              <div class="hud-badge" id="modal-stock-status-pill">
+                <span class="status-dot"></span> <span id="modal-stock-status-text">In Stock</span>
+              </div>
+            </div>
+
+            <!-- Stock Mode Switcher: Add Stock vs Direct Adjustment -->
+            <div class="stock-action-tabs">
+              <button type="button" id="tab-stock-mode-add" class="stock-tab-btn active" onclick="setProductStockMode('add')">
+                <i class="fa-solid fa-plus"></i> Add New Stock (Inward)
+              </button>
+              <button type="button" id="tab-stock-mode-adjust" class="stock-tab-btn" onclick="setProductStockMode('adjust')">
+                <i class="fa-solid fa-sliders"></i> Audit / Direct Set
+              </button>
+            </div>
+
+            <!-- Mode A: Add New Stock (Inward) -->
+            <div id="stock-mode-add-panel" class="stock-panel">
+              <label for="modal-prod-add-stock" style="font-weight: 700; color: #0284c7; font-size: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span><i class="fa-solid fa-truck-ramp-box"></i> ADD NEW STOCK RECEIVED (+)</span>
+                <span style="font-weight: 500; font-size: 11px; color: #64748b;">Leave at 0 if no new stock</span>
+              </label>
+              <div class="input-with-action">
+                <input type="number" id="modal-prod-add-stock" value="0" min="0" placeholder="0" oninput="calculateProductModalValues()">
+                <div class="quick-add-pills">
+                  <button type="button" class="pill-add-btn" onclick="quickAddStockToInput(5)">+5</button>
+                  <button type="button" class="pill-add-btn" onclick="quickAddStockToInput(10)">+10</button>
+                  <button type="button" class="pill-add-btn" onclick="quickAddStockToInput(25)">+25</button>
+                  <button type="button" class="pill-add-btn" onclick="quickAddStockToInput(50)">+50</button>
+                </div>
+              </div>
+              <small style="font-size: 11px; color: #64748b; display: block; margin-top: 5px;">
+                💡 <strong>How it works:</strong> Entering a number will take your existing stock and <strong>ADD</strong> this new quantity to it. If left at 0, your existing stock remains untouched.
+              </small>
+            </div>
+
+            <!-- Mode B: Direct Stock Adjustment / Physical Audit -->
+            <div id="stock-mode-adjust-panel" class="stock-panel hidden">
+              <label for="modal-prod-adjust-stock" style="font-weight: 700; color: #d97706; font-size: 12px; margin-bottom: 6px; display: block;">
+                <i class="fa-solid fa-clipboard-check"></i> DIRECT PHYSICAL COUNT / INVENTORY AUDIT
+              </label>
+              <input type="number" id="modal-prod-adjust-stock" min="0" placeholder="e.g. 50" oninput="calculateProductModalValues()">
+              <small style="font-size: 11px; color: #64748b; display: block; margin-top: 5px;">
+                ⚠️ Directly sets the absolute warehouse count (use for physical inventory audits, damage write-offs, or reconciliation).
+              </small>
+            </div>
+          </div>
+
+          <!-- Dynamic Live Breakdown & Valuation Card -->
+          <div class="stock-breakdown-card">
+            <div class="breakdown-row">
+              <span class="breakdown-label"><i class="fa-solid fa-boxes-stacked text-teal"></i> Final Resulting Stock:</span>
+              <strong id="modal-resulting-stock" class="breakdown-val text-teal">0 Units</strong>
+            </div>
+            <div class="breakdown-row">
+              <span class="breakdown-label"><i class="fa-solid fa-tag text-emerald"></i> Net Price (After Discount):</span>
+              <strong id="modal-preview-val-after-disc" class="breakdown-val text-emerald">₹ 0.00</strong>
+            </div>
+            <div class="breakdown-row total-row">
+              <span class="breakdown-label"><i class="fa-solid fa-calculator text-blue"></i> Total Warehouse Inventory Valuation:</span>
+              <strong id="modal-preview-total-val" class="breakdown-val-lg">₹ 0.00</strong>
+            </div>
           </div>
         </div>
 
@@ -2402,6 +2472,6 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=154"></script>
+  <script src="index_v5.js?v=155"></script>
 </body>
 </html>

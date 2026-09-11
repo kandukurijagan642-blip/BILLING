@@ -1640,12 +1640,12 @@ function loadAllDatabases() {
     localStorage.setItem("parties", JSON.stringify(partiesDb));
   }
 
-  // Ensure all products have valid default stock if undefined, null, empty or <= 0
+  // Ensure all products have valid numeric stock if undefined, null, empty or NaN
   let updatedProductsStock = false;
   productsDb.forEach(p => {
     const s = parseInt(p.stock, 10);
-    if (p.stock === undefined || p.stock === null || p.stock === "" || isNaN(s) || s <= 0) {
-      p.stock = 100;
+    if (p.stock === undefined || p.stock === null || p.stock === "" || isNaN(s)) {
+      p.stock = 0;
       updatedProductsStock = true;
     }
   });
@@ -1687,34 +1687,77 @@ function loadAllDatabases() {
   }
 }
 
+// Robust Helper: Normalize & locate product in master catalog
+function findProductInDb(item) {
+  if (!item || !Array.isArray(productsDb)) return null;
+  const itemDesc = (item.description || "").trim().toLowerCase();
+  const itemId = item.productId || item.id;
+
+  if (itemId) {
+    const byId = productsDb.find(p => p && p.id === itemId);
+    if (byId) return byId;
+  }
+  if (itemDesc) {
+    const byDesc = productsDb.find(p => p && (p.description || "").trim().toLowerCase() === itemDesc);
+    if (byDesc) return byDesc;
+  }
+  return null;
+}
+
+// Real-World Differential Invoice Stock Reconciliation Engine
+// - If invoice items/quantities are UNCHANGED upon edit, stock delta is 0 and existing stock is untouched!
+// - If quantities change, only the exact net difference is debited or credited from warehouse inventory.
 function reconcileProductInventoryStock(oldInvoice, newInvoice) {
   loadAllDatabases();
   let modified = false;
 
-  if (oldInvoice && oldInvoice.items) {
+  const productDeltas = new Map();
+
+  // 1. Credit back old invoice quantities
+  if (oldInvoice && Array.isArray(oldInvoice.items)) {
     oldInvoice.items.forEach(oldItem => {
-      const prod = productsDb.find(p => p.description === oldItem.description);
+      const prod = findProductInDb(oldItem);
       if (prod) {
-        prod.stock = Math.max(0, (parseInt(prod.stock, 10) || 0) + (parseInt(oldItem.quantity, 10) || 0));
-        modified = true;
+        const currentDelta = productDeltas.get(prod) || 0;
+        const oldQty = parseFloat(oldItem.quantity) || 0;
+        productDeltas.set(prod, currentDelta - oldQty);
       }
     });
   }
 
-  if (newInvoice && newInvoice.items) {
+  // 2. Debit new invoice quantities
+  if (newInvoice && Array.isArray(newInvoice.items)) {
     newInvoice.items.forEach(newItem => {
-      const prod = productsDb.find(p => p.description === newItem.description);
+      const prod = findProductInDb(newItem);
       if (prod) {
-        prod.stock = Math.max(0, (parseInt(prod.stock, 10) || 0) - (parseInt(newItem.quantity, 10) || 0));
-        modified = true;
+        const currentDelta = productDeltas.get(prod) || 0;
+        const newQty = parseFloat(newItem.quantity) || 0;
+        productDeltas.set(prod, currentDelta + newQty);
       }
     });
   }
+
+  // 3. Apply net differential
+  productDeltas.forEach((netDelta, prod) => {
+    if (netDelta !== 0) {
+      const currentStock = parseInt(prod.stock, 10) || 0;
+      const newStock = Math.max(0, currentStock - netDelta);
+      prod.stock = newStock;
+      prod.updatedAt = new Date().toISOString();
+      modified = true;
+
+      const actionText = netDelta > 0 
+        ? `Invoice Stock Deduction (-${netDelta} ${prod.unit || 'Units'})` 
+        : `Invoice Edit Stock Reversal (+${Math.abs(netDelta)} ${prod.unit || 'Units'})`;
+      sendStockTelegramReport(prod, actionText, currentStock, newStock);
+    }
+  });
 
   if (modified) {
     try {
       localStorage.setItem("products", JSON.stringify(productsDb));
       syncDatabaseToServer("products", productsDb);
+      if (typeof window.triggerDatabaseSync === 'function') window.triggerDatabaseSync();
     } catch (err) {
       console.warn("Unable to save products db:", err);
     }
@@ -5535,22 +5578,97 @@ window.deleteSavedInvoice = function(id) {
   }
 };
 
-// --- PRODUCTS DIALOG MODAL CONTROLLER ---
+// --- PRODUCTS DIALOG MODAL CONTROLLER (ENTERPRISE STOCK INWARD & AUDIT ENGINE) ---
+let currentProductStockMode = 'add'; // 'add' (inward restock) | 'adjust' (audit/direct count)
+let currentEditingExistingStock = 0;
+
+window.setProductStockMode = function(mode) {
+  currentProductStockMode = mode;
+  const tabAdd = document.getElementById("tab-stock-mode-add");
+  const tabAdjust = document.getElementById("tab-stock-mode-adjust");
+  const panelAdd = document.getElementById("stock-mode-add-panel");
+  const panelAdjust = document.getElementById("stock-mode-adjust-panel");
+
+  if (mode === 'add') {
+    if (tabAdd) tabAdd.classList.add("active");
+    if (tabAdjust) tabAdjust.classList.remove("active");
+    if (panelAdd) panelAdd.classList.remove("hidden");
+    if (panelAdjust) panelAdjust.classList.add("hidden");
+  } else {
+    if (tabAdd) tabAdd.classList.remove("active");
+    if (tabAdjust) tabAdjust.classList.add("active");
+    if (panelAdd) panelAdd.classList.add("hidden");
+    if (panelAdjust) panelAdjust.classList.remove("hidden");
+    const adjustInput = document.getElementById("modal-prod-adjust-stock");
+    if (adjustInput && (adjustInput.value === "" || adjustInput.value === null)) {
+      adjustInput.value = currentEditingExistingStock;
+    }
+  }
+  calculateProductModalValues();
+};
+
+window.quickAddStockToInput = function(amt) {
+  const addInput = document.getElementById("modal-prod-add-stock");
+  if (addInput) {
+    const currentVal = Math.max(0, parseInt(addInput.value, 10) || 0);
+    addInput.value = currentVal + amt;
+    calculateProductModalValues();
+  }
+};
+
 window.calculateProductModalValues = function() {
   const rateInput = document.getElementById("modal-prod-rate");
   const discInput = document.getElementById("modal-prod-discount");
-  const stockInput = document.getElementById("modal-prod-stock");
+  const prodId = document.getElementById("modal-prod-id")?.value;
+  const isEditing = !!prodId;
 
   const rate = parseFloat(rateInput?.value) || 0;
   const disc = parseFloat(discInput?.value) || 0;
-  const stock = Math.max(0, parseInt(stockInput?.value, 10) || 0);
+
+  let resultingStock = 0;
+  if (!isEditing) {
+    // New product mode: raw initial stock
+    const stockInput = document.getElementById("modal-prod-stock");
+    resultingStock = Math.max(0, parseInt(stockInput?.value, 10) || 0);
+  } else {
+    // Editing existing product: real-world business calculation
+    if (currentProductStockMode === 'add') {
+      const addInput = document.getElementById("modal-prod-add-stock");
+      const addedQty = Math.max(0, parseInt(addInput?.value, 10) || 0);
+      resultingStock = currentEditingExistingStock + addedQty;
+    } else {
+      const adjustInput = document.getElementById("modal-prod-adjust-stock");
+      resultingStock = Math.max(0, parseInt(adjustInput?.value, 10) || 0);
+    }
+  }
 
   const discountAmount = (rate * disc) / 100;
   const valAfterDisc = Math.max(0, rate - discountAmount);
-  const totalVal = stock * valAfterDisc;
+  const totalVal = resultingStock * valAfterDisc;
 
   const valAfterDiscEl = document.getElementById("modal-preview-val-after-disc");
   const totalValEl = document.getElementById("modal-preview-total-val");
+  const resultingStockEl = document.getElementById("modal-resulting-stock");
+
+  if (resultingStockEl) {
+    const unitEl = document.getElementById("modal-prod-unit");
+    const unitStr = unitEl?.value?.trim() || "Units";
+    if (isEditing && currentProductStockMode === 'add') {
+      const addInput = document.getElementById("modal-prod-add-stock");
+      const addedQty = Math.max(0, parseInt(addInput?.value, 10) || 0);
+      if (addedQty > 0) {
+        resultingStockEl.innerHTML = `${resultingStock} ${unitStr} <span style="font-size: 11.5px; color: #059669; font-weight: 600;">(${currentEditingExistingStock} + ${addedQty} inward)</span>`;
+      } else {
+        resultingStockEl.innerHTML = `${resultingStock} ${unitStr} <span style="font-size: 11.5px; color: #64748b; font-weight: 500;">(Unchanged)</span>`;
+      }
+    } else if (isEditing && currentProductStockMode === 'adjust') {
+      const delta = resultingStock - currentEditingExistingStock;
+      const deltaSign = delta > 0 ? `+${delta}` : `${delta}`;
+      resultingStockEl.innerHTML = `${resultingStock} ${unitStr} <span style="font-size: 11.5px; color: #d97706; font-weight: 600;">(${delta !== 0 ? deltaSign + ' audit' : 'Unchanged'})</span>`;
+    } else {
+      resultingStockEl.textContent = `${resultingStock} ${unitStr}`;
+    }
+  }
 
   if (valAfterDiscEl) {
     const discLabel = disc > 0 ? ` <span style="font-size: 11px; color: #64748b; font-weight: normal;">(-${disc}% = -₹ ${formatCurrency(discountAmount)})</span>` : '';
@@ -5567,11 +5685,18 @@ window.openProductModal = function(id = "") {
   document.getElementById("modal-prod-unit").value = "Bucket";
   document.getElementById("modal-prod-discount").value = "0";
   document.getElementById("modal-prod-stock").value = "0";
+  const addStockInput = document.getElementById("modal-prod-add-stock");
+  const adjustStockInput = document.getElementById("modal-prod-adjust-stock");
+  if (addStockInput) addStockInput.value = "0";
+  if (adjustStockInput) adjustStockInput.value = "";
+
+  const newStockGroup = document.getElementById("modal-new-stock-group");
+  const editStockGroup = document.getElementById("modal-edit-stock-group");
 
   if (id) {
     const prod = productsDb.find(p => p.id === id);
     if (prod) {
-      document.getElementById("product-modal-title").textContent = "Edit Product";
+      document.getElementById("product-modal-title").textContent = "Edit Product & Warehouse Stock";
       document.getElementById("modal-prod-id").value = prod.id;
       document.getElementById("modal-prod-desc").value = prod.description;
       document.getElementById("modal-prod-hsn").value = prod.hsn || "";
@@ -5579,10 +5704,30 @@ window.openProductModal = function(id = "") {
       document.getElementById("modal-prod-unit").value = prod.unit || "Bucket";
       document.getElementById("modal-prod-rate").value = prod.rate;
       document.getElementById("modal-prod-discount").value = prod.discount || 0;
-      document.getElementById("modal-prod-stock").value = prod.stock || 0;
+      
+      currentEditingExistingStock = Math.max(0, parseInt(prod.stock, 10) || 0);
+
+      const existDisp = document.getElementById("modal-existing-stock-display");
+      const unitDisp = document.getElementById("modal-existing-unit");
+      if (existDisp) existDisp.textContent = currentEditingExistingStock;
+      if (unitDisp) unitDisp.textContent = prod.unit || "Buckets";
+
+      const pill = document.getElementById("modal-stock-status-pill");
+      const pillText = document.getElementById("modal-stock-status-text");
+      if (pill && pillText) {
+        pill.className = "hud-badge " + (currentEditingExistingStock === 0 ? "out" : (currentEditingExistingStock <= 10 ? "low" : "instock"));
+        pillText.textContent = currentEditingExistingStock === 0 ? "Out of Stock" : (currentEditingExistingStock <= 10 ? "Low Stock" : "In Stock");
+      }
+
+      if (newStockGroup) newStockGroup.classList.add("hidden");
+      if (editStockGroup) editStockGroup.classList.remove("hidden");
+      setProductStockMode('add');
     }
   } else {
-    document.getElementById("product-modal-title").textContent = "Add New Product";
+    currentEditingExistingStock = 0;
+    document.getElementById("product-modal-title").textContent = "Add New Product to Catalog";
+    if (newStockGroup) newStockGroup.classList.remove("hidden");
+    if (editStockGroup) editStockGroup.classList.add("hidden");
   }
 
   calculateProductModalValues();
@@ -5603,18 +5748,56 @@ window.saveProductModal = function(e) {
   const desc = document.getElementById("modal-prod-desc").value.toUpperCase().trim();
   const hsn = document.getElementById("modal-prod-hsn").value.trim();
   const pack = document.getElementById("modal-prod-pack").value.trim();
-  const unit = document.getElementById("modal-prod-unit").value.trim();
+  const unit = document.getElementById("modal-prod-unit").value.trim() || "Bucket";
   const rate = parseFloat(document.getElementById("modal-prod-rate").value) || 0;
   const disc = parseFloat(document.getElementById("modal-prod-discount").value) || 0;
-  const stock = Math.max(0, parseInt(document.getElementById("modal-prod-stock").value, 10) || 0);
 
   let oldStock = 0;
+  let finalStock = 0;
+  let actionReportType = "New Product Added to Inventory";
+
   if (id) {
     const existing = productsDb.find(p => p.id === id);
-    if (existing) oldStock = parseInt(existing.stock, 10) || 0;
+    if (existing) oldStock = Math.max(0, parseInt(existing.stock, 10) || 0);
+
+    if (currentProductStockMode === 'add') {
+      const addInput = document.getElementById("modal-prod-add-stock");
+      const addedQty = Math.max(0, parseInt(addInput?.value, 10) || 0);
+      // REAL WORLD BUSINESS LOGIC:
+      // If user did not enter any new stock (addedQty === 0), preserve existing stock 100%!
+      // If user entered new stock, it takes existing stock and adds new inward stock!
+      finalStock = oldStock + addedQty;
+      actionReportType = addedQty > 0 
+        ? `Stock Inward / Restock (+${addedQty} ${unit})` 
+        : `Product Details Updated (Stock Unchanged: ${oldStock} ${unit})`;
+    } else {
+      // Direct Adjustment / Audit Mode
+      const adjustInput = document.getElementById("modal-prod-adjust-stock");
+      const setVal = adjustInput && adjustInput.value !== "" ? parseInt(adjustInput.value, 10) : oldStock;
+      finalStock = Math.max(0, isNaN(setVal) ? oldStock : setVal);
+      const delta = finalStock - oldStock;
+      actionReportType = delta !== 0 
+        ? `Inventory Physical Audit / Count Adjusted (${delta > 0 ? '+' : ''}${delta} ${unit})` 
+        : `Product Details Updated`;
+    }
+  } else {
+    // New product mode
+    finalStock = Math.max(0, parseInt(document.getElementById("modal-prod-stock")?.value, 10) || 0);
+    actionReportType = `New Product Added (Opening Stock: ${finalStock} ${unit})`;
   }
 
-  const product = { id: id || "prod-" + Date.now(), description: desc, hsn, packSize: pack, unit, rate, gstRate: 0, discount: disc, stock: stock, updatedAt: new Date().toISOString() };
+  const product = { 
+    id: id || "prod-" + Date.now(), 
+    description: desc, 
+    hsn, 
+    packSize: pack, 
+    unit, 
+    rate, 
+    gstRate: 0, 
+    discount: disc, 
+    stock: finalStock, 
+    updatedAt: new Date().toISOString() 
+  };
 
   if (id) {
     const idx = productsDb.findIndex(p => p.id === id);
@@ -5630,7 +5813,41 @@ window.saveProductModal = function(e) {
   populateBillingSelectors();
   if (window.triggerDatabaseSync) window.triggerDatabaseSync();
 
-  sendStockTelegramReport(product, id ? "Product Details / Stock Edited" : "New Product Added to Inventory", oldStock, stock);
+  const stockMsg = id && oldStock !== finalStock 
+    ? `Stock updated: ${oldStock} ➔ ${finalStock} ${unit}`
+    : `Stock: ${finalStock} ${unit}`;
+  showFloatingToast(`✅ "${product.description}" saved successfully! (${stockMsg})`, 3500);
+
+  sendStockTelegramReport(product, actionReportType, oldStock, finalStock);
+};
+
+window.quickRestockProduct = function(id) {
+  const prod = productsDb.find(p => p && p.id === id);
+  if (!prod) return;
+  const currentStock = Math.max(0, parseInt(prod.stock, 10) || 0);
+  const unit = prod.unit || "Buckets";
+  
+  const promptVal = prompt(`📦 RESTOCK INWARD: "${prod.description}"\n\nCurrent Warehouse Stock: ${currentStock} ${unit}\n\nEnter new quantity received from supplier/factory to ADD:`, "10");
+  if (promptVal === null) return;
+  
+  const addQty = parseInt(promptVal.trim(), 10);
+  if (isNaN(addQty) || addQty <= 0) {
+    showFloatingToast("⚠️ Please enter a valid quantity greater than 0 to restock.", "warning");
+    return;
+  }
+
+  const newStock = currentStock + addQty;
+  prod.stock = newStock;
+  prod.updatedAt = new Date().toISOString();
+
+  localStorage.setItem("products", JSON.stringify(productsDb));
+  syncDatabaseToServer("products", productsDb);
+  loadProductsDatabaseTable();
+  populateBillingSelectors();
+  if (window.triggerDatabaseSync) window.triggerDatabaseSync();
+
+  showFloatingToast(`📦 Restocked! Added +${addQty} ${unit} to "${prod.description}". New Total: ${newStock} ${unit}`, 4000);
+  sendStockTelegramReport(prod, `1-Click Inward Restock (+${addQty} ${unit})`, currentStock, newStock);
 };
 
 window.adjustProductStock = function(id, delta) {
@@ -5771,7 +5988,10 @@ function renderProductsTable(records) {
       <td style="text-align: right; font-weight: 800; color: #0f172a; font-size: 14px;">₹ ${formatCurrency(totalVal)}</td>
       <td style="text-align: center;">
         <div class="prod-actions-row">
-          <button class="prod-action-btn edit" onclick="openProductModal('${p.id}')" title="Edit Product">
+          <button class="prod-action-btn restock" onclick="quickRestockProduct('${p.id}')" title="1-Click Quick Restock (Add Inward Stock)" style="color: #0284c7; background: #e0f2fe; border: 1px solid #bae6fd;">
+            <i class="fa-solid fa-boxes-packing"></i>
+          </button>
+          <button class="prod-action-btn edit" onclick="openProductModal('${p.id}')" title="Edit Product & Stock">
             <i class="fa-solid fa-pen-to-square"></i>
           </button>
           <button class="prod-action-btn delete" onclick="deleteProductRowDb('${p.id}')" title="Delete Product">
