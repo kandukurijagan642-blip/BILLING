@@ -5120,10 +5120,41 @@ body {
   box-shadow: 0 1px 0 #cbd5e1;
 }
 
+/* --- Billing Stacking Order & Popover Isolation --- */
+#billing-parties-card {
+  position: relative;
+  z-index: 20;
+}
+
+#billing-parties-card:focus-within {
+  z-index: 60;
+}
+
+#billing-product-entry-card {
+  position: relative;
+  z-index: 30;
+}
+
+#billing-product-entry-card:focus-within,
+#billing-product-entry-card.popover-active {
+  z-index: 1000 !important;
+}
+
+#billing-items-table-card {
+  position: relative;
+  z-index: 5;
+}
+
+.smart-combo-group {
+  position: relative;
+  z-index: 40;
+}
+
 /* --- Smart Product Combobox & Popover --- */
 .smart-picker-container {
   position: relative;
   width: 100%;
+  z-index: 50;
 }
 
 .smart-search-input-wrap {
@@ -5249,19 +5280,19 @@ body {
 
 /* Floating Glassmorphic Popover */
 .smart-product-popover {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  width: 100%;
-  min-width: 360px;
-  max-width: 480px;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 12px;
-  box-shadow: 0 14px 34px -4px rgba(15, 23, 42, 0.2), 0 4px 12px rgba(0, 0, 0, 0.08);
-  z-index: 1000;
-  overflow: hidden;
-  animation: modalEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: absolute !important;
+  top: calc(100% + 6px) !important;
+  left: 0 !important;
+  width: 100% !important;
+  min-width: 380px !important;
+  max-width: 520px !important;
+  background: #ffffff !important;
+  border: 1.5px solid #cbd5e1 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 20px 45px -5px rgba(15, 23, 42, 0.35), 0 8px 16px -2px rgba(0, 0, 0, 0.15) !important;
+  z-index: 99999 !important;
+  overflow: hidden !important;
+  animation: modalEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
 .popover-quick-header {

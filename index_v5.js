@@ -2598,6 +2598,11 @@ function bindBillingFormInputs() {
 
   window.openSmartProductPopover = function() {
     const popover = document.getElementById("smart-product-popover");
+    const productCard = document.getElementById("billing-product-entry-card");
+    if (productCard) {
+      productCard.classList.add("popover-active");
+      productCard.style.zIndex = "1000";
+    }
     if (popover) {
       popover.classList.remove("hidden");
       const query = document.getElementById("smart-product-search")?.value || "";
@@ -2607,6 +2612,11 @@ function bindBillingFormInputs() {
 
   window.closeSmartProductPopover = function() {
     const popover = document.getElementById("smart-product-popover");
+    const productCard = document.getElementById("billing-product-entry-card");
+    if (productCard) {
+      productCard.classList.remove("popover-active");
+      productCard.style.zIndex = "";
+    }
     if (popover) popover.classList.add("hidden");
     smartPickerActiveIndex = -1;
   };
