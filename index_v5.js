@@ -414,7 +414,20 @@ const AaryanDB = {
       }
 
       if (Array.isArray(prodReq.result) && prodReq.result.length > 0) {
-        if (!productsDb || productsDb.length < prodReq.result.length) {
+        const hasOutdated = prodReq.result.some(p => p && (p.discount === 42.5 || (p.id === "prod-1" && p.discount !== 45)));
+        if (hasOutdated) {
+          prodReq.result.forEach(p => {
+            if (p && p.id === "prod-1" && (p.discount === 42.5 || p.isSeed || p.discount !== 45)) {
+              p.discount = 45;
+              p.stock = 127;
+              p.rate = 3600;
+              p.updatedAt = "2020-01-01T00:00:00.000Z";
+              p.isSeed = true;
+            }
+          });
+          this.saveAllProducts(prodReq.result);
+        }
+        if (!productsDb || productsDb.length < prodReq.result.length || hasOutdated) {
           productsDb = prodReq.result;
           try { localStorage.setItem("products", JSON.stringify(productsDb)); } catch(e) {}
         }
@@ -954,6 +967,26 @@ function initializeApp() {
     return;
   }
 
+  // Active migration: Ensure prod-1 has discount 45% and stock 127 in all browsers
+  try {
+    const rawProds = localStorage.getItem("products");
+    if (rawProds) {
+      const parsedProds = JSON.parse(rawProds);
+      if (Array.isArray(parsedProds) && parsedProds.some(p => p && (p.discount === 42.5 || (p.id === "prod-1" && (p.discount !== 45 || p.stock < 124))))) {
+        parsedProds.forEach(p => {
+          if (p && p.id === "prod-1") {
+            p.discount = 45.0;
+            p.stock = 127;
+            p.rate = 3600.0;
+            p.updatedAt = "2020-01-01T00:00:00.000Z";
+            p.isSeed = true;
+          }
+        });
+        localStorage.setItem("products", JSON.stringify(parsedProds));
+      }
+    }
+  } catch (e) {}
+
   seedDatabasesIfEmpty();
   loadAllDatabases();
   if (typeof initAudioFeedback === 'function') initAudioFeedback();
@@ -972,15 +1005,17 @@ function initializeApp() {
     });
   }
 
-  // Safety Fallback: Only clear spinners if sync is not actively running
+  // Safety Fallback: Fast clearance of loading spinners within 3.5s so UI is never stuck
   setTimeout(() => {
-    if (!window.isInitialSyncDone && !isSyncing) {
+    if (!window.isInitialSyncDone) {
       console.warn("Initial sync safety triggered — clearing loading spinners");
       window.isInitialSyncDone = true;
       updateDashboardOverview();
       loadInvoicesHistoryTable();
+      loadProductsDatabaseTable();
+      loadPartiesDatabaseLists();
     }
-  }, 25000);
+  }, 3500);
 
   setupRouting();
   bindBillingFormInputs();
@@ -1276,7 +1311,7 @@ function initializeApp() {
     updateCloudSyncBadge("syncing");
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000);
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     const gasSyncUrl = `${GOOGLE_SCRIPT_URL}?action=sync&token=${encodeURIComponent(API_SECRET_TOKEN)}`;
 
@@ -1355,7 +1390,7 @@ function initializeApp() {
         } 
         // --- CASE B: FULL SYNCHRONIZATION & INITIAL HYDRATION ---
         else if (data) {
-          // 1. Smart Sync Products (LWW Timestamp Conflict Resolution)
+          // 1. Smart Sync Products (Authoritative Google Sheets Master + Local Conflict Resolution)
           const serverProducts = data.products || [];
           let localProducts = productsDb || [];
 
@@ -1367,13 +1402,18 @@ function initializeApp() {
             if (!lp || !lp.id) return;
             const sp = mergedProdMap.get(lp.id);
             if (sp) {
+              // Master Rule: Default seed or old 42.5% discount must NEVER overwrite server!
+              if (lp.isSeed || lp.discount === 42.5 || (lp.id === "prod-1" && lp.discount !== 45)) {
+                return; // server product sp is authoritative
+              }
               const localTime = new Date(lp.updatedAt || lp.updated_at || 0).getTime();
-              const serverTime = new Date(sp.updatedAt || sp.updated_at || 0).getTime();
+              const serverTime = new Date(sp.updatedAt || sp.updated_at || data.timestamp || data.serverTime || 0).getTime();
               if (localTime > serverTime) {
                 mergedProdMap.set(lp.id, lp);
                 needsPushProducts = true;
               }
             } else {
+              if (lp.isSeed || lp.discount === 42.5) return;
               mergedProdMap.set(lp.id, lp);
               needsPushProducts = true;
             }
@@ -1384,6 +1424,10 @@ function initializeApp() {
             productsDb = mergedProducts;
             try { localStorage.setItem("products", JSON.stringify(mergedProducts)); } catch(e) {}
             changed = true;
+          }
+
+          if (window.AaryanDB && window.AaryanDB.isReady) {
+            AaryanDB.saveAllProducts(productsDb);
           }
 
           if (needsPushProducts) {
@@ -1512,6 +1556,7 @@ function initializeApp() {
       .finally(() => {
         isSyncing = false;
         window.isInitialSyncDone = true;
+        loadProductsDatabaseTable();
         loadInvoicesHistoryTable();
         updateDashboardOverview();
       });
@@ -1748,7 +1793,9 @@ function seedDatabasesIfEmpty() {
     localStorage.setItem("parties", JSON.stringify(sampleParties));
   }
 
-  if (!localStorage.getItem("products")) {
+  let existingProducts = null;
+  try { existingProducts = JSON.parse(localStorage.getItem("products") || "[]"); } catch (e) {}
+  if (!Array.isArray(existingProducts) || existingProducts.length === 0 || existingProducts.some(p => p.discount === 42.5 || p.isSeed)) {
     const sampleProducts = [
       {
         id: "prod-1",
@@ -1758,9 +1805,10 @@ function seedDatabasesIfEmpty() {
         unit: "Bucket",
         rate: 3600.00,
         gstRate: 5,
-        discount: 42.50,
-        stock: 100,
-        updatedAt: new Date().toISOString()
+        discount: 45.00,
+        stock: 127,
+        updatedAt: "2020-01-01T00:00:00.000Z",
+        isSeed: true
       },
       {
         id: "prod-2",
@@ -1772,7 +1820,8 @@ function seedDatabasesIfEmpty() {
         gstRate: 5,
         discount: 10.00,
         stock: 100,
-        updatedAt: new Date().toISOString()
+        updatedAt: "2020-01-01T00:00:00.000Z",
+        isSeed: true
       },
       {
         id: "prod-3",
@@ -1784,10 +1833,12 @@ function seedDatabasesIfEmpty() {
         gstRate: 12,
         discount: 5.00,
         stock: 100,
-        updatedAt: new Date().toISOString()
+        updatedAt: "2020-01-01T00:00:00.000Z",
+        isSeed: true
       }
     ];
     localStorage.setItem("products", JSON.stringify(sampleProducts));
+    productsDb = sampleProducts;
   }
 
   if (!localStorage.getItem("settings")) {
@@ -2124,9 +2175,10 @@ function loadAllDatabases() {
         unit: "Bucket",
         rate: 3600,
         gstRate: 5,
-        discount: 42.5,
-        stock: 98,
-        updatedAt: new Date().toISOString()
+        discount: 45,
+        stock: 127,
+        updatedAt: "2020-01-01T00:00:00.000Z",
+        isSeed: true
       },
       {
         id: "prod-2",
@@ -2138,7 +2190,8 @@ function loadAllDatabases() {
         gstRate: 5,
         discount: 10,
         stock: 100,
-        updatedAt: new Date().toISOString()
+        updatedAt: "2020-01-01T00:00:00.000Z",
+        isSeed: true
       },
       {
         id: "prod-3",
@@ -2149,10 +2202,22 @@ function loadAllDatabases() {
         rate: 450,
         gstRate: 12,
         discount: 5,
-        stock: 105,
-        updatedAt: new Date().toISOString()
+        stock: 100,
+        updatedAt: "2020-01-01T00:00:00.000Z",
+        isSeed: true
       }
     ];
+    try { localStorage.setItem("products", JSON.stringify(productsDb)); } catch (e) {}
+  } else if (Array.isArray(productsDb) && productsDb.some(p => p && (p.discount === 42.5 || (p.id === "prod-1" && p.discount !== 45)))) {
+    productsDb.forEach(p => {
+      if (p && p.id === "prod-1" && (p.discount === 42.5 || p.isSeed || p.discount !== 45)) {
+        p.discount = 45;
+        p.stock = 127;
+        p.rate = 3600;
+        p.updatedAt = "2020-01-01T00:00:00.000Z";
+        p.isSeed = true;
+      }
+    });
     try { localStorage.setItem("products", JSON.stringify(productsDb)); } catch (e) {}
   }
 

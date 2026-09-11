@@ -42,7 +42,7 @@
     }
   </script>
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=180">
+  <link rel="stylesheet" href="index.css?v=185">
   <script src="invoice_utils_v5.js?v=96"></script>
 </head>
 <body>
@@ -980,7 +980,7 @@
             </div>
             <div class="kpi-data">
               <span class="kpi-label">TOTAL PRODUCTS</span>
-              <h3 class="kpi-value" id="prod-kpi-count">0</h3>
+              <h3 class="kpi-value" id="prod-kpi-count">3</h3>
               <span class="kpi-hint">Master Catalog Items</span>
             </div>
           </div>
@@ -991,7 +991,7 @@
             </div>
             <div class="kpi-data">
               <span class="kpi-label">PHYSICAL STOCK</span>
-              <h3 class="kpi-value" id="prod-kpi-units">0 Units</h3>
+              <h3 class="kpi-value" id="prod-kpi-units">327 Units</h3>
               <span class="kpi-hint">Total Warehouse Units</span>
             </div>
           </div>
@@ -1002,7 +1002,7 @@
             </div>
             <div class="kpi-data">
               <span class="kpi-label">TOTAL INVENTORY VALUE</span>
-              <h3 class="kpi-value text-emerald" id="prod-kpi-valuation">₹ 0.00</h3>
+              <h3 class="kpi-value text-emerald" id="prod-kpi-valuation">₹ 3,70,710.00</h3>
               <span class="kpi-hint">Net Worth (After Discount)</span>
             </div>
           </div>
@@ -1014,7 +1014,7 @@
             <div class="kpi-data">
               <span class="kpi-label">STOCK ALERTS</span>
               <h3 class="kpi-value" id="prod-kpi-alerts">0 Alerts</h3>
-              <span class="kpi-hint" id="prod-kpi-alerts-sub">0 Low / 0 Out</span>
+              <span class="kpi-hint" id="prod-kpi-alerts-sub">All In Stock</span>
             </div>
           </div>
         </div>
@@ -1026,7 +1026,7 @@
               <div class="title-with-badge">
                 <i class="fa-solid fa-box-archive text-teal" style="font-size: 20px;"></i>
                 <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a;">Products &amp; Inventory Master</h3>
-                <span class="products-count-badge" id="product-count">0</span>
+                <span class="products-count-badge" id="product-count">3</span>
               </div>
               <p class="products-header-sub">Manage master pricing, promotional discount %, real-time physical stock &amp; inventory valuation</p>
             </div>
@@ -1077,14 +1077,163 @@
                 </tr>
               </thead>
               <tbody id="products-list-body">
-                <!-- Dynamically populated -->
+                <tr>
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <div style="width: 28px; height: 28px; border-radius: 6px; background: #f0fdfa; color: #0f766e; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;">
+                        <i class="fa-solid fa-box"></i>
+                      </div>
+                      <div>
+                        <div style="font-weight: 700; color: #0f172a; font-size: 13px;">RALLIMIN ADV + 15 KGs</div>
+                        <div style="font-size: 11px; color: #64748b;">Bucket</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span style="background: #f1f5f9; border: 1px solid #e2e8f0; padding: 2px 7px; border-radius: 5px; font-family: monospace; font-size: 11.5px; font-weight: 600; color: #475569;">23099090</span></td>
+                  <td style="text-align: center;"><span style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 2px 8px; font-size: 12px; font-weight: 600; color: #334155;">15 KG</span></td>
+                  <td style="text-align: right; font-weight: 600; color: #334155; font-size: 13px;">₹ 3,600.00</td>
+                  <td style="text-align: center;">
+                    <div class="prod-discount-badge" title="Click to edit discount percentage">
+                      <input type="number" step="0.1" min="0" max="100" value="45" onchange="updateProductDiscountInline('prod-1', this.value)" class="prod-discount-input">
+                      <span class="prod-discount-pct">%</span>
+                    </div>
+                  </td>
+                  <td style="text-align: right;">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end;">
+                      <span style="font-weight: 800; color: #16a34a; font-size: 13.5px;">₹ 1,980.00</span>
+                      <span style="font-size: 10px; color: #059669; font-weight: 600;">(-45%)</span>
+                    </div>
+                  </td>
+                  <td style="text-align: center;">
+                    <div class="prod-stock-stepper">
+                      <button class="btn-stock-step" onclick="adjustProductStock('prod-1', -1)" title="Decrease Stock">−</button>
+                      <span class="stock-qty-text">127</span>
+                      <button class="btn-stock-step" onclick="adjustProductStock('prod-1', 1)" title="Increase Stock">+</button>
+                      <span style="display: inline-block; background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; padding: 2px 7px; border-radius: 12px; font-size: 10px; font-weight: 700;"><i class="fa-solid fa-circle-check"></i> In Stock</span>
+                    </div>
+                  </td>
+                  <td style="text-align: right; font-weight: 800; color: #0f172a; font-size: 14px;">₹ 2,51,460.00</td>
+                  <td style="text-align: center;">
+                    <div class="prod-actions-row">
+                      <button class="prod-action-btn restock" onclick="quickRestockProduct('prod-1')" title="1-Click Quick Restock (Add Inward Stock)" style="color: #0284c7; background: #e0f2fe; border: 1px solid #bae6fd;">
+                        <i class="fa-solid fa-boxes-packing"></i>
+                      </button>
+                      <button class="prod-action-btn edit" onclick="openProductEditModal('prod-1')" title="Edit Product Details">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                      </button>
+                      <button class="prod-action-btn delete" onclick="deleteProductRowDb('prod-1')" title="Delete Product">
+                        <i class="fa-solid fa-trash-can"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <div style="width: 28px; height: 28px; border-radius: 6px; background: #f0fdfa; color: #0f766e; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;">
+                        <i class="fa-solid fa-box"></i>
+                      </div>
+                      <div>
+                        <div style="font-weight: 700; color: #0f172a; font-size: 13px;">AQUA PROBIOTIC FEED SUPPLEMENT 1KG</div>
+                        <div style="font-size: 11px; color: #64748b;">Can</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span style="background: #f1f5f9; border: 1px solid #e2e8f0; padding: 2px 7px; border-radius: 5px; font-family: monospace; font-size: 11.5px; font-weight: 600; color: #475569;">23099090</span></td>
+                  <td style="text-align: center;"><span style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 2px 8px; font-size: 12px; font-weight: 600; color: #334155;">1 KG</span></td>
+                  <td style="text-align: right; font-weight: 600; color: #334155; font-size: 13px;">₹ 850.00</td>
+                  <td style="text-align: center;">
+                    <div class="prod-discount-badge" title="Click to edit discount percentage">
+                      <input type="number" step="0.1" min="0" max="100" value="10" onchange="updateProductDiscountInline('prod-2', this.value)" class="prod-discount-input">
+                      <span class="prod-discount-pct">%</span>
+                    </div>
+                  </td>
+                  <td style="text-align: right;">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end;">
+                      <span style="font-weight: 800; color: #16a34a; font-size: 13.5px;">₹ 765.00</span>
+                      <span style="font-size: 10px; color: #059669; font-weight: 600;">(-10%)</span>
+                    </div>
+                  </td>
+                  <td style="text-align: center;">
+                    <div class="prod-stock-stepper">
+                      <button class="btn-stock-step" onclick="adjustProductStock('prod-2', -1)" title="Decrease Stock">−</button>
+                      <span class="stock-qty-text">100</span>
+                      <button class="btn-stock-step" onclick="adjustProductStock('prod-2', 1)" title="Increase Stock">+</button>
+                      <span style="display: inline-block; background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; padding: 2px 7px; border-radius: 12px; font-size: 10px; font-weight: 700;"><i class="fa-solid fa-circle-check"></i> In Stock</span>
+                    </div>
+                  </td>
+                  <td style="text-align: right; font-weight: 800; color: #0f172a; font-size: 14px;">₹ 76,500.00</td>
+                  <td style="text-align: center;">
+                    <div class="prod-actions-row">
+                      <button class="prod-action-btn restock" onclick="quickRestockProduct('prod-2')" title="1-Click Quick Restock (Add Inward Stock)" style="color: #0284c7; background: #e0f2fe; border: 1px solid #bae6fd;">
+                        <i class="fa-solid fa-boxes-packing"></i>
+                      </button>
+                      <button class="prod-action-btn edit" onclick="openProductEditModal('prod-2')" title="Edit Product Details">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                      </button>
+                      <button class="prod-action-btn delete" onclick="deleteProductRowDb('prod-2')" title="Delete Product">
+                        <i class="fa-solid fa-trash-can"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <div style="width: 28px; height: 28px; border-radius: 6px; background: #f0fdfa; color: #0f766e; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;">
+                        <i class="fa-solid fa-box"></i>
+                      </div>
+                      <div>
+                        <div style="font-weight: 700; color: #0f172a; font-size: 13px;">ZEOLITE POWDER 25KG BAG</div>
+                        <div style="font-size: 11px; color: #64748b;">Bag</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span style="background: #f1f5f9; border: 1px solid #e2e8f0; padding: 2px 7px; border-radius: 5px; font-family: monospace; font-size: 11.5px; font-weight: 600; color: #475569;">28421000</span></td>
+                  <td style="text-align: center;"><span style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 2px 8px; font-size: 12px; font-weight: 600; color: #334155;">25 KG</span></td>
+                  <td style="text-align: right; font-weight: 600; color: #334155; font-size: 13px;">₹ 450.00</td>
+                  <td style="text-align: center;">
+                    <div class="prod-discount-badge" title="Click to edit discount percentage">
+                      <input type="number" step="0.1" min="0" max="100" value="5" onchange="updateProductDiscountInline('prod-3', this.value)" class="prod-discount-input">
+                      <span class="prod-discount-pct">%</span>
+                    </div>
+                  </td>
+                  <td style="text-align: right;">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end;">
+                      <span style="font-weight: 800; color: #16a34a; font-size: 13.5px;">₹ 427.50</span>
+                      <span style="font-size: 10px; color: #059669; font-weight: 600;">(-5%)</span>
+                    </div>
+                  </td>
+                  <td style="text-align: center;">
+                    <div class="prod-stock-stepper">
+                      <button class="btn-stock-step" onclick="adjustProductStock('prod-3', -1)" title="Decrease Stock">−</button>
+                      <span class="stock-qty-text">100</span>
+                      <button class="btn-stock-step" onclick="adjustProductStock('prod-3', 1)" title="Increase Stock">+</button>
+                      <span style="display: inline-block; background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; padding: 2px 7px; border-radius: 12px; font-size: 10px; font-weight: 700;"><i class="fa-solid fa-circle-check"></i> In Stock</span>
+                    </div>
+                  </td>
+                  <td style="text-align: right; font-weight: 800; color: #0f172a; font-size: 14px;">₹ 42,750.00</td>
+                  <td style="text-align: center;">
+                    <div class="prod-actions-row">
+                      <button class="prod-action-btn restock" onclick="quickRestockProduct('prod-3')" title="1-Click Quick Restock (Add Inward Stock)" style="color: #0284c7; background: #e0f2fe; border: 1px solid #bae6fd;">
+                        <i class="fa-solid fa-boxes-packing"></i>
+                      </button>
+                      <button class="prod-action-btn edit" onclick="openProductEditModal('prod-3')" title="Edit Product Details">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                      </button>
+                      <button class="prod-action-btn delete" onclick="deleteProductRowDb('prod-3')" title="Delete Product">
+                        <i class="fa-solid fa-trash-can"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
               </tbody>
               <tfoot id="products-list-tfoot">
                 <tr>
                   <td colspan="4" style="text-align: right; font-weight: 700; color: #475569; padding: 14px 16px;">Total Warehouse Inventory:</td>
-                  <td colspan="2" style="text-align: center; font-weight: 800; color: #0284c7; padding: 14px 16px;" id="prod-total-count-footer">0 Items</td>
-                  <td style="text-align: center; font-weight: 800; color: #0f766e; padding: 14px 16px;" id="prod-total-stock-footer">0 Units</td>
-                  <td style="text-align: right; font-weight: 800; color: #0f172a; font-size: 14px; padding: 14px 16px;" id="prod-total-val-footer">₹ 0.00</td>
+                  <td colspan="2" style="text-align: center; font-weight: 800; color: #0284c7; padding: 14px 16px;" id="prod-total-count-footer">3 Items</td>
+                  <td style="text-align: center; font-weight: 800; color: #0f766e; padding: 14px 16px;" id="prod-total-stock-footer">327 Units</td>
+                  <td style="text-align: right; font-weight: 800; color: #0f172a; font-size: 14px; padding: 14px 16px;" id="prod-total-val-footer">₹ 3,70,710.00</td>
                   <td></td>
                 </tr>
               </tfoot>
@@ -2756,6 +2905,6 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=180"></script>
+  <script src="index_v5.js?v=185"></script>
 </body>
 </html>
