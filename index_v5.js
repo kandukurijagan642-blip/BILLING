@@ -1413,8 +1413,20 @@ function helper(n) {
 }
 
 // --- INDIAN CURRENCY FORMATTER ---
+function safeParseAmount(val) {
+  if (val === null || val === undefined || val === '') return 0;
+  if (typeof val === 'number') return isNaN(val) || !isFinite(val) ? 0 : val;
+  const cleaned = String(val).replace(/[^0-9.-]/g, '');
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) || !isFinite(parsed) ? 0 : parsed;
+}
+
 function formatCurrency(val) {
-  if (isNaN(val) || val === null || val === undefined) return '0.00';
+  if (val === null || val === undefined || val === '') return '0.00';
+  if (typeof val === 'string') {
+    val = parseFloat(val.replace(/[^0-9.-]/g, ''));
+  }
+  if (isNaN(val) || !isFinite(val)) return '0.00';
   let num = parseFloat(val).toFixed(2);
   let parts = num.split('.');
   let integerPart = parts[0];
@@ -2405,27 +2417,79 @@ function renderDashboardCharts() {
   }
 
   let totalCgst = 0, totalSgst = 0, totalIgst = 0;
+  let totalExemptOrZeroTaxRevenue = 0;
 
-  invoicesDb.forEach(inv => {
+  (invoicesDb || []).forEach(inv => {
+    if (!inv) return;
+    const invAmt = safeParseAmount(inv.total !== undefined ? inv.total : (inv.details && inv.details.total));
+
+    // Robust date parsing
     if (inv.invoiceDate) {
-      const parts = inv.invoiceDate.split('-');
-      if (parts.length === 3) {
-        const mIdx = parseInt(parts[1], 10) - 1;
-        const yr = parts[0];
-        if (mIdx >= 0 && mIdx < 12) {
-          const key = `${monthNames[mIdx]} ${yr}`;
-          if (monthlyRevenue.hasOwnProperty(key)) {
-            monthlyRevenue[key] += parseFloat(inv.total || 0);
+      let d = null;
+      const rawDate = String(inv.invoiceDate).trim();
+      if (/^\d{4}-\d{2}-\d{2}/.test(rawDate)) {
+        const p = rawDate.split('-');
+        d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+      } else {
+        const parsed = new Date(rawDate);
+        if (!isNaN(parsed.getTime())) {
+          d = parsed;
+        } else {
+          const parts = rawDate.split(/[-/ ]/);
+          if (parts.length === 3 && parts[2].length === 4) {
+            const yr = parseInt(parts[2], 10);
+            let m = parseInt(parts[1], 10) - 1;
+            if (isNaN(m)) {
+              const monPrefix = parts[1].toLowerCase().slice(0, 3);
+              const mIdx = monthNames.findIndex(mn => mn.toLowerCase() === monPrefix);
+              if (mIdx >= 0) m = mIdx;
+            }
+            const day = parseInt(parts[0], 10);
+            if (m >= 0 && !isNaN(day)) d = new Date(yr, m, day);
           }
+        }
+      }
+
+      if (d && !isNaN(d.getTime())) {
+        const key = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+        if (monthlyRevenue.hasOwnProperty(key)) {
+          monthlyRevenue[key] += invAmt;
         }
       }
     }
 
+    // Extract taxes with multi-tier fallback
     const details = inv.details || {};
-    totalCgst += parseFloat(details.totalCgst || 0);
-    totalSgst += parseFloat(details.totalSgst || 0);
-    totalIgst += parseFloat(details.totalIgst || 0);
+    let cgst = safeParseAmount(inv.cgst !== undefined ? inv.cgst : (details.cgst !== undefined ? details.cgst : details.totalCgst));
+    let sgst = safeParseAmount(inv.sgst !== undefined ? inv.sgst : (details.sgst !== undefined ? details.sgst : details.totalSgst));
+    let igst = safeParseAmount(inv.igst !== undefined ? inv.igst : (details.igst !== undefined ? details.igst : details.totalIgst));
+
+    // If taxes evaluate to 0, check if line items had gstRate/taxRate
+    if (cgst === 0 && sgst === 0 && igst === 0) {
+      const items = inv.items || details.items || [];
+      if (Array.isArray(items) && items.length > 0 && typeof InvoiceUtils !== 'undefined' && typeof InvoiceUtils.calculateInvoiceBreakdown === 'function') {
+        const sellerStateCode = (globalSettings.company && globalSettings.company.stateCode) || "37";
+        const buyerStateCode = (inv.buyer && inv.buyer.stateCode) || (details.buyer && details.buyer.stateCode) || "37";
+        const bk = InvoiceUtils.calculateInvoiceBreakdown(items, sellerStateCode, buyerStateCode);
+        cgst = bk.totalCgst;
+        sgst = bk.totalSgst;
+        igst = bk.totalIgst;
+      }
+    }
+
+    if (cgst === 0 && sgst === 0 && igst === 0) {
+      totalExemptOrZeroTaxRevenue += invAmt;
+    }
+
+    totalCgst += cgst;
+    totalSgst += sgst;
+    totalIgst += igst;
   });
+
+  totalCgst = Math.round(totalCgst * 100) / 100;
+  totalSgst = Math.round(totalSgst * 100) / 100;
+  totalIgst = Math.round(totalIgst * 100) / 100;
+  const totalTaxSum = totalCgst + totalSgst + totalIgst;
 
   const labels = Object.keys(monthlyRevenue);
   const dataValues = Object.values(monthlyRevenue);
@@ -2506,14 +2570,18 @@ function renderDashboardCharts() {
     }
   });
 
-  const hasTaxData = (totalCgst + totalSgst + totalIgst) > 0;
+  const hasTaxData = totalTaxSum > 0;
+  const gstLabels = hasTaxData ? ['CGST', 'SGST', 'IGST'] : ['Bill of Supply (0% GST)'];
+  const gstData = hasTaxData ? [totalCgst, totalSgst, totalIgst] : [totalExemptOrZeroTaxRevenue || 1];
+  const gstColors = hasTaxData ? ['#10b981', '#0284c7', '#f59e0b'] : ['#0891b2'];
+
   gstChartInstance = new Chart(gstCanvas, {
     type: 'doughnut',
     data: {
-      labels: ['CGST', 'SGST', 'IGST'],
+      labels: gstLabels,
       datasets: [{
-        data: hasTaxData ? [totalCgst, totalSgst, totalIgst] : [1, 1, 1],
-        backgroundColor: hasTaxData ? ['#10b981', '#0284c7', '#f59e0b'] : ['#e2e8f0', '#cbd5e1', '#94a3b8'],
+        data: gstData,
+        backgroundColor: gstColors,
         borderWidth: 2,
         borderColor: '#ffffff',
         hoverOffset: 4
@@ -2529,7 +2597,7 @@ function renderDashboardCharts() {
           labels: {
             color: '#475569',
             font: { size: 11, family: 'Inter', weight: '600' },
-            padding: 14,
+            padding: 12,
             usePointStyle: true,
             pointStyle: 'circle'
           }
@@ -2540,7 +2608,13 @@ function renderDashboardCharts() {
           cornerRadius: 8,
           callbacks: {
             label: function(context) {
-              return hasTaxData ? ` ₹ ${context.parsed.toLocaleString('en-IN')}` : ' No tax data';
+              const label = context.label || '';
+              const val = context.parsed;
+              if (hasTaxData) {
+                return ` ${label}: ₹ ${val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+              } else {
+                return ` ${label}: ₹ ${val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (100% Tax-Exempt)`;
+              }
             }
           }
         }
@@ -2569,6 +2643,9 @@ window.calculateMarginWidget = function() {
 function updateDashboardOverview() {
   loadAllDatabases();
 
+  // Clean out invalid / corrupted entries
+  invoicesDb = (invoicesDb || []).filter(inv => inv && (inv.id || inv.invoiceNo) && inv.id !== 'inv_test_delta');
+
   const isSyncLoading = invoicesDb.length === 0 && !window.isInitialSyncDone;
 
   if (isSyncLoading) {
@@ -2576,13 +2653,20 @@ function updateDashboardOverview() {
     if (elements.statTotalAmount) elements.statTotalAmount.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="font-size: 16px;"></i>`;
   } else {
     if (elements.statTotalInvoices) elements.statTotalInvoices.textContent = invoicesDb.length;
-    const totalRevenue = invoicesDb.reduce((sum, inv) => sum + parseFloat(inv.total), 0);
-    if (elements.statTotalAmount) elements.statTotalAmount.textContent = '₹ ' + formatCurrency(totalRevenue);
+    const totalRevenue = invoicesDb.reduce((sum, inv) => {
+      if (!inv) return sum;
+      const raw = inv.total !== undefined ? inv.total : (inv.details && inv.details.total !== undefined ? inv.details.total : 0);
+      return sum + safeParseAmount(raw);
+    }, 0);
+    if (elements.statTotalAmount) {
+      elements.statTotalAmount.textContent = '₹ ' + formatCurrency(totalRevenue);
+      elements.statTotalAmount.title = 'Total Gross Billing Volume: ₹ ' + formatCurrency(totalRevenue);
+    }
   }
 
-  if (elements.statTotalProducts) elements.statTotalProducts.textContent = productsDb.length;
+  if (elements.statTotalProducts) elements.statTotalProducts.textContent = (productsDb || []).length;
   
-  const uniqueParties = new Set(partiesDb.map(p => p.name)).size;
+  const uniqueParties = new Set((partiesDb || []).map(p => p && p.name).filter(Boolean)).size;
   if (elements.statTotalParties) elements.statTotalParties.textContent = uniqueParties;
 
   checkLowStockAlerts();
@@ -2604,7 +2688,7 @@ function updateDashboardOverview() {
       } else {
         elements.dashboardRecentInvoicesBody.innerHTML = `
           <tr>
-            <td colspan="7" class="text-center text-muted">No invoices generated yet.</td>
+            <td colspan="7" class="text-center text-muted" style="padding: 24px;">No invoices generated yet.</td>
           </tr>
         `;
       }
@@ -2613,26 +2697,30 @@ function updateDashboardOverview() {
 
     recent.forEach(inv => {
       const details = inv.details || {};
-      const status = details.paymentStatus || 'Paid';
+      const status = details.paymentStatus || inv.paymentStatus || 'Paid';
       let badgeClass = 'badge-paid';
       if (status === 'Partial') badgeClass = 'badge-partial';
       if (status === 'Unpaid') badgeClass = 'badge-unpaid';
 
+      const invTotal = safeParseAmount(inv.total !== undefined ? inv.total : details.total);
+      const custName = (inv.customerName || (details.buyer && details.buyer.name) || 'Cash Customer').trim();
+      const itemsCount = inv.itemsCount !== undefined ? inv.itemsCount : ((inv.items || details.items || []).length);
+
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td style="font-weight: 700; color: var(--primary-teal);">#${inv.invoiceNo}</td>
-        <td>${formatInputDateString(inv.invoiceDate)}</td>
-        <td style="font-weight: 600;">${inv.customerName}</td>
-        <td class="text-center">${inv.itemsCount}</td>
-        <td style="text-align: right; font-weight: 700;">₹ ${formatCurrency(inv.total)}</td>
-        <td class="text-center"><span class="badge-status ${badgeClass}">${status}</span></td>
+        <td style="font-weight: 700; color: var(--primary-teal); white-space: nowrap;">#${inv.invoiceNo}</td>
+        <td style="white-space: nowrap;">${formatInputDateString(inv.invoiceDate)}</td>
+        <td style="font-weight: 600; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${custName}">${custName}</td>
+        <td class="text-center" style="white-space: nowrap;">${itemsCount}</td>
+        <td style="text-align: right; font-weight: 700; white-space: nowrap;">₹ ${formatCurrency(invTotal)}</td>
+        <td class="text-center" style="white-space: nowrap;"><span class="badge-status ${badgeClass}">${status}</span></td>
         <td class="actions-cell">
-          <button class="action-btn edit" onclick="editSavedInvoice('${inv.id}')" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
-          <button class="action-btn print" onclick="printSavedInvoice('${inv.id}')" title="Print A4"><i class="fa-solid fa-print"></i></button>
-          <button class="action-btn print" onclick="printSavedInvoiceThermal('${inv.id}')" title="Print Thermal POS"><i class="fa-solid fa-receipt"></i></button>
-          <button class="action-btn share btn-whatsapp" onclick="shareInvoiceToWhatsApp('${inv.id}', this)" title="Share PDF via WhatsApp"><i class="fa-brands fa-whatsapp" style="color: #16a34a;"></i></button>
+          <button class="action-btn edit" onclick="editSavedInvoice('${inv.id}')" title="Edit Invoice"><i class="fa-solid fa-pen-to-square"></i></button>
+          <button class="action-btn print" onclick="printSavedInvoice('${inv.id}')" title="Print A4 Tax Invoice"><i class="fa-solid fa-print"></i></button>
+          <button class="action-btn print" onclick="printSavedInvoiceThermal('${inv.id}')" title="Print Thermal POS Receipt"><i class="fa-solid fa-receipt"></i></button>
+          <button class="action-btn share btn-whatsapp" onclick="shareInvoiceToWhatsApp('${inv.id}', this)" title="Share PDF via WhatsApp (1-Click)"><i class="fa-brands fa-whatsapp" style="color: #16a34a;"></i></button>
           <button class="action-btn share btn-telegram" onclick="shareInvoiceToTelegram('${inv.id}', this)" title="Share PDF to Telegram (@fishbilling_bot_bot)"><i class="fa-brands fa-telegram" style="color: #0284c7;"></i></button>
-          <button class="action-btn delete" onclick="deleteSavedInvoice('${inv.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+          <button class="action-btn delete" onclick="deleteSavedInvoice('${inv.id}')" title="Delete Invoice"><i class="fa-solid fa-trash"></i></button>
         </td>
       `;
       elements.dashboardRecentInvoicesBody.appendChild(tr);

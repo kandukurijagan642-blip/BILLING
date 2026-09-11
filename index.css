@@ -845,8 +845,8 @@ body {
   background: linear-gradient(135deg, #090d16 0%, #0f172a 40%, #0e384c 100%);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px !important;
-  padding: 12px 20px !important;
-  margin-bottom: 12px !important;
+  padding: 14px 20px !important;
+  margin: 0 0 14px 0 !important;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -854,6 +854,8 @@ body {
   position: relative;
   overflow: hidden;
   box-sizing: border-box !important;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .dashboard-hero-card::before {
@@ -926,22 +928,23 @@ body {
 /* --- STATS CARD MODULE --- */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px !important;
-  margin-bottom: 12px !important;
+  margin-bottom: 14px !important;
 }
 
 .stat-card {
   background: #ffffff;
   border: 1px solid rgba(226, 232, 240, 0.85);
   border-radius: 12px !important;
-  padding: 12px 14px !important;
+  padding: 12px 16px !important;
   display: flex;
   align-items: center;
   gap: 12px !important;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   box-sizing: border-box !important;
+  min-width: 0;
 }
 
 .stat-card:hover {
@@ -972,6 +975,12 @@ body {
 .text-cyan { color: #0891b2; }
 .text-purple { color: #7c3aed; }
 
+.stat-details {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
 .stat-label {
   font-size: 9.5px !important;
   font-weight: 700;
@@ -982,7 +991,7 @@ body {
 }
 
 .stat-details h3 {
-  font-size: 20px !important;
+  font-size: 19px !important;
   font-weight: 800;
   color: #0f172a;
   margin: 1px 0 !important;
@@ -990,6 +999,9 @@ body {
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stat-trend {
@@ -1041,36 +1053,53 @@ body {
 .padding-0 { padding: 0 !important; }
 .overflow-hidden { overflow: hidden; }
 
+/* Analytics Charts Grid */
+.analytics-charts-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.85fr) minmax(0, 1.15fr);
+  gap: 14px;
+  margin-bottom: 14px !important;
+}
+
+@media (max-width: 992px) {
+  .analytics-charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Tables Styling */
 .table-responsive {
   width: 100%;
   overflow-x: auto;
   overflow-y: visible;
-  border-radius: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  background: #ffffff;
   -webkit-overflow-scrolling: touch;
 }
 
 .dashboard-table {
   width: 100%;
+  min-width: 760px;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 12.5px;
   text-align: left;
 }
 
 .dashboard-table th {
   background-color: #f8fafc;
   color: #64748b;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 13px 18px;
+  letter-spacing: 0.05em;
+  padding: 10px 14px;
   border-bottom: 1px solid #e2e8f0;
   white-space: nowrap;
 }
 
 .dashboard-table td {
-  padding: 13px 18px;
+  padding: 10px 14px;
   border-bottom: 1px solid #f1f5f9;
   color: #1e293b;
   font-variant-numeric: tabular-nums;
@@ -1091,21 +1120,22 @@ body {
 /* Icons / Actions in tables */
 .actions-cell {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   justify-content: center;
   align-items: center;
+  white-space: nowrap;
 }
 
 .action-btn {
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   color: #64748b;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1114,7 +1144,7 @@ body {
 
 .action-btn:hover {
   background: #f1f5f9;
-  transform: scale(1.1);
+  transform: scale(1.08);
 }
 
 .action-btn.edit:hover { color: #0284c7 !important; background: #f0f9ff !important; border-color: rgba(2, 132, 199, 0.2) !important; }

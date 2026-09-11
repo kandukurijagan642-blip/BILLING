@@ -14,7 +14,7 @@
       const qty = parseFloat(item.quantity !== undefined ? item.quantity : item.qty) || 0;
       const rate = parseFloat(item.rate !== undefined ? item.rate : item.price) || 0;
       const discount = parseFloat(item.discount) || 0;
-      const taxRate = parseFloat(item.taxRate !== undefined ? item.taxRate : (item.gst !== undefined ? item.gst : 0)) || 0;
+      const taxRate = parseFloat(item.taxRate !== undefined ? item.taxRate : (item.gstRate !== undefined ? item.gstRate : (item.gst !== undefined ? item.gst : 0))) || 0;
 
       let lineAmount = parseFloat(item.amount);
       if (isNaN(lineAmount) || lineAmount <= 0) {

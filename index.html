@@ -43,7 +43,7 @@
       });
     }
     // Build Version Enforcement: Clears stale caches when new build is deployed
-    window.__APP_BUILD_VERSION__ = "v305_instant_save";
+    window.__APP_BUILD_VERSION__ = "v306_dashboard_fit";
     try {
       const storedBuild = localStorage.getItem("aaryan_app_build_version");
       if (storedBuild !== window.__APP_BUILD_VERSION__) {
@@ -57,8 +57,8 @@
   <link rel="preconnect" href="https://script.google.com" crossorigin>
   <link rel="dns-prefetch" href="https://script.google.com">
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=305">
-  <script src="invoice_utils_v5.js?v=98"></script>
+  <link rel="stylesheet" href="index.css?v=306">
+  <script src="invoice_utils_v5.js?v=306"></script>
 </head>
 <body>
 
@@ -282,13 +282,13 @@
         </div>
 
         <!-- Live Analytics & Revenue Charts Grid -->
-        <div class="analytics-charts-grid margin-top-12" style="display: grid; grid-template-columns: 2fr 1fr; gap: 14px;">
+        <div class="analytics-charts-grid">
           <div class="card-box" style="margin-top: 0;">
             <div class="card-box-header">
               <h3><i class="fa-solid fa-chart-area text-cyan"></i> Monthly Sales & Revenue Trend</h3>
               <span class="badge-status badge-paid">Live Analytics</span>
             </div>
-            <div style="height: 185px; position: relative; padding: 6px 10px;">
+            <div style="height: 190px; position: relative; padding: 4px 6px;">
               <canvas id="dashboard-sales-chart"></canvas>
             </div>
           </div>
@@ -297,14 +297,14 @@
               <h3><i class="fa-solid fa-chart-pie text-emerald"></i> GST Tax Breakdown</h3>
               <span class="badge-status badge-paid">Tax Analytics</span>
             </div>
-            <div style="height: 185px; position: relative; padding: 6px 10px;">
+            <div style="height: 190px; position: relative; padding: 4px 6px;">
               <canvas id="dashboard-gst-chart"></canvas>
             </div>
           </div>
         </div>
 
         <!-- Recent Invoices Table Card -->
-        <div class="card-box margin-top-20">
+        <div class="card-box margin-top-12">
           <div class="card-box-header">
             <h3><i class="fa-solid fa-clock-rotate-left"></i> Recent Invoices & Billing Logs</h3>
             <button class="btn btn-secondary" onclick="switchTab('billing')">
@@ -315,13 +315,13 @@
             <table class="dashboard-table">
               <thead>
                 <tr>
-                  <th>INVOICE #</th>
-                  <th>DATE</th>
+                  <th style="width: 90px;">INVOICE #</th>
+                  <th style="width: 110px;">DATE</th>
                   <th>CUSTOMER</th>
-                  <th>ITEMS</th>
-                  <th style="text-align: right;">TOTAL</th>
-                  <th style="text-align: center;">STATUS</th>
-                  <th style="text-align: center;">ACTIONS</th>
+                  <th style="width: 65px; text-align: center;">ITEMS</th>
+                  <th style="width: 125px; text-align: right;">TOTAL</th>
+                  <th style="width: 95px; text-align: center;">STATUS</th>
+                  <th style="width: 200px; text-align: center;">ACTIONS</th>
                 </tr>
               </thead>
               <tbody id="dashboard-recent-invoices-body">
@@ -2920,6 +2920,6 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=305"></script>
+  <script src="index_v5.js?v=306"></script>
 </body>
 </html>
