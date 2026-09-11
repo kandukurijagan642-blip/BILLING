@@ -40,12 +40,22 @@
         }
       });
     }
+    // Build Version Enforcement: Clears stale caches when new build is deployed
+    window.__APP_BUILD_VERSION__ = "v301_1s_sync";
+    try {
+      const storedBuild = localStorage.getItem("aaryan_app_build_version");
+      if (storedBuild !== window.__APP_BUILD_VERSION__) {
+        localStorage.setItem("aaryan_app_build_version", window.__APP_BUILD_VERSION__);
+        localStorage.removeItem("aaryan_last_sync_time");
+        localStorage.removeItem("aaryandb_migrated_v2");
+      }
+    } catch (e) {}
   </script>
   <!-- High-Speed Google Cloud Connection Pre-warming -->
   <link rel="preconnect" href="https://script.google.com" crossorigin>
   <link rel="dns-prefetch" href="https://script.google.com">
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=220">
+  <link rel="stylesheet" href="index.css?v=301">
   <script src="invoice_utils_v5.js?v=96"></script>
 </head>
 <body>
@@ -178,9 +188,9 @@
             <i class="fa-solid fa-triangle-exclamation"></i>
             <span id="low-stock-count-text">0 Low Stock</span>
           </div>
-          <div id="live-cloud-sync-badge" class="cloud-sync-pill synced cursor-pointer" onclick="openDatabaseTelemetryModal()" title="50+ Real-Time Multi-User Cloud Sync Active (Click for Telemetry HUD)">
+          <div id="live-cloud-sync-badge" class="cloud-sync-pill synced cursor-pointer" onclick="openDatabaseTelemetryModal()" title="1-Second Continuous Google Database Auto-Sync (Click for Telemetry HUD)">
             <span class="realtime-radar-dot active" id="sync-radar-dot"></span>
-            <span id="sync-status-text">50+ Live Synced</span>
+            <span id="sync-status-text">🟢 1s Google DB • Live</span>
           </div>
           <div id="live-whatsapp-pill" class="whatsapp-sync-pill connected cursor-pointer" onclick="openWhatsAppBotModal()" title="WhatsApp Bot Connected (+918367047947)">
             <span class="radar-dot" id="wa-radar-indicator"></span>
@@ -994,7 +1004,7 @@
             </div>
             <div class="kpi-data">
               <span class="kpi-label">PHYSICAL STOCK</span>
-              <h3 class="kpi-value" id="prod-kpi-units">327 Units</h3>
+              <h3 class="kpi-value" id="prod-kpi-units">330 Units</h3>
               <span class="kpi-hint">Total Warehouse Units</span>
             </div>
           </div>
@@ -1005,7 +1015,7 @@
             </div>
             <div class="kpi-data">
               <span class="kpi-label">TOTAL INVENTORY VALUE</span>
-              <h3 class="kpi-value text-emerald" id="prod-kpi-valuation">₹ 3,70,710.00</h3>
+              <h3 class="kpi-value text-emerald" id="prod-kpi-valuation">₹ 3,76,650.00</h3>
               <span class="kpi-hint">Net Worth (After Discount)</span>
             </div>
           </div>
@@ -1110,12 +1120,12 @@
                   <td style="text-align: center;">
                     <div class="prod-stock-stepper">
                       <button class="btn-stock-step" onclick="adjustProductStock('prod-1', -1)" title="Decrease Stock">−</button>
-                      <span class="stock-qty-text">127</span>
+                      <span class="stock-qty-text">130</span>
                       <button class="btn-stock-step" onclick="adjustProductStock('prod-1', 1)" title="Increase Stock">+</button>
                       <span style="display: inline-block; background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; padding: 2px 7px; border-radius: 12px; font-size: 10px; font-weight: 700;"><i class="fa-solid fa-circle-check"></i> In Stock</span>
                     </div>
                   </td>
-                  <td style="text-align: right; font-weight: 800; color: #0f172a; font-size: 14px;">₹ 2,51,460.00</td>
+                  <td style="text-align: right; font-weight: 800; color: #0f172a; font-size: 14px;">₹ 2,57,400.00</td>
                   <td style="text-align: center;">
                     <div class="prod-actions-row">
                       <button class="prod-action-btn restock" onclick="quickRestockProduct('prod-1')" title="1-Click Quick Restock (Add Inward Stock)" style="color: #0284c7; background: #e0f2fe; border: 1px solid #bae6fd;">
@@ -1235,8 +1245,8 @@
                 <tr>
                   <td colspan="4" style="text-align: right; font-weight: 700; color: #475569; padding: 14px 16px;">Total Warehouse Inventory:</td>
                   <td colspan="2" style="text-align: center; font-weight: 800; color: #0284c7; padding: 14px 16px;" id="prod-total-count-footer">3 Items</td>
-                  <td style="text-align: center; font-weight: 800; color: #0f766e; padding: 14px 16px;" id="prod-total-stock-footer">327 Units</td>
-                  <td style="text-align: right; font-weight: 800; color: #0f172a; font-size: 14px; padding: 14px 16px;" id="prod-total-val-footer">₹ 3,70,710.00</td>
+                  <td style="text-align: center; font-weight: 800; color: #0f766e; padding: 14px 16px;" id="prod-total-stock-footer">330 Units</td>
+                  <td style="text-align: right; font-weight: 800; color: #0f172a; font-size: 14px; padding: 14px 16px;" id="prod-total-val-footer">₹ 3,76,650.00</td>
                   <td></td>
                 </tr>
               </tfoot>
@@ -2908,6 +2918,6 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=220"></script>
+  <script src="index_v5.js?v=301"></script>
 </body>
 </html>

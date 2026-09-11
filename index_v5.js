@@ -9,6 +9,7 @@ let dbEventSource = null;
 let isSavingInvoice = false;
 
 // Authoritative Master Fallback Snapshot (Ensures 0ms instant display even on cold cache)
+window.recentProductMutations = {};
 const GOOGLE_MASTER_PRODUCTS_SNAPSHOT = [
   {
     id: "prod-1",
@@ -19,8 +20,8 @@ const GOOGLE_MASTER_PRODUCTS_SNAPSHOT = [
     rate: 3600,
     discount: 45,
     price: 1980,
-    stock: 127,
-    totalValue: 251460,
+    stock: 130,
+    totalValue: 257400,
     status: "In Stock"
   },
   {
@@ -493,7 +494,7 @@ const AaryanDB = {
           prodReq.result.forEach(p => {
             if (p && p.id === "prod-1" && (p.discount === 42.5 || p.isSeed || p.discount !== 45)) {
               p.discount = 45;
-              p.stock = 127;
+              p.stock = 130;
               p.rate = 3600;
               p.updatedAt = "2020-01-01T00:00:00.000Z";
               p.isSeed = true;
@@ -735,39 +736,100 @@ const AaryanDB = {
 
 window.AaryanDB = AaryanDB;
 
+// Dedicated direct push debouncer for rapid consecutive clicks (e.g. rapid +1, +1, +1 on stock)
+let directPushProductTimer = null;
+let directPushPartiesTimer = null;
+
+async function pushDirectToGoogleDatabase(action, payload) {
+  if (typeof window.updateCloudSyncBadge === "function") {
+    window.updateCloudSyncBadge("syncing");
+  }
+
+  const gasPayload = {
+    action,
+    auth: API_SECRET_TOKEN,
+    ...payload
+  };
+
+  try {
+    const res = await fetch(GOOGLE_SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(gasPayload),
+      redirect: "follow"
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.ok) {
+        window.lastSyncTimeMs = Date.now();
+        if (typeof window.updateCloudSyncBadge === "function") {
+          window.updateCloudSyncBadge("synced");
+        }
+        return data;
+      }
+    }
+  } catch (err) {
+    console.warn("Direct push to Google Database note (queued to outbox):", err.message);
+  }
+
+  // Fallback / Offline resilience: enqueue in AaryanDB outbox
+  if (window.AaryanDB && typeof window.AaryanDB.enqueueOutbox === "function") {
+    const fallbackType = action === "save_products" ? "product" :
+                         action === "save_parties" ? "party" :
+                         action === "save_invoice" ? "invoice" : "settings";
+    window.AaryanDB.enqueueOutbox(fallbackType, action, payload);
+    window.AaryanDB.drainOutbox();
+  }
+  return null;
+}
+
+window.pushDirectToGoogleDatabase = pushDirectToGoogleDatabase;
+
 function syncDatabaseToServer(type, data) {
   window.lastSyncETag = null;
   let action = "";
+  let payload = {};
+
   if (type === "invoices") {
     action = "save_invoice";
+    payload = { invoice: data };
     broadcastInterTabEvent('invoice_saved', { invoice: data });
+    pushDirectToGoogleDatabase(action, payload);
   } else if (type === "products") {
     action = "save_products";
+    payload = { products: data };
     broadcastInterTabEvent('products_saved', { products: data });
+    // Debounce rapid product clicks (+1, +1) by 250ms so final stock pushes cleanly in < 1 second
+    if (directPushProductTimer) clearTimeout(directPushProductTimer);
+    directPushProductTimer = setTimeout(() => {
+      pushDirectToGoogleDatabase("save_products", { products: productsDb });
+    }, 250);
   } else if (type === "parties") {
     action = "save_parties";
+    payload = { parties: data };
     broadcastInterTabEvent('parties_saved', { parties: data });
+    if (directPushPartiesTimer) clearTimeout(directPushPartiesTimer);
+    directPushPartiesTimer = setTimeout(() => {
+      pushDirectToGoogleDatabase("save_parties", { parties: partiesDb });
+    }, 250);
   } else if (type === "settings") {
     action = "save_settings";
+    payload = { settings: data };
+    pushDirectToGoogleDatabase(action, payload);
   }
-
-  // Enqueue into persistent Outbox & drain immediately
-  AaryanDB.enqueueOutbox(type, action, data);
-  AaryanDB.drainOutbox();
 }
 
 function deleteProductFromServer(id) {
   window.lastSyncETag = null;
   broadcastInterTabEvent('record_deleted', { recordType: 'product', id });
-  AaryanDB.enqueueOutbox("product", "delete_record", { type: "product", id });
-  AaryanDB.drainOutbox();
+  pushDirectToGoogleDatabase("delete_record", { type: "product", id });
 }
 
 function deletePartyFromServer(id) {
   window.lastSyncETag = null;
   broadcastInterTabEvent('record_deleted', { recordType: 'party', id });
-  AaryanDB.enqueueOutbox("party", "delete_record", { type: "party", id });
-  AaryanDB.drainOutbox();
+  pushDirectToGoogleDatabase("delete_record", { type: "party", id });
 }
 
 // ============================================================================
@@ -787,7 +849,7 @@ window.updateCloudSyncBadge = function(status) {
 
   const now = Date.now();
   const diffSec = Math.max(0, Math.floor((now - (window.lastSyncTimeMs || now)) / 1000));
-  const timeText = diffSec < 2 ? "1s Live" : `${diffSec}s ago`;
+  const timeText = diffSec <= 2 ? "1s Live" : `${diffSec}s ago`;
 
   if (status === "syncing") {
     badge.className = "cloud-sync-pill syncing cursor-pointer";
@@ -827,7 +889,7 @@ window.triggerDatabaseSync = async function(forceReload = false) {
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  const timeoutId = setTimeout(() => controller.abort(), 25000);
 
   const gasSyncUrl = `${GOOGLE_SCRIPT_URL}?action=sync&token=${encodeURIComponent(API_SECRET_TOKEN)}`;
 
@@ -864,8 +926,25 @@ window.triggerDatabaseSync = async function(forceReload = false) {
     // 1. Authoritative Products directly from Google Database
     if (Array.isArray(data.products) && data.products.length > 0) {
       const cleanProds = data.products.filter(p => p && (p.id || p.description));
-      if (JSON.stringify(cleanProds) !== JSON.stringify(productsDb)) {
-        productsDb = cleanProds;
+      
+      // Preserve recent local optimistic mutations (within 10 seconds)
+      const mergedProds = cleanProds.map(serverProd => {
+        const localProd = productsDb.find(p => p.id === serverProd.id);
+        const mutationTime = (window.recentProductMutations && window.recentProductMutations[serverProd.id]) || 0;
+        const isRecentlyMutated = (Date.now() - mutationTime) < 10000;
+        if (localProd && isRecentlyMutated) {
+          return {
+            ...serverProd,
+            stock: localProd.stock,
+            discount: localProd.discount,
+            updatedAt: localProd.updatedAt
+          };
+        }
+        return serverProd;
+      });
+
+      if (JSON.stringify(mergedProds) !== JSON.stringify(productsDb)) {
+        productsDb = mergedProds;
         try { localStorage.setItem("products", JSON.stringify(productsDb)); } catch(e) {}
         changed = true;
       }
@@ -934,7 +1013,7 @@ window.triggerDatabaseSync = async function(forceReload = false) {
   .catch((err) => {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
-      console.warn("Google Apps Script sync timeout (>8s). Serving cached Google database snapshot.");
+      console.warn("Google Apps Script sync timeout (>25s). Serving cached Google database snapshot.");
       if (typeof window.updateCloudSyncBadge === 'function') window.updateCloudSyncBadge("synced");
     } else {
       console.warn("Google Apps Script sync notice:", err.message);
@@ -1448,27 +1527,43 @@ function initializeApp() {
   // ============================================================================
   let multiUserSyncTimer = null;
 
-  function scheduleNextRealtimeSync() {
-    if (multiUserSyncTimer) clearTimeout(multiUserSyncTimer);
-
-    // Visible active tab: poll every 1 second (1000ms)
-    // Hidden/minimized tab: poll every 5 seconds (5000ms)
-    const isHidden = document.hidden || document.visibilityState === "hidden";
-    const interval = isHidden ? 5000 : 1000;
-
-    multiUserSyncTimer = setTimeout(async () => {
-      try {
-        if (navigator.onLine && typeof window.triggerDatabaseSync === "function" && !isSyncing) {
-          await window.triggerDatabaseSync(false);
-        }
-      } catch (e) {
-      } finally {
-        scheduleNextRealtimeSync();
+  async function perform1SecondTick() {
+    try {
+      if (navigator.onLine && typeof window.triggerDatabaseSync === "function" && !isSyncing) {
+        await window.triggerDatabaseSync(false);
       }
-    }, interval);
+    } catch (e) {
+    } finally {
+      if (!isSyncing && navigator.onLine && typeof window.updateRealtimePresenceHUD === 'function') {
+        window.updateRealtimePresenceHUD("live");
+      }
+    }
   }
 
-  // Start continuous 1-second auto-sync immediately
+  // Unthrottled Web Worker Heartbeat (Runs at 1000ms even when browser window is unfocused or backgrounded)
+  try {
+    const workerBlob = new Blob([
+      "setInterval(function(){ self.postMessage('tick'); }, 1000);"
+    ], { type: 'application/javascript' });
+    const syncWorker = new Worker(URL.createObjectURL(workerBlob));
+    syncWorker.onmessage = function(e) {
+      if (e.data === 'tick') {
+        perform1SecondTick();
+      }
+    };
+  } catch (workerErr) {
+    console.warn("Background worker heartbeat note, using standard interval:", workerErr);
+    setInterval(perform1SecondTick, 1000);
+  }
+
+  // Complementary foreground fallback timer
+  function scheduleNextRealtimeSync() {
+    if (multiUserSyncTimer) clearTimeout(multiUserSyncTimer);
+    multiUserSyncTimer = setTimeout(async () => {
+      await perform1SecondTick();
+      scheduleNextRealtimeSync();
+    }, 1000);
+  }
   scheduleNextRealtimeSync();
 
   // Keep HUD elapsed timer updated every 1s
@@ -7224,6 +7319,7 @@ window.quickRestockProduct = function(id) {
   const newStock = currentStock + addQty;
   prod.stock = newStock;
   prod.updatedAt = new Date().toISOString();
+  window.recentProductMutations[id] = Date.now();
 
   localStorage.setItem("products", JSON.stringify(productsDb));
   if (window.AaryanDB && window.AaryanDB.isReady) AaryanDB.saveAllProducts(productsDb);
@@ -7231,7 +7327,6 @@ window.quickRestockProduct = function(id) {
   loadProductsDatabaseTable();
   populateBillingSelectors();
   if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
-  if (window.triggerDatabaseSync) window.triggerDatabaseSync();
 
   showFloatingToast(`📦 Restocked! Added +${addQty} ${unit} to "${prod.description}". New Total: ${newStock} ${unit}`, 4000);
   sendStockTelegramReport(prod, `1-Click Inward Restock (+${addQty} ${unit})`, currentStock, newStock);
@@ -7243,13 +7338,13 @@ window.adjustProductStock = function(id, delta) {
   const current = parseInt(prod.stock, 10) || 0;
   prod.stock = Math.max(0, current + delta);
   prod.updatedAt = new Date().toISOString();
+  window.recentProductMutations[id] = Date.now();
   
   localStorage.setItem("products", JSON.stringify(productsDb));
   if (window.AaryanDB && window.AaryanDB.isReady) AaryanDB.saveAllProducts(productsDb);
   syncDatabaseToServer("products", productsDb);
   loadProductsDatabaseTable();
   if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
-  if (window.triggerDatabaseSync) window.triggerDatabaseSync();
 
   const actionText = delta > 0 ? `Inline Stock Added (+${delta})` : `Inline Stock Reduced (${delta})`;
   sendStockTelegramReport(prod, actionText, current, prod.stock);
@@ -7261,13 +7356,13 @@ window.updateProductDiscountInline = function(id, newDiscount) {
   const parsedDisc = Math.max(0, Math.min(100, parseFloat(newDiscount) || 0));
   prod.discount = parsedDisc;
   prod.updatedAt = new Date().toISOString();
+  window.recentProductMutations[id] = Date.now();
   localStorage.setItem("products", JSON.stringify(productsDb));
   if (window.AaryanDB && window.AaryanDB.isReady) AaryanDB.saveAllProducts(productsDb);
   syncDatabaseToServer("products", productsDb);
   loadProductsDatabaseTable();
   populateBillingSelectors();
   if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
-  if (window.triggerDatabaseSync) window.triggerDatabaseSync();
   showFloatingToast(`🏷️ Discount for "${prod.description}" set to ${parsedDisc}%!`);
 };
 
