@@ -899,26 +899,33 @@ document.addEventListener("DOMContentLoaded", () => {
   window.updateCloudSyncBadge = function(status) {
     const badge = document.getElementById("live-cloud-sync-badge");
     const textEl = document.getElementById("sync-status-text");
-    if (!badge || !textEl) return;
+    const radarDot = document.getElementById("sync-radar-dot");
+    if (!badge) return;
     
     if (syncBadgeTimer) clearTimeout(syncBadgeTimer);
 
+    const now = Date.now();
+    const diffSec = Math.max(0, Math.floor((now - (window.lastSyncTimeMs || now)) / 1000));
+    const timeText = diffSec < 3 ? "Just now" : `${diffSec}s ago`;
+
     if (status === "syncing") {
-      badge.className = "cloud-sync-pill syncing";
-      textEl.textContent = "Syncing...";
-      // Auto-revert safety fallback if fetch is slow
-      syncBadgeTimer = setTimeout(() => {
-        if (badge.classList.contains("syncing")) {
-          badge.className = "cloud-sync-pill synced";
-          textEl.textContent = "Cloud Synced";
-        }
-      }, 3000);
-    } else if (status === "synced") {
-      badge.className = "cloud-sync-pill synced";
-      textEl.textContent = "Google Drive Synced";
-    } else if (status === "offline") {
-      badge.className = "cloud-sync-pill offline";
-      textEl.textContent = "Offline Mode";
+      badge.className = "cloud-sync-pill syncing cursor-pointer";
+      if (textEl) textEl.innerHTML = `<span class="realtime-sync-spinning">🔄</span> Syncing 50+...`;
+      if (radarDot) radarDot.style.display = "none";
+    } else if (status === "offline" || !navigator.onLine) {
+      badge.className = "cloud-sync-pill offline cursor-pointer";
+      if (textEl) textEl.textContent = "Offline (Queued)";
+      if (radarDot) {
+        radarDot.style.display = "inline-block";
+        radarDot.className = "realtime-radar-dot offline";
+      }
+    } else {
+      badge.className = "cloud-sync-pill synced cursor-pointer";
+      if (textEl) textEl.textContent = `50+ Live • ${timeText}`;
+      if (radarDot) {
+        radarDot.style.display = "inline-block";
+        radarDot.className = "realtime-radar-dot active";
+      }
     }
   };
 
@@ -1415,23 +1422,8 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   window.updateRealtimePresenceHUD = function(status = "live") {
-    const badge = document.getElementById("realtime-presence-badge");
-    const textEl = document.getElementById("realtime-presence-text");
-    if (!badge || !textEl) return;
-
-    const now = Date.now();
-    const diffSec = Math.max(0, Math.floor((now - (window.lastSyncTimeMs || now)) / 1000));
-    const timeText = diffSec < 3 ? "Just now" : `${diffSec}s ago`;
-
-    if (status === "syncing") {
-      badge.className = "realtime-presence-pill syncing cursor-pointer";
-      textEl.innerHTML = `<span class="realtime-sync-spinning">🔄</span> Syncing 50+...`;
-    } else if (status === "offline" || !navigator.onLine) {
-      badge.className = "realtime-presence-pill offline cursor-pointer";
-      textEl.innerHTML = `<span class="realtime-radar-dot offline"></span> Offline (Queued)`;
-    } else {
-      badge.className = "realtime-presence-pill active cursor-pointer";
-      textEl.innerHTML = `<span class="realtime-radar-dot active"></span> 50+ Live • ${timeText}`;
+    if (typeof window.updateCloudSyncBadge === "function") {
+      window.updateCloudSyncBadge(status);
     }
   };
 

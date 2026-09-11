@@ -95,43 +95,55 @@
   50% { box-shadow: 0 0 0 6px rgba(244, 63, 94, 0); }
 }
 
-/* Live Cloud Sync Pill Indicator */
+/* Live Cloud & Multi-User Sync Pill Indicator */
 .cloud-sync-pill {
   display: inline-flex !important;
   align-items: center !important;
+  justify-content: center !important;
   gap: 7px !important;
-  padding: 4px 12px !important;
+  height: 30px !important;
+  padding: 0 11px !important;
   border-radius: 20px !important;
-  font-size: 12px !important;
+  font-size: 11.5px !important;
   font-weight: 700 !important;
-  background: rgba(16, 185, 129, 0.15) !important;
-  color: #10b981 !important;
-  border: 1px solid rgba(16, 185, 129, 0.4) !important;
-  transition: all 0.3s ease !important;
+  background: rgba(16, 185, 129, 0.12) !important;
+  color: #047857 !important;
+  border: 1px solid rgba(16, 185, 129, 0.35) !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
   user-select: none !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  box-sizing: border-box !important;
+}
+
+.cloud-sync-pill:hover {
+  background: rgba(16, 185, 129, 0.2) !important;
+  border-color: rgba(16, 185, 129, 0.5) !important;
+  transform: translateY(-1px);
 }
 
 .cloud-sync-pill.syncing {
-  background: rgba(245, 158, 11, 0.15) !important;
-  color: #f59e0b !important;
-  border-color: rgba(245, 158, 11, 0.4) !important;
+  background: rgba(6, 182, 212, 0.12) !important;
+  color: #0891b2 !important;
+  border-color: rgba(6, 182, 212, 0.35) !important;
 }
 
 .cloud-sync-pill.offline {
-  background: rgba(239, 68, 68, 0.15) !important;
-  color: #ef4444 !important;
-  border-color: rgba(239, 68, 68, 0.4) !important;
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: #b91c1c !important;
+  border-color: rgba(239, 68, 68, 0.35) !important;
 }
 
 .sync-dot {
-  width: 9px !important;
-  height: 9px !important;
+  width: 8px !important;
+  height: 8px !important;
   border-radius: 50% !important;
   background-color: currentColor !important;
   box-shadow: 0 0 6px currentColor !important;
   animation: pulse-dot 1.8s infinite ease-in-out !important;
   display: inline-block !important;
+  flex-shrink: 0 !important;
 }
 
 /* WhatsApp Automation Pill Indicator & Advanced Rotating Animations */
@@ -175,24 +187,29 @@
 .whatsapp-sync-pill {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 8px !important;
-  padding: 5px 13px !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  height: 30px !important;
+  padding: 0 11px !important;
   border-radius: 20px !important;
-  font-size: 12px !important;
+  font-size: 11.5px !important;
   font-weight: 700 !important;
-  background: rgba(37, 211, 102, 0.15) !important;
-  color: #16a34a !important;
+  background: rgba(37, 211, 102, 0.12) !important;
+  color: #15803d !important;
   border: 1px solid rgba(37, 211, 102, 0.4) !important;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
   user-select: none !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
   cursor: pointer !important;
   position: relative !important;
+  box-sizing: border-box !important;
 }
 
 .whatsapp-sync-pill:hover {
-  transform: translateY(-1.5px);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(34, 197, 94, 0.2) !important;
 }
 
 /* Radar pulse dot inside pill */
@@ -260,25 +277,70 @@
 .telegram-sync-pill {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 8px !important;
-  padding: 5px 13px !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  height: 30px !important;
+  padding: 0 11px !important;
   border-radius: 20px !important;
-  font-size: 12px !important;
+  font-size: 11.5px !important;
   font-weight: 700 !important;
-  background: rgba(14, 165, 233, 0.12) !important;
-  color: #0284c7 !important;
-  border: 1px solid rgba(14, 165, 233, 0.4) !important;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  background: rgba(14, 165, 233, 0.1) !important;
+  color: #0369a1 !important;
+  border: 1px solid rgba(14, 165, 233, 0.35) !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
   user-select: none !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
   cursor: pointer !important;
   position: relative !important;
+  box-sizing: border-box !important;
 }
 
 .telegram-sync-pill:hover {
-  transform: translateY(-1.5px);
-  box-shadow: 0 3px 10px rgba(14, 165, 233, 0.25) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(14, 165, 233, 0.2) !important;
   border-color: #0284c7 !important;
+}
+
+/* Audio FX Toggle Pill */
+.audio-fx-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  height: 30px !important;
+  padding: 0 10px !important;
+  border-radius: 20px !important;
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  background: #f8fafc !important;
+  color: #475569 !important;
+  border: 1px solid #cbd5e1 !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  user-select: none !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  cursor: pointer !important;
+  box-sizing: border-box !important;
+}
+
+.audio-fx-pill:hover {
+  background: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+  transform: translateY(-1px);
+}
+
+.audio-fx-pill.active {
+  background: rgba(14, 165, 233, 0.1) !important;
+  color: #0284c7 !important;
+  border-color: rgba(14, 165, 233, 0.35) !important;
+}
+
+.audio-fx-pill.muted {
+  background: #f1f5f9 !important;
+  color: #94a3b8 !important;
+  border-color: #e2e8f0 !important;
 }
 
 .tg-dot {
@@ -654,25 +716,28 @@ body {
 }
 
 .content-header {
-  height: 64px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(226, 232, 240, 0.85);
-  padding: 0 28px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-shrink: 0;
-  position: sticky;
-  top: 0;
-  z-index: 30;
+  height: 54px !important;
+  min-height: 54px !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.85) !important;
+  padding: 0 20px !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  flex-shrink: 0 !important;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 30 !important;
+  box-sizing: border-box !important;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
+  min-width: 0;
 }
 
 .header-title-wrap {
@@ -681,14 +746,14 @@ body {
 }
 
 .breadcrumbs {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
   color: #94a3b8;
   display: flex;
   align-items: center;
   gap: 5px;
   line-height: 1;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
 }
 
 .crumb-root {
@@ -707,12 +772,30 @@ body {
 
 .content-header h2 {
   font-family: 'Outfit', 'Inter', sans-serif;
-  font-size: 19px;
-  font-weight: 800;
+  font-size: 17px !important;
+  font-weight: 800 !important;
   letter-spacing: -0.025em;
   color: #0f172a;
   margin: 0;
   line-height: 1.2;
+}
+
+/* Pro Top Header Meta Navigation Pills Container */
+.app-top-header-meta {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+  flex-wrap: nowrap !important;
+  min-width: 0 !important;
+}
+
+.app-top-header-meta > * {
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
 }
 
 .mobile-nav-toggle {
@@ -720,9 +803,9 @@ body {
   border: 1px solid #e2e8f0;
   background: #ffffff;
   color: #0f172a;
-  border-radius: 10px;
-  width: 38px;
-  height: 38px;
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
   align-items: center;
   justify-content: center;
   cursor: pointer;
@@ -735,7 +818,7 @@ body {
 
 .content-view {
   flex: 1;
-  padding: 24px 28px;
+  padding: 14px 20px !important;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -749,14 +832,16 @@ body {
 .dashboard-hero-card {
   background: linear-gradient(135deg, #090d16 0%, #0f172a 40%, #0e384c 100%);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  padding: 26px 32px;
+  border-radius: 12px !important;
+  padding: 12px 20px !important;
+  margin-bottom: 12px !important;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 15px 35px -5px rgba(15, 23, 42, 0.35);
+  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.25);
   position: relative;
   overflow: hidden;
+  box-sizing: border-box !important;
 }
 
 .dashboard-hero-card::before {
@@ -772,29 +857,31 @@ body {
 
 .hero-text-content h2 {
   font-family: 'Outfit', sans-serif;
-  font-size: 24px;
+  font-size: 18px !important;
   font-weight: 800;
   color: #ffffff;
-  margin: 6px 0 4px 0;
-  letter-spacing: -0.03em;
+  margin: 3px 0 2px 0 !important;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
 .hero-text-content p {
-  font-size: 13px;
+  font-size: 11.5px !important;
   color: #94a3b8;
   margin: 0;
+  line-height: 1.2;
 }
 
 .hero-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   background: rgba(14, 165, 233, 0.18);
   border: 1px solid rgba(56, 189, 248, 0.35);
   color: #38bdf8;
-  font-size: 10.5px;
+  font-size: 9.5px !important;
   font-weight: 800;
-  padding: 4px 11px;
+  padding: 2px 8px !important;
   border-radius: 9999px;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -802,61 +889,63 @@ body {
 
 .hero-actions {
   display: flex;
-  gap: 12px;
+  gap: 8px !important;
   align-items: center;
   z-index: 1;
 }
 
 .btn-hero {
-  padding: 10px 20px;
-  font-size: 13px;
+  padding: 6px 14px !important;
+  font-size: 12px !important;
   font-weight: 600;
-  border-radius: 10px;
+  border-radius: 8px !important;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   cursor: pointer;
 }
 
 .btn-hero:hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 /* --- STATS CARD MODULE --- */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
+  gap: 12px !important;
+  margin-bottom: 12px !important;
 }
 
 .stat-card {
   background: #ffffff;
   border: 1px solid rgba(226, 232, 240, 0.85);
-  border-radius: 16px;
-  padding: 22px 24px;
+  border-radius: 12px !important;
+  padding: 12px 14px !important;
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 12px !important;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box !important;
 }
 
 .stat-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 24px -4px rgba(15, 23, 42, 0.08), 0 4px 8px -2px rgba(15, 23, 42, 0.03);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px -4px rgba(15, 23, 42, 0.08);
   border-color: rgba(2, 132, 199, 0.3);
 }
 
 .stat-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
+  width: 38px !important;
+  height: 38px !important;
+  border-radius: 10px !important;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 15px !important;
   flex-shrink: 0;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
 }
@@ -872,40 +961,42 @@ body {
 .text-purple { color: #7c3aed; }
 
 .stat-label {
-  font-size: 11px;
+  font-size: 9.5px !important;
   font-weight: 700;
   color: #64748b;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   display: block;
 }
 
 .stat-details h3 {
-  font-size: 26px;
+  font-size: 20px !important;
   font-weight: 800;
   color: #0f172a;
-  margin: 3px 0;
+  margin: 1px 0 !important;
   font-family: 'Outfit', sans-serif;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
+  line-height: 1.2;
 }
 
 .stat-trend {
-  font-size: 11.5px;
+  font-size: 10px !important;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }
 
 /* --- CARDS & BOXES --- */
 .card-box {
   background: #ffffff;
   border: 1px solid rgba(226, 232, 240, 0.85);
-  border-radius: 16px;
-  padding: 22px 24px;
+  border-radius: 12px !important;
+  padding: 12px 16px !important;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box !important;
 }
 
 .card-box:hover {
@@ -917,19 +1008,19 @@ body {
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid #f1f5f9;
-  padding-bottom: 14px;
-  margin-bottom: 18px;
+  padding-bottom: 8px !important;
+  margin-bottom: 10px !important;
 }
 
 .card-box-header h3 {
-  font-size: 15px;
+  font-size: 13.5px !important;
   font-weight: 700;
   color: #0f172a;
   font-family: 'Outfit', sans-serif;
   letter-spacing: -0.02em;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
 }
 
 .margin-top-20 { margin-top: 20px; }
@@ -1229,34 +1320,39 @@ body {
 
 /* --- GST BILLING LAYOUT REFITTING --- */
 .billing-page-container {
-  display: flex;
-  gap: 20px;
-  align-items: flex-start;
+  display: flex !important;
+  gap: 14px !important;
+  align-items: flex-start !important;
 }
 
 .billing-form-wrapper {
-  width: 74%;
-  display: flex;
-  flex-direction: column;
+  flex: 1 !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
 }
 
 .billing-summary-wrapper {
-  width: 26%;
-  flex-shrink: 0;
+  width: 320px !important;
+  flex-shrink: 0 !important;
+  position: sticky !important;
+  top: 10px !important;
+  z-index: 15 !important;
 }
 
 .billing-card-form {
   background: #ffffff;
   border: 1px solid rgba(226, 232, 240, 0.85);
-  border-radius: 14px;
-  padding: 18px 20px;
+  border-radius: 12px !important;
+  padding: 12px 16px !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .billing-card-form.grid-2-columns {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
+  gap: 10px !important;
 }
 
 /* Party select cards */
@@ -5613,17 +5709,23 @@ body {
    ENTERPRISE 50+ CONCURRENT MULTI-USER REAL-TIME PRESENCE HUD
    ========================================================================== */
 .realtime-presence-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 12px;
-  border-radius: 9999px;
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  user-select: none;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  height: 30px !important;
+  padding: 0 12px !important;
+  border-radius: 9999px !important;
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.2px !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+  user-select: none !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  line-height: 1 !important;
+  box-sizing: border-box !important;
 }
 
 .realtime-presence-pill.active {
