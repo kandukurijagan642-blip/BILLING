@@ -115,9 +115,9 @@ function saveInvoicePdfSecure(data) {
 
   var file = invFolder.createFile(blob);
   
-  // Security Enforcement: Set file access to PRIVATE
+  // File Access: Allow view access with link for customers and billing operators
   try {
-    file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   } catch (e) {}
 
   var fileId = file.getId();

@@ -31,8 +31,32 @@ function processSaveInvoice(invoiceData, user, ss) {
 
     var computed = valResult.computed;
 
-    // 4. Auto-Generate Next Sequential Invoice Number if empty
-    if (!computed.invoiceNo) {
+    // 4. Concurrency Guard: Check if editing existing invoice strictly by ID
+    var existingIdx = -1;
+    if (computed.id) {
+      for (var i = 0; i < existingInvoices.length; i++) {
+        if (existingInvoices[i].id === computed.id) {
+          existingIdx = i;
+          break;
+        }
+      }
+    }
+
+    // Check if suggested invoiceNo is already occupied by a DIFFERENT invoice
+    var isNumberCollision = false;
+    if (computed.invoiceNo) {
+      for (var k = 0; k < existingInvoices.length; k++) {
+        if (String(existingInvoices[k].invoiceNo).trim() === String(computed.invoiceNo).trim()) {
+          if (existingIdx === -1 || existingInvoices[k].id !== computed.id) {
+            isNumberCollision = true;
+            break;
+          }
+        }
+      }
+    }
+
+    // Auto-Generate Next Sequential Invoice Number if empty OR if collided with concurrent user
+    if (!computed.invoiceNo || (existingIdx === -1 && isNumberCollision)) {
       var maxNo = 0;
       for (var k = 0; k < existingInvoices.length; k++) {
         var n = parseInt(String(existingInvoices[k].invoiceNo).replace(/\D/g, ""), 10);
@@ -43,13 +67,6 @@ function processSaveInvoice(invoiceData, user, ss) {
 
     // 5. Atomic Inventory Stock Adjustment
     // If editing existing invoice, first restore previous items
-    var existingIdx = -1;
-    for (var i = 0; i < existingInvoices.length; i++) {
-      if (existingInvoices[i].id === computed.id || existingInvoices[i].invoiceNo === computed.invoiceNo) {
-        existingIdx = i;
-        break;
-      }
-    }
 
     if (existingIdx > -1) {
       var oldInv = existingInvoices[existingIdx];

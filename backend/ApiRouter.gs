@@ -29,7 +29,9 @@ function handleApiGet(e) {
 
   // 1. Status Health Check
   if (action === "status") {
-    
+    return ContentService.createTextOutput(JSON.stringify({
+      ok: true,
+      status: "healthy",
       serverTime: Date.now(),
       timestamp: new Date().toISOString()
     })).setMimeType(ContentService.MimeType.JSON);

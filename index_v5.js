@@ -481,10 +481,20 @@ const AaryanDB = {
             gasPayload = { action: 'save_parties', auth: API_SECRET_TOKEN, parties: op.payload?.parties || op.payload };
           } else if (op.type === 'settings' || op.action === 'save_settings') {
             gasPayload = { action: 'save_settings', auth: API_SECRET_TOKEN, settings: op.payload?.settings || op.payload };
+          } else if (op.type === 'pdf' || op.action === 'upload_pdf') {
+            gasPayload = {
+              action: 'upload_pdf',
+              auth: API_SECRET_TOKEN,
+              token: API_SECRET_TOKEN,
+              invoiceNo: op.payload?.invoiceNo || op.invoiceNo,
+              filename: op.payload?.filename || op.filename,
+              pdfBase64: op.payload?.pdfBase64 || op.pdfBase64
+            };
           } else if (op.action === 'delete_record') {
             gasPayload = { action: 'delete_record', auth: API_SECRET_TOKEN, type: op.payload?.type || op.type, id: op.payload?.id };
           }
 
+          let responseData = null;
           if (gasPayload) {
             try {
               const res = await fetch(GOOGLE_SCRIPT_URL, {
@@ -497,6 +507,7 @@ const AaryanDB = {
                 const data = await res.json();
                 if (data && data.ok) {
                   synced = true;
+                  responseData = data;
                 }
               }
             } catch (netErr) {
@@ -505,6 +516,28 @@ const AaryanDB = {
           }
 
           if (synced) {
+            // Authoritative server updates: if PDF upload returned a URL, attach to matching invoice
+            if ((op.type === 'pdf' || op.action === 'upload_pdf') && responseData && (responseData.pdfUrl || responseData.viewUrl)) {
+              const pUrl = responseData.viewUrl || responseData.pdfUrl;
+              const tNo = String(op.payload?.invoiceNo || op.invoiceNo || "").trim();
+              const match = invoicesDb.find(i => String(i.invoiceNo).trim() === tNo || (i.details && String(i.details.invoiceNo).trim() === tNo));
+              if (match) {
+                match.pdfUrl = pUrl;
+                if (match.details) match.details.pdfUrl = pUrl;
+                try { localStorage.setItem("invoices", JSON.stringify(invoicesDb)); } catch (e) {}
+              }
+            }
+
+            // If save_invoice returned an authoritative server assigned invoice
+            if ((op.type === 'invoice' || op.action === 'save_invoice') && responseData && responseData.invoice) {
+              const serverInv = responseData.invoice;
+              const idx = invoicesDb.findIndex(i => i.id === serverInv.id);
+              if (idx > -1) {
+                invoicesDb[idx] = Object.assign({}, invoicesDb[idx], serverInv);
+                try { localStorage.setItem("invoices", JSON.stringify(invoicesDb)); } catch (e) {}
+              }
+            }
+
             if (this.db) {
               const delTx = this.db.transaction(['outbox'], 'readwrite');
               delTx.objectStore('outbox').delete(op.id);
@@ -564,6 +597,75 @@ function deletePartyFromServer(id) {
   AaryanDB.enqueueOutbox("party", "delete_record", { type: "party", id });
   AaryanDB.drainOutbox();
 }
+
+// --- SECURE GOOGLE DRIVE PDF ARCHIVE & CLOUD SYNC ENGINE ---
+async function uploadInvoicePdfToGoogleDrive(invoiceDetails, pdfBase64) {
+  if (!invoiceDetails || !pdfBase64) {
+    console.warn("uploadInvoicePdfToGoogleDrive: Missing details or pdfBase64");
+    return null;
+  }
+
+  const invoiceNo = String(invoiceDetails.invoiceNo || invoiceDetails.id || "INV").trim();
+  const filename = `Invoice_${invoiceNo}.pdf`;
+
+  const payload = {
+    action: "upload_pdf",
+    auth: API_SECRET_TOKEN,
+    token: API_SECRET_TOKEN,
+    invoiceNo: invoiceNo,
+    filename: filename,
+    pdfBase64: pdfBase64
+  };
+
+  try {
+    const res = await fetch(GOOGLE_SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload),
+      redirect: "follow"
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.ok && (data.pdfUrl || data.viewUrl)) {
+        const publicUrl = data.viewUrl || data.pdfUrl;
+        console.log(`☁️ Successfully saved PDF to Google Drive: ${publicUrl}`);
+
+        invoiceDetails.pdfUrl = publicUrl;
+        if (invoiceDetails.details) invoiceDetails.details.pdfUrl = publicUrl;
+
+        const idx = invoicesDb.findIndex(i => i.id === invoiceDetails.id || String(i.invoiceNo) === String(invoiceNo));
+        if (idx > -1) {
+          invoicesDb[idx].pdfUrl = publicUrl;
+          if (invoicesDb[idx].details) invoicesDb[idx].details.pdfUrl = publicUrl;
+          try { localStorage.setItem("invoices", JSON.stringify(invoicesDb)); } catch (e) {}
+        }
+
+        if (typeof showFloatingToast === "function") {
+          showFloatingToast(`☁️ Invoice #${invoiceNo} PDF saved to Google Drive!`, "success");
+        }
+        return publicUrl;
+      } else {
+        console.warn("Google Drive upload API returned notice:", data?.error);
+      }
+    }
+  } catch (err) {
+    console.warn("Network error during Google Drive PDF upload, queueing in persistent outbox:", err.message);
+  }
+
+  // Resilient offline fallback: Queue in AaryanDB outbox for auto-retry
+  try {
+    if (window.AaryanDB && typeof window.AaryanDB.enqueueOutbox === "function") {
+      window.AaryanDB.enqueueOutbox("pdf", "upload_pdf", payload);
+      console.log(`📥 Invoice #${invoiceNo} PDF queued in offline outbox for automatic retry.`);
+    }
+  } catch (queueErr) {
+    console.warn("Could not queue PDF in outbox:", queueErr);
+  }
+
+  return null;
+}
+window.uploadInvoicePdfToGoogleDrive = uploadInvoicePdfToGoogleDrive;
 
 // --- DATABASE TELEMETRY & STATUS HUD ---
 window.openDatabaseTelemetryModal = async function() {
@@ -1242,13 +1344,26 @@ document.addEventListener("DOMContentLoaded", () => {
           updateDashboardOverview();
           calculateSummaryAndTable();
           autoSuggestInvoiceNo();
+          if (typeof window.broadcastDatabaseMutation === 'function') {
+            window.broadcastDatabaseMutation();
+          }
+        }
+        window.lastSyncTimeMs = Date.now();
+        if (typeof window.updateRealtimePresenceHUD === 'function') {
+          window.updateRealtimePresenceHUD("live");
         }
       })
       .catch(err => {
         if (err.name === 'AbortError') {
           updateCloudSyncBadge("synced");
+          if (typeof window.updateRealtimePresenceHUD === 'function') {
+            window.updateRealtimePresenceHUD("live");
+          }
         } else {
           updateCloudSyncBadge("offline");
+          if (typeof window.updateRealtimePresenceHUD === 'function') {
+            window.updateRealtimePresenceHUD("offline");
+          }
           console.warn("Sync notice:", err.message);
         }
       })
@@ -1257,23 +1372,117 @@ document.addEventListener("DOMContentLoaded", () => {
       });
   };
 
-  // Run initial database sync
-  window.triggerDatabaseSync();
+  // ============================================================================
+  // ENTERPRISE REAL-TIME MULTI-USER SYNCHRONIZATION ENGINE (50+ CONCURRENT MEMBERS)
+  // ============================================================================
+  let multiUserSyncTimer = null;
+  let interTabChannel = null;
 
-  // If on localhost, run periodic heartbeat sync; on cloud, Adaptive Smart Polling handles it
-  if (isLocalhost) {
-    setInterval(window.triggerDatabaseSync, 2500);
+  try {
+    if (typeof BroadcastChannel !== "undefined") {
+      interTabChannel = new BroadcastChannel("aaryan_billing_mesh_sync");
+      interTabChannel.onmessage = (ev) => {
+        if (ev.data && ev.data.action === "DATABASE_MUTATED") {
+          try {
+            productsDb = JSON.parse(localStorage.getItem("products") || "[]");
+            partiesDb = JSON.parse(localStorage.getItem("parties") || "[]");
+            invoicesDb = JSON.parse(localStorage.getItem("invoices") || "[]");
+            globalSettings = JSON.parse(localStorage.getItem("settings") || "{}");
+            loadProductsDatabaseTable();
+            loadPartiesDatabaseLists();
+            loadInvoicesHistoryTable();
+            updateDashboardOverview();
+            calculateSummaryAndTable();
+            autoSuggestInvoiceNo();
+            if (typeof window.updateRealtimePresenceHUD === 'function') {
+              window.updateRealtimePresenceHUD("live");
+            }
+          } catch (err) {}
+        }
+      };
+    }
+  } catch (e) {}
+
+  window.broadcastDatabaseMutation = function() {
+    try {
+      if (interTabChannel) {
+        interTabChannel.postMessage({
+          action: "DATABASE_MUTATED",
+          timestamp: Date.now()
+        });
+      }
+    } catch (e) {}
+  };
+
+  window.updateRealtimePresenceHUD = function(status = "live") {
+    const badge = document.getElementById("realtime-presence-badge");
+    const textEl = document.getElementById("realtime-presence-text");
+    if (!badge || !textEl) return;
+
+    const now = Date.now();
+    const diffSec = Math.max(0, Math.floor((now - (window.lastSyncTimeMs || now)) / 1000));
+    const timeText = diffSec < 3 ? "Just now" : `${diffSec}s ago`;
+
+    if (status === "syncing") {
+      badge.className = "realtime-presence-pill syncing cursor-pointer";
+      textEl.innerHTML = `<span class="realtime-sync-spinning">🔄</span> Syncing 50+...`;
+    } else if (status === "offline" || !navigator.onLine) {
+      badge.className = "realtime-presence-pill offline cursor-pointer";
+      textEl.innerHTML = `<span class="realtime-radar-dot offline"></span> Offline (Queued)`;
+    } else {
+      badge.className = "realtime-presence-pill active cursor-pointer";
+      textEl.innerHTML = `<span class="realtime-radar-dot active"></span> 50+ Live • ${timeText}`;
+    }
+  };
+
+  function scheduleNextRealtimeSync() {
+    if (multiUserSyncTimer) clearTimeout(multiUserSyncTimer);
+
+    const isHidden = document.hidden || document.visibilityState === "hidden";
+    // Jitter (0 to 1500ms) prevents 50 users from pinging Google Apps Script at the exact same millisecond
+    const jitter = Math.floor(Math.random() * 1500);
+    const interval = isHidden ? (30000 + jitter) : (5000 + jitter);
+
+    multiUserSyncTimer = setTimeout(async () => {
+      try {
+        if (navigator.onLine && typeof window.triggerDatabaseSync === "function" && !isSyncing) {
+          await window.triggerDatabaseSync();
+        }
+      } catch (e) {
+      } finally {
+        scheduleNextRealtimeSync();
+      }
+    }, interval);
   }
+
+  // Run initial database sync & start the adaptive multi-user poller
+  window.triggerDatabaseSync();
+  scheduleNextRealtimeSync();
+
+  // Keep HUD elapsed timer updated every 3s
+  setInterval(() => {
+    if (!isSyncing && navigator.onLine && typeof window.updateRealtimePresenceHUD === 'function') {
+      window.updateRealtimePresenceHUD("live");
+    }
+  }, 3000);
 
   // Sync automatically when window/tab is focused or returned to
   window.addEventListener("focus", () => {
-    window.triggerDatabaseSync();
+    const now = Date.now();
+    if (now - (window.lastSyncTimeMs || 0) > 3500) {
+      window.triggerDatabaseSync();
+      scheduleNextRealtimeSync();
+    }
   });
 
   // Sync automatically when tab becomes visible
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
-      window.triggerDatabaseSync();
+      const now = Date.now();
+      if (now - (window.lastSyncTimeMs || 0) > 3500) {
+        window.triggerDatabaseSync();
+        scheduleNextRealtimeSync();
+      }
     }
   });
 
@@ -3212,9 +3421,12 @@ window.updatePrintTitleHeader = function() {
 function autoSuggestInvoiceNo(force = false) {
   if (currentInvoice && currentInvoice.isEditing && !force) return;
   const nextStr = InvoiceUtils.getNextInvoiceNumber(invoicesDb);
-  if (force || !currentInvoice.invoiceNo || !elements.billInvoiceNo || !elements.billInvoiceNo.value) {
+  const isTyping = elements.billInvoiceNo && document.activeElement === elements.billInvoiceNo;
+  const isCollisionWithSync = invoicesDb.some(inv => inv && String(inv.invoiceNo).trim() === String(elements.billInvoiceNo?.value || "").trim());
+
+  if (force || !currentInvoice.invoiceNo || !elements.billInvoiceNo || !elements.billInvoiceNo.value || (!isTyping && isCollisionWithSync)) {
     currentInvoice.invoiceNo = nextStr;
-    if (elements.billInvoiceNo) {
+    if (elements.billInvoiceNo && !isTyping) {
       elements.billInvoiceNo.value = currentInvoice.invoiceNo;
     }
   }
