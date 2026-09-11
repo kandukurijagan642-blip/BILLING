@@ -1790,7 +1790,14 @@ window.switchTab = function(tabName) {
   let title = tabName.charAt(0).toUpperCase() + tabName.slice(1);
   if (tabName === 'billing') title = 'GST Billing';
   if (tabName === 'history') title = 'Invoice History';
+  if (tabName === 'products') title = 'Inventory & Products';
+  if (tabName === 'parties') title = 'Client & Party Accounts';
+  if (tabName === 'reports') title = 'Analytics & Reports';
+  if (tabName === 'settings') title = 'System & Automation Settings';
   elements.viewTitle.textContent = title;
+
+  const crumbEl = document.getElementById("current-crumb");
+  if (crumbEl) crumbEl.textContent = title;
 
   if (tabName === 'dashboard') {
     updateDashboardOverview();
@@ -1884,26 +1891,75 @@ function renderDashboardCharts() {
   if (salesChartInstance) salesChartInstance.destroy();
   if (gstChartInstance) gstChartInstance.destroy();
 
+  const ctx = salesCanvas.getContext('2d');
+  let gradient = null;
+  try {
+    gradient = ctx.createLinearGradient(0, 0, 0, 240);
+    gradient.addColorStop(0, 'rgba(2, 132, 199, 0.35)');
+    gradient.addColorStop(1, 'rgba(2, 132, 199, 0.00)');
+  } catch (e) {}
+
   salesChartInstance = new Chart(salesCanvas, {
-    type: 'bar',
+    type: 'line',
     data: {
       labels: labels,
       datasets: [{
         label: 'Revenue (₹)',
         data: dataValues,
-        backgroundColor: 'rgba(6, 182, 212, 0.65)',
-        borderColor: '#06b6d4',
-        borderWidth: 2,
-        borderRadius: 6
+        fill: true,
+        backgroundColor: gradient || 'rgba(2, 132, 199, 0.15)',
+        borderColor: '#0284c7',
+        borderWidth: 2.5,
+        tension: 0.38,
+        pointBackgroundColor: '#ffffff',
+        pointBorderColor: '#0284c7',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        pointHoverBackgroundColor: '#0284c7',
+        pointHoverBorderColor: '#ffffff',
+        pointHoverBorderWidth: 2
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      interaction: {
+        mode: 'index',
+        intersect: false
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(15, 23, 42, 0.92)',
+          titleColor: '#ffffff',
+          bodyColor: '#38bdf8',
+          padding: 10,
+          cornerRadius: 8,
+          boxPadding: 4,
+          callbacks: {
+            label: function(context) {
+              return ` Revenue: ₹ ${context.parsed.y.toLocaleString('en-IN')}`;
+            }
+          }
+        }
+      },
       scales: {
-        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
-        x: { grid: { display: false } }
+        y: {
+          beginAtZero: true,
+          grid: { color: 'rgba(226, 232, 240, 0.6)' },
+          ticks: {
+            color: '#64748b',
+            font: { size: 11, family: 'Inter' },
+            callback: function(val) {
+              return '₹ ' + (val >= 1000 ? (val / 1000) + 'k' : val);
+            }
+          }
+        },
+        x: {
+          grid: { display: false },
+          ticks: { color: '#64748b', font: { size: 11, family: 'Inter' } }
+        }
       }
     }
   });
@@ -1915,15 +1971,37 @@ function renderDashboardCharts() {
       labels: ['CGST', 'SGST', 'IGST'],
       datasets: [{
         data: hasTaxData ? [totalCgst, totalSgst, totalIgst] : [1, 1, 1],
-        backgroundColor: hasTaxData ? ['#10b981', '#06b6d4', '#f59e0b'] : ['#334155', '#475569', '#64748b'],
-        borderWidth: 0
+        backgroundColor: hasTaxData ? ['#10b981', '#0284c7', '#f59e0b'] : ['#e2e8f0', '#cbd5e1', '#94a3b8'],
+        borderWidth: 2,
+        borderColor: '#ffffff',
+        hoverOffset: 4
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      cutout: '72%',
       plugins: {
-        legend: { position: 'bottom', labels: { color: '#cbd5e1', font: { size: 11 } } }
+        legend: {
+          position: 'bottom',
+          labels: {
+            color: '#475569',
+            font: { size: 11, family: 'Inter', weight: '600' },
+            padding: 14,
+            usePointStyle: true,
+            pointStyle: 'circle'
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(15, 23, 42, 0.92)',
+          padding: 10,
+          cornerRadius: 8,
+          callbacks: {
+            label: function(context) {
+              return hasTaxData ? ` ₹ ${context.parsed.toLocaleString('en-IN')}` : ' No tax data';
+            }
+          }
+        }
       }
     }
   });
@@ -7055,10 +7133,46 @@ window.importDataBackupJSON = function(event) {
     }
   }, true);
 
-  // Escape key closes modals
+  // SaaS Global Keyboard Shortcuts & Modal Escape
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape' || e.key === 'Esc') {
       dismissAllActiveModals();
+      return;
+    }
+
+    // Ctrl / Cmd keyboard shortcuts (Pro SaaS speedrun)
+    if (e.ctrlKey || e.metaKey) {
+      const key = (e.key || '').toLowerCase();
+      if (key === 'b') {
+        e.preventDefault();
+        if (typeof window.switchTab === 'function') window.switchTab('billing');
+      } else if (key === 'd') {
+        e.preventDefault();
+        if (typeof window.switchTab === 'function') window.switchTab('dashboard');
+      } else if (key === 'h') {
+        e.preventDefault();
+        if (typeof window.switchTab === 'function') window.switchTab('history');
+      } else if (key === 'k') {
+        e.preventDefault();
+        const activeNav = document.querySelector('.sidebar-nav .nav-item.active');
+        const activeTab = activeNav ? activeNav.getAttribute('data-tab') : '';
+        if (activeTab === 'history') {
+          const histInput = document.getElementById('search-history-input');
+          if (histInput) { histInput.focus(); histInput.select(); }
+        } else if (activeTab === 'products') {
+          const prodInput = document.getElementById('search-products-input');
+          if (prodInput) { prodInput.focus(); prodInput.select(); }
+        } else if (activeTab === 'billing') {
+          const itemInput = document.getElementById('bill-item-name') || document.getElementById('bill-buyer-name');
+          if (itemInput) { itemInput.focus(); itemInput.select(); }
+        } else {
+          if (typeof window.switchTab === 'function') window.switchTab('history');
+          setTimeout(() => {
+            const histInput = document.getElementById('search-history-input');
+            if (histInput) { histInput.focus(); histInput.select(); }
+          }, 80);
+        }
+      }
     }
   });
 })();
