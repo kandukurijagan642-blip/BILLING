@@ -4112,7 +4112,11 @@ window.saveCurrentInvoiceRecord = async function(actionType = 'save_only', btnEl
       if (actionType !== 'share_whatsapp' && rawPhone && rawPhone.toString().replace(/\D/g, '').length >= 10 && globalSettings.whatsappAutoSend !== false) {
         try {
           if (typeof autoDispatchInvoiceToWhatsApp === 'function') {
-            await autoDispatchInvoiceToWhatsApp(invoiceRecord.details, precomputedBase64);
+            const sent = await autoDispatchInvoiceToWhatsApp(invoiceRecord.details, precomputedBase64);
+            invoiceRecord.waAutoSent = Boolean(sent);
+            if (typeof updateSuccessModalWhatsAppStatus === 'function') {
+              updateSuccessModalWhatsAppStatus(invoiceRecord);
+            }
           }
         } catch (e) {
           console.warn("Auto WhatsApp dispatch note:", e);
@@ -4228,9 +4232,35 @@ window.openInvoiceSuccessModal = function(invoiceRecord) {
   }
   const totEl = document.getElementById("modal-success-total");
   if (totEl) totEl.textContent = `₹ ${formatCurrency(invoiceRecord.total || 0)}`;
+
+  window.updateSuccessModalWhatsAppStatus(invoiceRecord);
+
   modal.classList.remove("hidden");
   modal.style.removeProperty("display");
   modal.style.removeProperty("visibility");
+};
+
+window.updateSuccessModalWhatsAppStatus = function(invoiceRecord) {
+  if (!invoiceRecord) return;
+  const waBtn = document.getElementById("modal-success-btn-whatsapp");
+  if (!waBtn) return;
+  const consigneePhone = invoiceRecord.details?.consignee?.phone || invoiceRecord.details?.buyer?.phone || "";
+  const cleanDigits = consigneePhone.toString().replace(/\D/g, '');
+  const isBotConnected = whatsappBotStatus && (whatsappBotStatus.isReady || whatsappBotStatus.status === 'CONNECTED');
+
+  if (invoiceRecord.waAutoSent) {
+    waBtn.innerHTML = `<i class="fa-solid fa-circle-check text-success"></i> WhatsApp Sent!`;
+    waBtn.style.background = "#15803d";
+    waBtn.title = "Dispatched via WhatsApp Companion Bot";
+  } else if (cleanDigits.length >= 10) {
+    const formatted = cleanDigits.length === 10 ? cleanDigits : cleanDigits.slice(-10);
+    waBtn.innerHTML = `<i class="fa-brands fa-whatsapp"></i> Send WhatsApp (+91 ${formatted})`;
+    waBtn.style.background = "#16a34a";
+    waBtn.title = isBotConnected ? "Send immediately via WhatsApp Bot" : "1-Click Direct WhatsApp Share";
+  } else {
+    waBtn.innerHTML = `<i class="fa-brands fa-whatsapp"></i> WhatsApp`;
+    waBtn.style.background = "#16a34a";
+  }
 };
 
 window.closeInvoiceSuccessModal = function(goToHistory = false) {
@@ -4277,7 +4307,8 @@ window.triggerSuccessModalDownloadPdf = function() {
 window.triggerSuccessModalWhatsApp = function() {
   if (!lastSavedInvoiceRecord) return;
   const rec = lastSavedInvoiceRecord;
-  shareInvoicePdfNative(rec.details);
+  const waBtn = document.getElementById("modal-success-btn-whatsapp");
+  shareInvoicePdfNative(rec.details, waBtn, true);
 };
 
 // --- POPULATE PRINT VIEW CANVAS (A4) ---
@@ -6147,8 +6178,11 @@ async function autoDispatchInvoiceToWhatsApp(details, precomputedBase64 = null) 
       return true;
     }
   } else {
-    // When bot is offline, log notice without interrupting cashier
-    console.log("WhatsApp Bot is offline. Automatic silent background dispatch completed without browser redirect.");
+    // When bot is offline or on web cloud mode, notify cashier that 1-click share is ready in modal
+    const recName = recipientsInfo.consigneeName || recipientsInfo.buyerName || 'Customer';
+    const targetPhone = recipientsInfo.primaryPhone ? `to ${recName} (+${recipientsInfo.primaryPhone})` : '';
+    console.log("WhatsApp Bot is offline or in cloud web mode. 1-Click WhatsApp ready.");
+    showFloatingToast(`📲 1-Click WhatsApp ready: Click 'WhatsApp' in modal to send ${targetPhone}`, 5500);
   }
   return false;
 }
@@ -6271,29 +6305,12 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
         throw new Error('Failed to dispatch to recipient(s)');
       }
     } catch (fastErr) {
-      console.warn("Background bot dispatch failed:", fastErr);
-      showFloatingToast(`⚠️ WhatsApp Bot send failed: ${fastErr.message}`, "warning");
-      if (btnEl && btnEl.tagName) {
-        btnEl.innerHTML = origHtml;
-        btnEl.disabled = false;
-      }
-      return false;
+      console.warn("Background bot dispatch failed, continuing to 1-click WhatsApp:", fastErr);
+      showFloatingToast(`📲 Opening 1-Click WhatsApp for Consignee (+${cleanPhone})...`, 3000);
     }
   }
 
-  // If Bot is offline: ask user before opening WhatsApp Web
-  if (!force1Click) {
-    const userChoice = confirm(`⚠️ WhatsApp Bot is offline.\n\nTo send invoices automatically in background without opening WhatsApp, make sure Start_WhatsApp_Bot.bat is running on port 3001.\n\nDo you want to open WhatsApp Web manually for Consignee (+${cleanPhone})?`);
-    if (!userChoice) {
-      if (btnEl && btnEl.tagName) {
-        btnEl.innerHTML = origHtml;
-        btnEl.disabled = false;
-      }
-      return false;
-    }
-  }
-
-  // Fallback: 1-click WhatsApp Web/App directly to Consignee (+${cleanPhone})
+  // 1-Click Direct WhatsApp Share directly to Consignee (+${cleanPhone})
   const waUrl = launchWhatsAppWebOrApp(cleanPhone, fullShareText);
   openWhatsAppDirect(waUrl);
 
