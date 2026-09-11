@@ -1,4 +1,4 @@
-// Database states
+// Database states with Instant Synchronous Hydration (0ms Startup)
 let productsDb = [];
 let partiesDb = [];
 let invoicesDb = [];
@@ -7,6 +7,60 @@ let isSyncing = false;
 window.isInitialSyncDone = false;
 let dbEventSource = null;
 let isSavingInvoice = false;
+
+// Authoritative Master Fallback Snapshot (Ensures 0ms instant display even on cold cache)
+const GOOGLE_MASTER_PRODUCTS_SNAPSHOT = [
+  {
+    id: "prod-1",
+    description: "RALLIMIN ADV + 15 KGs",
+    hsn: "23099090",
+    packSize: "15 KG",
+    unit: "Bucket",
+    rate: 3600,
+    discount: 45,
+    price: 1980,
+    stock: 127,
+    totalValue: 251460,
+    status: "In Stock"
+  },
+  {
+    id: "prod-2",
+    description: "AQUA PROBIOTIC FEED SUPPLEMENT 1KG",
+    hsn: "23099090",
+    packSize: "1 KG",
+    unit: "Can",
+    rate: 850,
+    discount: 10,
+    price: 765,
+    stock: 100,
+    totalValue: 76500,
+    status: "In Stock"
+  },
+  {
+    id: "prod-3",
+    description: "ZEOLITE POWDER 25KG BAG",
+    hsn: "28421000",
+    packSize: "25 KG",
+    unit: "Bag",
+    rate: 450,
+    discount: 5,
+    price: 427.5,
+    stock: 100,
+    totalValue: 42750,
+    status: "In Stock"
+  }
+];
+
+try {
+  const localProds = JSON.parse(localStorage.getItem("products") || "[]");
+  productsDb = (Array.isArray(localProds) && localProds.length > 0) ? localProds : GOOGLE_MASTER_PRODUCTS_SNAPSHOT;
+  partiesDb = JSON.parse(localStorage.getItem("parties") || "[]");
+  invoicesDb = JSON.parse(localStorage.getItem("invoices") || "[]");
+  globalSettings = JSON.parse(localStorage.getItem("settings") || "{}");
+  if (Array.isArray(invoicesDb) && invoicesDb.length > 0) {
+    invoicesDb.sort((a, b) => String(a.invoiceNo || "").localeCompare(String(b.invoiceNo || "")));
+  }
+} catch (e) {}
 // XSS Defense Helper
 function escapeHtml(str) {
   if (str === null || str === undefined) return '';
@@ -733,11 +787,11 @@ window.updateCloudSyncBadge = function(status) {
 
   const now = Date.now();
   const diffSec = Math.max(0, Math.floor((now - (window.lastSyncTimeMs || now)) / 1000));
-  const timeText = diffSec < 3 ? "Just now" : `${diffSec}s ago`;
+  const timeText = diffSec < 2 ? "1s Live" : `${diffSec}s ago`;
 
   if (status === "syncing") {
     badge.className = "cloud-sync-pill syncing cursor-pointer";
-    if (textEl) textEl.innerHTML = `<span class="realtime-sync-spinning">🔄</span> Syncing 50+...`;
+    if (textEl) textEl.innerHTML = `<span class="realtime-sync-spinning">🔄</span> Syncing...`;
     if (radarDot) radarDot.style.display = "none";
   } else if (status === "offline" || !navigator.onLine) {
     badge.className = "cloud-sync-pill offline cursor-pointer";
@@ -748,7 +802,7 @@ window.updateCloudSyncBadge = function(status) {
     }
   } else {
     badge.className = "cloud-sync-pill synced cursor-pointer";
-    if (textEl) textEl.textContent = `50+ Live • ${timeText}`;
+    if (textEl) textEl.textContent = `🟢 1s Google DB • ${timeText}`;
     if (radarDot) {
       radarDot.style.display = "inline-block";
       radarDot.className = "realtime-radar-dot active";
@@ -768,12 +822,12 @@ window.triggerDatabaseSync = async function(forceReload = false) {
   }
 
   isSyncing = true;
-  if (typeof window.updateCloudSyncBadge === 'function') {
+  if (forceReload && typeof window.updateCloudSyncBadge === 'function') {
     window.updateCloudSyncBadge("syncing");
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
 
   const gasSyncUrl = `${GOOGLE_SCRIPT_URL}?action=sync&token=${encodeURIComponent(API_SECRET_TOKEN)}`;
 
@@ -847,25 +901,30 @@ window.triggerDatabaseSync = async function(forceReload = false) {
       }
     }
 
-    // Mirror authoritative data to IndexedDB
-    if (window.AaryanDB && window.AaryanDB.isReady) {
+    // Mirror authoritative data to IndexedDB when changed
+    if (changed && window.AaryanDB && window.AaryanDB.isReady) {
       AaryanDB.saveAllProducts(productsDb);
       AaryanDB.saveAllParties(partiesDb);
       AaryanDB.saveAllInvoices(invoicesDb);
       AaryanDB.saveSettings(globalSettings);
     }
 
+    const isFirstHydration = !window.isInitialSyncDone;
     window.isInitialSyncDone = true;
-    if (typeof loadProductsDatabaseTable === 'function') loadProductsDatabaseTable();
-    if (typeof loadPartiesDatabaseLists === 'function') loadPartiesDatabaseLists();
-    if (typeof loadInvoicesHistoryTable === 'function') loadInvoicesHistoryTable();
-    if (typeof updateDashboardOverview === 'function') updateDashboardOverview();
-    if (typeof calculateSummaryAndTable === 'function') calculateSummaryAndTable();
-    if (typeof autoSuggestInvoiceNo === 'function') autoSuggestInvoiceNo();
-    if (typeof populateBillingSelectors === 'function') populateBillingSelectors();
 
-    if (changed && typeof window.broadcastDatabaseMutation === 'function') {
-      window.broadcastDatabaseMutation();
+    // Only re-render DOM tables and summaries if database values actually changed!
+    if (changed || isFirstHydration) {
+      if (typeof loadProductsDatabaseTable === 'function') loadProductsDatabaseTable();
+      if (typeof loadPartiesDatabaseLists === 'function') loadPartiesDatabaseLists();
+      if (typeof loadInvoicesHistoryTable === 'function') loadInvoicesHistoryTable();
+      if (typeof updateDashboardOverview === 'function') updateDashboardOverview();
+      if (typeof calculateSummaryAndTable === 'function') calculateSummaryAndTable();
+      if (typeof autoSuggestInvoiceNo === 'function') autoSuggestInvoiceNo();
+      if (typeof populateBillingSelectors === 'function') populateBillingSelectors();
+
+      if (changed && typeof window.broadcastDatabaseMutation === 'function') {
+        window.broadcastDatabaseMutation();
+      }
     }
 
     if (typeof window.updateRealtimePresenceHUD === 'function') {
@@ -875,7 +934,7 @@ window.triggerDatabaseSync = async function(forceReload = false) {
   .catch((err) => {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
-      console.warn("Google Apps Script sync timeout (>12s). Serving cached Google database snapshot.");
+      console.warn("Google Apps Script sync timeout (>8s). Serving cached Google database snapshot.");
       if (typeof window.updateCloudSyncBadge === 'function') window.updateCloudSyncBadge("synced");
     } else {
       console.warn("Google Apps Script sync notice:", err.message);
@@ -889,9 +948,6 @@ window.triggerDatabaseSync = async function(forceReload = false) {
     isSyncing = false;
     activeSyncPromise = null;
     window.isInitialSyncDone = true;
-    if (typeof loadProductsDatabaseTable === 'function') loadProductsDatabaseTable();
-    if (typeof loadInvoicesHistoryTable === 'function') loadInvoicesHistoryTable();
-    if (typeof updateDashboardOverview === 'function') updateDashboardOverview();
   });
 
   return activeSyncPromise;
@@ -1387,21 +1443,23 @@ function initializeApp() {
     showFloatingToast(`🎉 Successfully uploaded ${processedCount} PDFs to Google Drive & updated Google Sheet!`, 5000);
   };
 
-  // --- ENTERPRISE BACKGROUND REFRESH & MULTI-DEVICE MESH POLLING ---
+  // ============================================================================
+  // 1-SECOND CONTINUOUS HIGH-SPEED AUTOMATIC GOOGLE DATABASE SYNC ENGINE
+  // ============================================================================
   let multiUserSyncTimer = null;
 
   function scheduleNextRealtimeSync() {
     if (multiUserSyncTimer) clearTimeout(multiUserSyncTimer);
 
+    // Visible active tab: poll every 1 second (1000ms)
+    // Hidden/minimized tab: poll every 5 seconds (5000ms)
     const isHidden = document.hidden || document.visibilityState === "hidden";
-    // Jitter (0 to 3000ms) prevents concurrent users from pinging Google Apps Script at the exact same second
-    const jitter = Math.floor(Math.random() * 3000);
-    const interval = isHidden ? (60000 + jitter) : (35000 + jitter);
+    const interval = isHidden ? 5000 : 1000;
 
     multiUserSyncTimer = setTimeout(async () => {
       try {
         if (navigator.onLine && typeof window.triggerDatabaseSync === "function" && !isSyncing) {
-          await window.triggerDatabaseSync();
+          await window.triggerDatabaseSync(false);
         }
       } catch (e) {
       } finally {
@@ -1410,31 +1468,29 @@ function initializeApp() {
     }, interval);
   }
 
-  // Start background multi-user poller (initial sync was triggered on startup)
+  // Start continuous 1-second auto-sync immediately
   scheduleNextRealtimeSync();
 
-  // Keep HUD elapsed timer updated every 3s
+  // Keep HUD elapsed timer updated every 1s
   setInterval(() => {
     if (!isSyncing && navigator.onLine && typeof window.updateRealtimePresenceHUD === 'function') {
       window.updateRealtimePresenceHUD("live");
     }
-  }, 3000);
+  }, 1000);
 
-  // Sync automatically when window/tab is focused or returned to (throttled to 20s)
+  // Sync automatically when window/tab is focused or returned to
   window.addEventListener("focus", () => {
-    const now = Date.now();
-    if (now - (window.lastSyncTimeMs || 0) > 20000) {
-      window.triggerDatabaseSync();
+    if (navigator.onLine && typeof window.triggerDatabaseSync === "function" && !isSyncing) {
+      window.triggerDatabaseSync(false);
       scheduleNextRealtimeSync();
     }
   });
 
-  // Sync automatically when tab becomes visible (throttled to 20s)
+  // Sync automatically when tab becomes visible
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
-      const now = Date.now();
-      if (now - (window.lastSyncTimeMs || 0) > 20000) {
-        window.triggerDatabaseSync();
+      if (navigator.onLine && typeof window.triggerDatabaseSync === "function" && !isSyncing) {
+        window.triggerDatabaseSync(false);
         scheduleNextRealtimeSync();
       }
     }
