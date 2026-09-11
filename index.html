@@ -21,6 +21,9 @@
   <meta name="theme-color" content="#06b6d4">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <!-- Force unregister service worker and clear cache to apply updates -->
   <script>
     if ('serviceWorker' in navigator) {
@@ -39,7 +42,7 @@
     }
   </script>
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=115">
+  <link rel="stylesheet" href="index.css?v=170">
   <script src="invoice_utils_v5.js?v=96"></script>
 </head>
 <body>
@@ -302,12 +305,13 @@
                   <th>CUSTOMER</th>
                   <th>ITEMS</th>
                   <th style="text-align: right;">TOTAL</th>
+                  <th style="text-align: center;">STATUS</th>
                   <th style="text-align: center;">ACTIONS</th>
                 </tr>
               </thead>
               <tbody id="dashboard-recent-invoices-body">
                 <tr>
-                  <td colspan="6" class="text-center text-muted">No invoices generated yet.</td>
+                  <td colspan="7" class="text-center text-muted">No invoices generated yet.</td>
                 </tr>
               </tbody>
             </table>
@@ -836,7 +840,7 @@
       <section id="view-history" class="content-view hidden">
         <div class="card-box">
           <div class="card-box-header" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
-            <h3>Invoice History (<span id="history-count">0</span>)</h3>
+            <h3>Invoice History (<span id="history-count"><i class="fa-solid fa-spinner fa-spin" style="font-size: 11px;"></i></span>)</h3>
             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
               <select id="filter-history-status" onchange="filterInvoicesByStatus()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--card-bg, #0f172a); color: var(--text-color, #f8fafc); font-size: 13px; cursor: pointer;">
                 <option value="all">All Payment Statuses</option>
@@ -862,11 +866,19 @@
                   <th>CUSTOMER</th>
                   <th>ITEMS</th>
                   <th style="text-align: right;">TOTAL</th>
+                  <th style="text-align: center;">STATUS</th>
                   <th style="text-align: center;">ACTIONS</th>
                 </tr>
               </thead>
               <tbody id="history-invoices-body">
-                <!-- Dynamically populated -->
+                <tr>
+                  <td colspan="7" class="text-center" style="padding: 40px 16px; color: #64748b;">
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;">
+                      <i class="fa-solid fa-circle-notch fa-spin fa-2x" style="color: #0284c7;"></i>
+                      <div style="font-weight: 600; font-size: 14px; color: #334155;">Loading Invoices...</div>
+                    </div>
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -2659,6 +2671,6 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=165"></script>
+  <script src="index_v5.js?v=170"></script>
 </body>
 </html>

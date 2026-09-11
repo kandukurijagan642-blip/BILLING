@@ -4,6 +4,7 @@ let partiesDb = [];
 let invoicesDb = [];
 let globalSettings = {};
 let isSyncing = false;
+window.isInitialSyncDone = false;
 let dbEventSource = null;
 let isSavingInvoice = false;
 // XSS Defense Helper
@@ -929,7 +930,7 @@ function formatTaxValue(val) {
 }
 
 // --- INITIALIZE SPA DASHBOARD ---
-document.addEventListener("DOMContentLoaded", () => {
+function initializeApp() {
   // One-time cache clear and service worker unregistration for v34 to clear out old fields cached by service worker
   if (localStorage.getItem("sw_cleared_v95_cache_clean") !== "true") {
     if ('serviceWorker' in navigator) {
@@ -1457,7 +1458,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         const isHistoryLoading = elements.historyInvoicesBody && elements.historyInvoicesBody.innerHTML.includes('Syncing');
-        if (changed || isHistoryLoading) {
+        const wasInitial = !window.isInitialSyncDone;
+        if (changed || isHistoryLoading || wasInitial) {
           console.log("⚡ Database synchronized! Updating active UI views...");
           loadProductsDatabaseTable();
           loadPartiesDatabaseLists();
@@ -1490,8 +1492,11 @@ document.addEventListener("DOMContentLoaded", () => {
       })
       .finally(() => {
         isSyncing = false;
-        if (elements.historyInvoicesBody && elements.historyInvoicesBody.innerHTML.includes('Syncing')) {
+        const wasInitial = !window.isInitialSyncDone;
+        window.isInitialSyncDone = true;
+        if (wasInitial || (elements.historyInvoicesBody && elements.historyInvoicesBody.innerHTML.includes('Syncing'))) {
           loadInvoicesHistoryTable();
+          updateDashboardOverview();
         }
       });
   };
@@ -1689,7 +1694,13 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
   */
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener("DOMContentLoaded", initializeApp);
+} else {
+  initializeApp();
+}
 
 // --- LOCAL STORAGE DATABASES SEEDING ---
 function seedDatabasesIfEmpty() {
@@ -2486,56 +2497,76 @@ window.calculateMarginWidget = function() {
 
 function updateDashboardOverview() {
   loadAllDatabases();
-  elements.statTotalInvoices.textContent = invoicesDb.length;
-  elements.statTotalProducts.textContent = productsDb.length;
+
+  const isSyncLoading = invoicesDb.length === 0 && (!window.isInitialSyncDone || isSyncing);
+
+  if (isSyncLoading) {
+    if (elements.statTotalInvoices) elements.statTotalInvoices.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="font-size: 16px;"></i>`;
+    if (elements.statTotalAmount) elements.statTotalAmount.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="font-size: 16px;"></i>`;
+  } else {
+    if (elements.statTotalInvoices) elements.statTotalInvoices.textContent = invoicesDb.length;
+    const totalRevenue = invoicesDb.reduce((sum, inv) => sum + parseFloat(inv.total), 0);
+    if (elements.statTotalAmount) elements.statTotalAmount.textContent = '₹ ' + formatCurrency(totalRevenue);
+  }
+
+  if (elements.statTotalProducts) elements.statTotalProducts.textContent = productsDb.length;
   
   const uniqueParties = new Set(partiesDb.map(p => p.name)).size;
-  elements.statTotalParties.textContent = uniqueParties;
-
-  const totalRevenue = invoicesDb.reduce((sum, inv) => sum + parseFloat(inv.total), 0);
-  elements.statTotalAmount.textContent = '₹ ' + formatCurrency(totalRevenue);
+  if (elements.statTotalParties) elements.statTotalParties.textContent = uniqueParties;
 
   checkLowStockAlerts();
   renderDashboardCharts();
 
-  elements.dashboardRecentInvoicesBody.innerHTML = "";
-  const recent = invoicesDb.slice().reverse().slice(0, 5);
-  
-  if (recent.length === 0) {
-    elements.dashboardRecentInvoicesBody.innerHTML = `
-      <tr>
-        <td colspan="7" class="text-center text-muted">No invoices generated yet.</td>
-      </tr>
-    `;
-    return;
+  if (elements.dashboardRecentInvoicesBody) {
+    elements.dashboardRecentInvoicesBody.innerHTML = "";
+    const recent = invoicesDb.slice().reverse().slice(0, 5);
+    
+    if (recent.length === 0) {
+      if (isSyncLoading) {
+        elements.dashboardRecentInvoicesBody.innerHTML = `
+          <tr>
+            <td colspan="7" class="text-center" style="padding: 24px; color: #64748b;">
+              <i class="fa-solid fa-circle-notch fa-spin"></i> Syncing invoices...
+            </td>
+          </tr>
+        `;
+      } else {
+        elements.dashboardRecentInvoicesBody.innerHTML = `
+          <tr>
+            <td colspan="7" class="text-center text-muted">No invoices generated yet.</td>
+          </tr>
+        `;
+      }
+      return;
+    }
+
+    recent.forEach(inv => {
+      const details = inv.details || {};
+      const status = details.paymentStatus || 'Paid';
+      let badgeClass = 'badge-paid';
+      if (status === 'Partial') badgeClass = 'badge-partial';
+      if (status === 'Unpaid') badgeClass = 'badge-unpaid';
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td style="font-weight: 700; color: var(--primary-teal);">#${inv.invoiceNo}</td>
+        <td>${formatInputDateString(inv.invoiceDate)}</td>
+        <td style="font-weight: 600;">${inv.customerName}</td>
+        <td class="text-center">${inv.itemsCount}</td>
+        <td style="text-align: right; font-weight: 700;">₹ ${formatCurrency(inv.total)}</td>
+        <td class="text-center"><span class="badge-status ${badgeClass}">${status}</span></td>
+        <td class="actions-cell">
+          <button class="action-btn edit" onclick="editSavedInvoice('${inv.id}')" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
+          <button class="action-btn print" onclick="printSavedInvoice('${inv.id}')" title="Print A4"><i class="fa-solid fa-print"></i></button>
+          <button class="action-btn print" onclick="printSavedInvoiceThermal('${inv.id}')" title="Print Thermal POS"><i class="fa-solid fa-receipt"></i></button>
+          <button class="action-btn share btn-whatsapp" onclick="shareInvoiceToWhatsApp('${inv.id}', this)" title="Share PDF via WhatsApp"><i class="fa-brands fa-whatsapp" style="color: #16a34a;"></i></button>
+          <button class="action-btn share btn-telegram" onclick="shareInvoiceToTelegram('${inv.id}', this)" title="Share PDF to Telegram (@fishbilling_bot_bot)"><i class="fa-brands fa-telegram" style="color: #0284c7;"></i></button>
+          <button class="action-btn delete" onclick="deleteSavedInvoice('${inv.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+        </td>
+      `;
+      elements.dashboardRecentInvoicesBody.appendChild(tr);
+    });
   }
-
-  recent.forEach(inv => {
-    const details = inv.details || {};
-    const status = details.paymentStatus || 'Paid';
-    let badgeClass = 'badge-paid';
-    if (status === 'Partial') badgeClass = 'badge-partial';
-    if (status === 'Unpaid') badgeClass = 'badge-unpaid';
-
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td style="font-weight: 700; color: var(--primary-teal);">#${inv.invoiceNo}</td>
-      <td>${formatInputDateString(inv.invoiceDate)}</td>
-      <td style="font-weight: 600;">${inv.customerName}</td>
-      <td class="text-center">${inv.itemsCount}</td>
-      <td style="text-align: right; font-weight: 700;">₹ ${formatCurrency(inv.total)}</td>
-      <td class="text-center"><span class="badge-status ${badgeClass}">${status}</span></td>
-      <td class="actions-cell">
-        <button class="action-btn edit" onclick="editSavedInvoice('${inv.id}')" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
-        <button class="action-btn print" onclick="printSavedInvoice('${inv.id}')" title="Print A4"><i class="fa-solid fa-print"></i></button>
-        <button class="action-btn print" onclick="printSavedInvoiceThermal('${inv.id}')" title="Print Thermal POS"><i class="fa-solid fa-receipt"></i></button>
-        <button class="action-btn share btn-whatsapp" onclick="shareInvoiceToWhatsApp('${inv.id}', this)" title="Share PDF via WhatsApp"><i class="fa-brands fa-whatsapp" style="color: #16a34a;"></i></button>
-        <button class="action-btn share btn-telegram" onclick="shareInvoiceToTelegram('${inv.id}', this)" title="Share PDF to Telegram (@fishbilling_bot_bot)"><i class="fa-brands fa-telegram" style="color: #0284c7;"></i></button>
-        <button class="action-btn delete" onclick="deleteSavedInvoice('${inv.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
-      </td>
-    `;
-    elements.dashboardRecentInvoicesBody.appendChild(tr);
-  });
 }
 
 function formatInputDateString(dateStr) {
@@ -6871,28 +6902,49 @@ window.filterInvoicesByStatus = async function() {
 // --- SAVED INVOICE VIEW EDIT & DELETE HISTORY ---
 function loadInvoicesHistoryTable() {
   loadAllDatabases();
-  if (elements.historyCount) {
-    if (invoicesDb.length === 0 && isSyncing) {
-      elements.historyCount.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="font-size: 11px;"></i>`;
-    } else {
-      elements.historyCount.textContent = invoicesDb.length;
-    }
-  }
-  renderHistoryTableRows(invoicesDb);
 
-  // If memory is empty on history tab visit, trigger immediate cloud sync
-  if (invoicesDb.length === 0 && !isSyncing && typeof window.triggerDatabaseSync === 'function') {
-    window.triggerDatabaseSync(true).then(() => {
-      if (elements.historyCount) elements.historyCount.textContent = invoicesDb.length;
-      renderHistoryTableRows(invoicesDb);
-    }).catch(() => {});
+  if (invoicesDb && invoicesDb.length > 0) {
+    if (elements.historyCount) elements.historyCount.textContent = invoicesDb.length;
+    renderHistoryTableRows(invoicesDb);
+    return;
+  }
+
+  // If empty before initial sync finishes, show loading spinner — NEVER show "0 / No invoices found"
+  if (!window.isInitialSyncDone || isSyncing) {
+    if (elements.historyCount) {
+      elements.historyCount.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="font-size: 11px;"></i>`;
+    }
+    if (elements.historyInvoicesBody) {
+      elements.historyInvoicesBody.innerHTML = `
+        <tr>
+          <td colspan="7" class="text-center" style="padding: 40px 16px; color: #64748b;">
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;">
+              <i class="fa-solid fa-circle-notch fa-spin fa-2x" style="color: #0284c7;"></i>
+              <div style="font-weight: 600; font-size: 14px; color: #334155;">Syncing Invoices from Cloud...</div>
+              <div style="font-size: 12px; color: #94a3b8;">Connecting to Google Sheets master database</div>
+            </div>
+          </td>
+        </tr>
+      `;
+    }
+    if (!isSyncing && typeof window.triggerDatabaseSync === 'function') {
+      window.triggerDatabaseSync(true).then(() => {
+        if (elements.historyCount) elements.historyCount.textContent = invoicesDb.length;
+        renderHistoryTableRows(invoicesDb);
+      }).catch(() => {});
+    }
+  } else {
+    if (elements.historyCount) elements.historyCount.textContent = "0";
+    renderHistoryTableRows([]);
   }
 }
 
 function renderHistoryTableRows(records) {
+  if (!elements.historyInvoicesBody) return;
   elements.historyInvoicesBody.innerHTML = "";
   if (!records || records.length === 0) {
-    if (isSyncing) {
+    const isSearching = elements.searchHistoryInput && elements.searchHistoryInput.value.trim().length > 0;
+    if (!isSearching && (!window.isInitialSyncDone || isSyncing)) {
       elements.historyInvoicesBody.innerHTML = `
         <tr>
           <td colspan="7" class="text-center" style="padding: 40px 16px; color: #64748b;">
@@ -6909,7 +6961,7 @@ function renderHistoryTableRows(records) {
         <tr>
           <td colspan="7" class="text-center text-muted" style="padding: 32px; font-weight: 500;">
             <i class="fa-solid fa-file-invoice" style="font-size: 24px; color: #cbd5e1; display: block; margin-bottom: 8px;"></i>
-            No invoices found.
+            ${isSearching ? 'No matching invoices found.' : 'No invoices found.'}
           </td>
         </tr>
       `;
@@ -7384,7 +7436,7 @@ function loadProductsDatabaseTable() {
 function renderProductsTable(records) {
   elements.productsListBody.innerHTML = "";
   if (!records || records.length === 0) {
-    if (isSyncing) {
+    if (!window.isInitialSyncDone || isSyncing) {
       elements.productsListBody.innerHTML = `
         <tr>
           <td colspan="9" class="text-center text-muted" style="padding: 40px 16px;">
@@ -7665,8 +7717,9 @@ function renderPartiesLists(records) {
   const receivers = records.filter(p => p.type === 'receiver');
   const consignees = records.filter(p => p.type === 'consignee');
 
+  const isPartiesSyncing = !window.isInitialSyncDone || isSyncing;
   if (receivers.length === 0) {
-    elements.receiversScrollBox.innerHTML = isSyncing
+    elements.receiversScrollBox.innerHTML = isPartiesSyncing
       ? `<div class="text-center text-muted padding-20"><i class="fa-solid fa-spinner fa-spin"></i> Syncing clients...</div>`
       : `<div class="text-center text-muted padding-20">No receivers found.</div>`;
   } else {
@@ -7677,7 +7730,7 @@ function renderPartiesLists(records) {
   }
 
   if (consignees.length === 0) {
-    elements.consigneesScrollBox.innerHTML = isSyncing
+    elements.consigneesScrollBox.innerHTML = isPartiesSyncing
       ? `<div class="text-center text-muted padding-20"><i class="fa-solid fa-spinner fa-spin"></i> Syncing consignees...</div>`
       : `<div class="text-center text-muted padding-20">No consignees found.</div>`;
   } else {
