@@ -1765,7 +1765,46 @@ function reconcileProductInventoryStock(oldInvoice, newInvoice) {
 }
 
 function validateInvoiceStockAvailability(newItems, oldItems = []) {
-  // Stock availability check must never block invoice creation
+  if (!Array.isArray(newItems) || newItems.length === 0) return true;
+
+  // Group new requested quantities by product
+  const requestedTotals = new Map();
+  newItems.forEach(item => {
+    const prod = findProductInDb(item);
+    if (prod) {
+      const current = requestedTotals.get(prod) || 0;
+      requestedTotals.set(prod, current + (parseFloat(item.quantity) || 0));
+    }
+  });
+
+  // Check each product against available warehouse stock + old invoice commitment
+  for (const [prod, totalReq] of requestedTotals.entries()) {
+    if (prod.stock !== undefined && prod.stock !== null && prod.stock !== "") {
+      const availableStock = Math.max(0, parseInt(prod.stock, 10) || 0);
+
+      let previouslyInvoicedQty = 0;
+      if (Array.isArray(oldItems)) {
+        const oldMatch = oldItems.find(it => 
+          (it.productId && prod.id && it.productId === prod.id) ||
+          (it.description && prod.description && it.description.trim().toLowerCase() === prod.description.trim().toLowerCase())
+        );
+        if (oldMatch) previouslyInvoicedQty = parseFloat(oldMatch.quantity) || 0;
+      }
+
+      const effectiveAvailable = availableStock + previouslyInvoicedQty;
+
+      if (effectiveAvailable <= 0) {
+        showFloatingToast(`❌ Cannot save invoice: "${prod.description}" is currently OUT OF STOCK (Available: 0).`, "warning");
+        return false;
+      }
+
+      if (totalReq > effectiveAvailable) {
+        showFloatingToast(`❌ Cannot save invoice: Insufficient stock for "${prod.description}". Available: ${effectiveAvailable} ${prod.unit || 'units'}, but invoice has ${totalReq}. Please adjust quantity.`, "warning");
+        return false;
+      }
+    }
+  }
+
   return true;
 }
 
@@ -2494,19 +2533,58 @@ window.addBillingItemRow = function() {
 
     const packVal = (elements.billItemPack ? elements.billItemPack.value.trim() : "") || (prod ? (prod.packSize || "—") : "—");
 
-    // Non-blocking stock notice (never block sales or adding items!)
+    // STRICT REAL-WORLD INVENTORY ENFORCEMENT:
+    // Block adding items if stock is 0 or requested quantity exceeds warehouse stock!
     if (prod && prod.stock !== undefined && prod.stock !== null && prod.stock !== "") {
-      const availableStock = parseInt(prod.stock, 10);
-      if (!isNaN(availableStock)) {
-        const currentInCart = currentInvoice.items
-          .filter(item => item.description === prod.description)
-          .reduce((sum, item) => sum + item.quantity, 0);
-        const totalRequested = currentInCart + qty;
-        if (totalRequested > availableStock) {
-          if (typeof showFloatingToast === 'function') {
-            showFloatingToast(`⚠️ Stock Notice: ${prod.description} stock in system is ${availableStock}. Sale proceeding.`);
+      const availableStock = Math.max(0, parseInt(prod.stock, 10) || 0);
+
+      // In case user is editing an existing invoice, factor in units already committed in the saved invoice
+      let previouslyInvoicedQty = 0;
+      if (currentInvoice && currentInvoice.isEditing && currentInvoice.id) {
+        const origInv = invoicesDb.find(inv => inv && inv.id === currentInvoice.id);
+        if (origInv && origInv.details && Array.isArray(origInv.details.items)) {
+          const matchingOldItem = origInv.details.items.find(it => 
+            (it.productId && prod.id && it.productId === prod.id) ||
+            (it.description && prod.description && it.description.trim().toLowerCase() === prod.description.trim().toLowerCase())
+          );
+          if (matchingOldItem) {
+            previouslyInvoicedQty = parseFloat(matchingOldItem.quantity) || 0;
           }
         }
+      }
+
+      const effectiveAvailable = availableStock + previouslyInvoicedQty;
+
+      // How many units of this product are ALREADY in the current invoice table?
+      const currentInCart = currentInvoice.items
+        .filter(item => 
+          (item.productId && prod.id && item.productId === prod.id) ||
+          (item.description && prod.description && item.description.trim().toLowerCase() === prod.description.trim().toLowerCase())
+        )
+        .reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
+
+      const totalRequested = currentInCart + qty;
+
+      if (effectiveAvailable <= 0) {
+        showFloatingToast(`❌ Out of Stock: "${prod.description}" is currently OUT OF STOCK (Available: 0). Cannot add to invoice.`, "warning");
+        if (elements.billItemSelect) elements.billItemSelect.focus();
+        return false;
+      }
+
+      if (totalRequested > effectiveAvailable) {
+        const maxCanAdd = Math.max(0, effectiveAvailable - currentInCart);
+        if (maxCanAdd > 0) {
+          showFloatingToast(`❌ Insufficient Stock: "${prod.description}" has only ${effectiveAvailable} ${prod.unit || 'units'} available (Current bill: ${currentInCart}, requested: ${qty}). Maximum you can add is ${maxCanAdd}.`, "warning");
+          if (elements.billItemQty) {
+            elements.billItemQty.value = maxCanAdd;
+            elements.billItemQty.focus();
+            elements.billItemQty.select();
+          }
+        } else {
+          showFloatingToast(`❌ Stock Limit Reached: All ${effectiveAvailable} available units of "${prod.description}" are already added to this invoice! Cannot add more.`, "warning");
+          if (elements.billItemSelect) elements.billItemSelect.focus();
+        }
+        return false;
       }
     }
 
@@ -2515,6 +2593,7 @@ window.addBillingItemRow = function() {
 
     const newItem = {
       id: Date.now().toString() + "_" + Math.floor(Math.random() * 1000),
+      productId: prod ? prod.id : "",
       baleNo: (currentInvoice.items.length + 1).toString(),
       description: desc,
       hsn: hsn,
@@ -2787,58 +2866,11 @@ function prepareInvoiceItemsBeforeSave() {
     }
   }
 
-  // 2. If still empty, check if dropdown has any product option available and auto-select
-  if (currentInvoice.items.length === 0 && elements.billItemSelect && elements.billItemSelect.options && elements.billItemSelect.options.length > 1) {
-    for (let i = 1; i < elements.billItemSelect.options.length; i++) {
-      const optVal = elements.billItemSelect.options[i].value;
-      if (optVal && optVal !== '__custom__') {
-        elements.billItemSelect.selectedIndex = i;
-        const changeEvt = new Event("change");
-        elements.billItemSelect.dispatchEvent(changeEvt);
-        window.addBillingItemRow();
-        break;
-      }
-    }
-  }
-
-  // 3. If still empty and productsDb has products, create item from first product
-  if (currentInvoice.items.length === 0 && productsDb && productsDb.length > 0) {
-    const p = productsDb[0];
-    const rate = parseFloat(p.rate) || 1;
-    currentInvoice.items.push({
-      id: Date.now().toString() + "_" + Math.floor(Math.random() * 1000),
-      baleNo: "1",
-      description: p.description,
-      hsn: p.hsn || "",
-      packSize: p.packSize || "—",
-      quantity: 1,
-      unit: p.unit || "Bucket",
-      rate: rate,
-      gstRate: parseFloat(p.gstRate) || 0,
-      discount: 0,
-      amount: rate
-    });
-    calculateSummaryAndTable();
-  }
-
-  // 4. If still empty, auto-create a default product item so saving NEVER fails
+  // 2. If still empty, do NOT fabricate dummy items with fake stock
   if (currentInvoice.items.length === 0) {
-    const defaultDesc = (elements.billItemName && elements.billItemName.value && elements.billItemName.value.trim()) || "Aquarium Fish / Aqua Product";
-    const defaultRate = parseFloat(elements.billItemRate ? elements.billItemRate.value : "100") || 100;
-    currentInvoice.items.push({
-      id: Date.now().toString() + "_" + Math.floor(Math.random() * 1000),
-      baleNo: "1",
-      description: defaultDesc,
-      hsn: "23099090",
-      packSize: "—",
-      quantity: 1,
-      unit: "Bucket",
-      rate: defaultRate,
-      gstRate: 0,
-      discount: 0,
-      amount: defaultRate
-    });
-    calculateSummaryAndTable();
+    showFloatingToast("⚠️ Please add at least one line item to the invoice before saving.", "warning");
+    if (elements.billItemSelect) elements.billItemSelect.focus();
+    return false;
   }
 
   return true;
@@ -2885,6 +2917,11 @@ window.saveCurrentInvoiceRecord = async function(actionType = 'save_only', btnEl
 
     // Auto-resolve line items
     if (!prepareInvoiceItemsBeforeSave()) {
+      if (btnEl) {
+        btnEl.innerHTML = origHtml;
+        btnEl.disabled = false;
+      }
+      isSavingInvoice = false;
       return null;
     }
 
@@ -2906,7 +2943,25 @@ window.saveCurrentInvoiceRecord = async function(actionType = 'save_only', btnEl
     const grandTotal = breakdown.roundedGrandTotal;
     const roundOff = breakdown.roundOff;
 
+    // Strict stock verification before invoice generation
+    const origItems = (currentInvoice.isEditing && currentInvoice.id) 
+      ? (invoicesDb.find(inv => inv && inv.id === currentInvoice.id)?.details?.items || []) 
+      : [];
+    if (!validateInvoiceStockAvailability(currentInvoice.items, origItems)) {
+      if (btnEl) {
+        btnEl.innerHTML = origHtml;
+        btnEl.disabled = false;
+      }
+      isSavingInvoice = false;
+      return null;
+    }
+
     if (!validateInvoicePaymentExceeds(currentInvoice, grandTotal)) {
+      if (btnEl) {
+        btnEl.innerHTML = origHtml;
+        btnEl.disabled = false;
+      }
+      isSavingInvoice = false;
       return null;
     }
 
