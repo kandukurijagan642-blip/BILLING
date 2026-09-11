@@ -253,7 +253,8 @@ function readInventoryFromSheet(ss) {
       price: Number(row[7] || row[5] || 0),
       stock: Number(row[8] || 0),
       totalValue: Number(row[9] || 0),
-      status: String(row[10] || "In Stock")
+      status: String(row[10] || "In Stock"),
+      updatedAt: new Date().toISOString()
     });
   }
   return products;

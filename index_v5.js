@@ -215,6 +215,22 @@ try {
           partiesDb = partiesDb.filter(p => p && p.id !== msg.id);
           if (typeof loadPartiesDatabaseLists === 'function') loadPartiesDatabaseLists();
         }
+      } else if (msg.type === 'DATABASE_MUTATED' || msg.action === 'DATABASE_MUTATED') {
+        try {
+          productsDb = JSON.parse(localStorage.getItem("products") || "[]");
+          partiesDb = JSON.parse(localStorage.getItem("parties") || "[]");
+          invoicesDb = JSON.parse(localStorage.getItem("invoices") || "[]");
+          globalSettings = JSON.parse(localStorage.getItem("settings") || "{}");
+          if (typeof loadProductsDatabaseTable === 'function') loadProductsDatabaseTable();
+          if (typeof loadPartiesDatabaseLists === 'function') loadPartiesDatabaseLists();
+          if (typeof loadInvoicesHistoryTable === 'function') loadInvoicesHistoryTable();
+          if (typeof updateDashboardOverview === 'function') updateDashboardOverview();
+          if (typeof calculateSummaryAndTable === 'function') calculateSummaryAndTable();
+          if (typeof autoSuggestInvoiceNo === 'function') autoSuggestInvoiceNo();
+          if (typeof window.updateRealtimePresenceHUD === 'function') {
+            window.updateRealtimePresenceHUD("live");
+          }
+        } catch (err) {}
       }
     };
   }
@@ -229,6 +245,10 @@ function broadcastInterTabEvent(type, payload = {}) {
     } catch (e) {}
   }
 }
+
+window.broadcastDatabaseMutation = function() {
+  broadcastInterTabEvent('DATABASE_MUTATED');
+};
 
 // --- AARYAN-DB: ASYNCHRONOUS INDEXED-DB ENGINE + WRITE-AHEAD OUTBOX QUEUE ---
 const AaryanDB = {
@@ -696,6 +716,192 @@ function deletePartyFromServer(id) {
   AaryanDB.drainOutbox();
 }
 
+// ============================================================================
+// HIGH-SPEED GOOGLE DATABASE SYNC ENGINE (AUTHORITATIVE GOOGLE CLOUD MASTER)
+// ============================================================================
+let activeSyncPromise = null;
+let lastSyncTimeMs = 0;
+let syncBadgeTimer = null;
+
+window.updateCloudSyncBadge = function(status) {
+  const badge = document.getElementById("live-cloud-sync-badge");
+  const textEl = document.getElementById("sync-status-text");
+  const radarDot = document.getElementById("sync-radar-dot");
+  if (!badge) return;
+  
+  if (syncBadgeTimer) clearTimeout(syncBadgeTimer);
+
+  const now = Date.now();
+  const diffSec = Math.max(0, Math.floor((now - (window.lastSyncTimeMs || now)) / 1000));
+  const timeText = diffSec < 3 ? "Just now" : `${diffSec}s ago`;
+
+  if (status === "syncing") {
+    badge.className = "cloud-sync-pill syncing cursor-pointer";
+    if (textEl) textEl.innerHTML = `<span class="realtime-sync-spinning">🔄</span> Syncing 50+...`;
+    if (radarDot) radarDot.style.display = "none";
+  } else if (status === "offline" || !navigator.onLine) {
+    badge.className = "cloud-sync-pill offline cursor-pointer";
+    if (textEl) textEl.textContent = "Offline (Queued)";
+    if (radarDot) {
+      radarDot.style.display = "inline-block";
+      radarDot.className = "realtime-radar-dot offline";
+    }
+  } else {
+    badge.className = "cloud-sync-pill synced cursor-pointer";
+    if (textEl) textEl.textContent = `50+ Live • ${timeText}`;
+    if (radarDot) {
+      radarDot.style.display = "inline-block";
+      radarDot.className = "realtime-radar-dot active";
+    }
+  }
+};
+
+window.updateRealtimePresenceHUD = function(status = "live") {
+  if (typeof window.updateCloudSyncBadge === "function") {
+    window.updateCloudSyncBadge(status);
+  }
+};
+
+window.triggerDatabaseSync = async function(forceReload = false) {
+  if (activeSyncPromise) {
+    return activeSyncPromise;
+  }
+
+  isSyncing = true;
+  if (typeof window.updateCloudSyncBadge === 'function') {
+    window.updateCloudSyncBadge("syncing");
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+  const gasSyncUrl = `${GOOGLE_SCRIPT_URL}?action=sync&token=${encodeURIComponent(API_SECRET_TOKEN)}`;
+
+  activeSyncPromise = fetch(gasSyncUrl, {
+    signal: controller.signal,
+    redirect: 'follow',
+    cache: 'no-store'
+  })
+  .then(async (res) => {
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error("HTTP sync error " + res.status);
+    const text = await res.text();
+    if (!text || (!text.trim().startsWith('{') && !text.trim().startsWith('['))) {
+      console.warn("Google Apps Script sync returned non-JSON challenge response. Retaining local cache.");
+      return null;
+    }
+    return JSON.parse(text);
+  })
+  .then((data) => {
+    if (!data) return;
+    lastSyncTimeMs = Date.now();
+    window.lastSyncTimeMs = lastSyncTimeMs;
+    if (typeof window.updateCloudSyncBadge === 'function') {
+      window.updateCloudSyncBadge("synced");
+    }
+
+    if (data.serverTime) {
+      window.lastSyncTimestamp = data.serverTime;
+      localStorage.setItem("aaryan_last_sync_time", String(data.serverTime));
+    }
+
+    let changed = false;
+
+    // 1. Authoritative Products directly from Google Database
+    if (Array.isArray(data.products) && data.products.length > 0) {
+      const cleanProds = data.products.filter(p => p && (p.id || p.description));
+      if (JSON.stringify(cleanProds) !== JSON.stringify(productsDb)) {
+        productsDb = cleanProds;
+        try { localStorage.setItem("products", JSON.stringify(productsDb)); } catch(e) {}
+        changed = true;
+      }
+    }
+
+    // 2. Authoritative Parties directly from Google Database
+    if (Array.isArray(data.parties) && data.parties.length > 0) {
+      const cleanParties = data.parties.filter(p => p && (p.id || p.name));
+      if (JSON.stringify(cleanParties) !== JSON.stringify(partiesDb)) {
+        partiesDb = cleanParties;
+        try { localStorage.setItem("parties", JSON.stringify(partiesDb)); } catch(e) {}
+        changed = true;
+      }
+    }
+
+    // 3. Authoritative Invoices directly from Google Database
+    if (Array.isArray(data.invoices)) {
+      const cleanInvoices = data.invoices.filter(i => i && (i.id || i.invoiceNo));
+      cleanInvoices.sort((a, b) => String(a.invoiceNo || "").localeCompare(String(b.invoiceNo || "")));
+      if (JSON.stringify(cleanInvoices) !== JSON.stringify(invoicesDb)) {
+        invoicesDb = cleanInvoices;
+        try { localStorage.setItem("invoices", JSON.stringify(invoicesDb)); } catch(e) {}
+        changed = true;
+      }
+    }
+
+    // 4. Authoritative Settings directly from Google Database
+    if (data.globalSettings && Object.keys(data.globalSettings).length > 0) {
+      if (JSON.stringify(data.globalSettings) !== JSON.stringify(globalSettings)) {
+        globalSettings = data.globalSettings;
+        try { localStorage.setItem("settings", JSON.stringify(globalSettings)); } catch(e) {}
+        changed = true;
+      }
+    }
+
+    // Mirror authoritative data to IndexedDB
+    if (window.AaryanDB && window.AaryanDB.isReady) {
+      AaryanDB.saveAllProducts(productsDb);
+      AaryanDB.saveAllParties(partiesDb);
+      AaryanDB.saveAllInvoices(invoicesDb);
+      AaryanDB.saveSettings(globalSettings);
+    }
+
+    window.isInitialSyncDone = true;
+    if (typeof loadProductsDatabaseTable === 'function') loadProductsDatabaseTable();
+    if (typeof loadPartiesDatabaseLists === 'function') loadPartiesDatabaseLists();
+    if (typeof loadInvoicesHistoryTable === 'function') loadInvoicesHistoryTable();
+    if (typeof updateDashboardOverview === 'function') updateDashboardOverview();
+    if (typeof calculateSummaryAndTable === 'function') calculateSummaryAndTable();
+    if (typeof autoSuggestInvoiceNo === 'function') autoSuggestInvoiceNo();
+    if (typeof populateBillingSelectors === 'function') populateBillingSelectors();
+
+    if (changed && typeof window.broadcastDatabaseMutation === 'function') {
+      window.broadcastDatabaseMutation();
+    }
+
+    if (typeof window.updateRealtimePresenceHUD === 'function') {
+      window.updateRealtimePresenceHUD("live");
+    }
+  })
+  .catch((err) => {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      console.warn("Google Apps Script sync timeout (>12s). Serving cached Google database snapshot.");
+      if (typeof window.updateCloudSyncBadge === 'function') window.updateCloudSyncBadge("synced");
+    } else {
+      console.warn("Google Apps Script sync notice:", err.message);
+      if (typeof window.updateCloudSyncBadge === 'function') window.updateCloudSyncBadge("offline");
+    }
+    if (typeof window.updateRealtimePresenceHUD === 'function') {
+      window.updateRealtimePresenceHUD(navigator.onLine ? "live" : "offline");
+    }
+  })
+  .finally(() => {
+    isSyncing = false;
+    activeSyncPromise = null;
+    window.isInitialSyncDone = true;
+    if (typeof loadProductsDatabaseTable === 'function') loadProductsDatabaseTable();
+    if (typeof loadInvoicesHistoryTable === 'function') loadInvoicesHistoryTable();
+    if (typeof updateDashboardOverview === 'function') updateDashboardOverview();
+  });
+
+  return activeSyncPromise;
+};
+
+// Immediate Kickoff on Script Load (Zero-Wait Millisecond 0 Google Database Fetch)
+try {
+  window.triggerDatabaseSync();
+} catch (e) {}
+
 // --- SECURE GOOGLE DRIVE PDF ARCHIVE & CLOUD SYNC ENGINE ---
 async function uploadInvoicePdfToGoogleDrive(invoiceDetails, pdfBase64) {
   if (!invoiceDetails || !pdfBase64) {
@@ -1025,48 +1231,15 @@ function initializeApp() {
   fetchWhatsAppBotStatus();
   initWhatsAppEventSource();
 
-  // Initialize Real-Time Database Sync Stream (SSE) for 0ms sub-millisecond cloud updates
-  initDatabaseEventSource();
-
-  // Kick off immediate cloud sync in parallel so data hydrates instantly on startup
+  // Trigger cloud sync to join any in-flight startup request or refresh data
   if (typeof window.triggerDatabaseSync === 'function') {
-    window.triggerDatabaseSync(true).catch(e => console.warn("Initial sync note:", e));
+    window.triggerDatabaseSync().catch(e => console.warn("Initial sync note:", e));
   }
 
-  // Helper to update top header cloud sync pill indicator with auto-revert safety
-  let syncBadgeTimer = null;
-  window.updateCloudSyncBadge = function(status) {
-    const badge = document.getElementById("live-cloud-sync-badge");
-    const textEl = document.getElementById("sync-status-text");
-    const radarDot = document.getElementById("sync-radar-dot");
-    if (!badge) return;
-    
-    if (syncBadgeTimer) clearTimeout(syncBadgeTimer);
-
-    const now = Date.now();
-    const diffSec = Math.max(0, Math.floor((now - (window.lastSyncTimeMs || now)) / 1000));
-    const timeText = diffSec < 3 ? "Just now" : `${diffSec}s ago`;
-
-    if (status === "syncing") {
-      badge.className = "cloud-sync-pill syncing cursor-pointer";
-      if (textEl) textEl.innerHTML = `<span class="realtime-sync-spinning">🔄</span> Syncing 50+...`;
-      if (radarDot) radarDot.style.display = "none";
-    } else if (status === "offline" || !navigator.onLine) {
-      badge.className = "cloud-sync-pill offline cursor-pointer";
-      if (textEl) textEl.textContent = "Offline (Queued)";
-      if (radarDot) {
-        radarDot.style.display = "inline-block";
-        radarDot.className = "realtime-radar-dot offline";
-      }
-    } else {
-      badge.className = "cloud-sync-pill synced cursor-pointer";
-      if (textEl) textEl.textContent = `50+ Live • ${timeText}`;
-      if (radarDot) {
-        radarDot.style.display = "inline-block";
-        radarDot.className = "realtime-radar-dot active";
-      }
-    }
-  };
+  // Update header cloud sync status pill
+  if (typeof window.updateCloudSyncBadge === 'function') {
+    window.updateCloudSyncBadge(isSyncing ? "syncing" : "synced");
+  }
 
   // Manual Trigger for Google Drive & Live Sheets Sync
   window.triggerManualGoogleDriveSync = async function(btnEl) {
@@ -1214,401 +1387,8 @@ function initializeApp() {
     showFloatingToast(`🎉 Successfully uploaded ${processedCount} PDFs to Google Drive & updated Google Sheet!`, 5000);
   };
 
-  // Host awareness: Local Node.js server (localhost) vs Cloud Serverless (Netlify)
-  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-
-  // --- SMART ADAPTIVE POLLING ENGINE (ACTIVE: 4s, IDLE: 25s, HIDDEN: PAUSED) ---
-  let adaptivePollTimer = null;
-  let userLastActiveAt = Date.now();
-  let isUserActive = true;
-
-  function markUserActive() {
-    userLastActiveAt = Date.now();
-    if (!isUserActive) {
-      isUserActive = true;
-      scheduleNextAdaptivePoll(true);
-    }
-  }
-
-  function scheduleNextAdaptivePoll(immediate = false) {
-    if (adaptivePollTimer) clearTimeout(adaptivePollTimer);
-    if (document.hidden) return; // Completely pause polling when tab is hidden or minimized
-
-    const idleFor = Date.now() - userLastActiveAt;
-    isUserActive = idleFor < 25000;
-    const pollDelay = immediate ? 50 : (isUserActive ? 4000 : 25000);
-
-    adaptivePollTimer = setTimeout(async () => {
-      await window.triggerDatabaseSync();
-      scheduleNextAdaptivePoll();
-    }, pollDelay);
-  }
-
-  function initAdaptiveSmartPolling() {
-    ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach(evt => {
-      document.addEventListener(evt, markUserActive, { passive: true });
-    });
-
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") {
-        markUserActive();
-        scheduleNextAdaptivePoll(true);
-      }
-    });
-
-    window.addEventListener("focus", () => {
-      markUserActive();
-      scheduleNextAdaptivePoll(true);
-    });
-
-    scheduleNextAdaptivePoll(true);
-  }
-
-  // Real-time Database EventStream Listener (Server-Sent Events for Localhost, Smart Adaptive Polling for Cloud)
-  function initDatabaseEventSource() {
-    if (!isLocalhost) {
-      // In serverless cloud (Netlify), EventSource does not maintain persistent streams.
-      // Use Smart Adaptive Polling instead of looping failed connections.
-      initAdaptiveSmartPolling();
-      return;
-    }
-
-    if (!window.EventSource) {
-      initAdaptiveSmartPolling();
-      return;
-    }
-
-    if (dbEventSource) {
-      try { dbEventSource.close(); } catch (e) {}
-    }
-
-    try {
-      dbEventSource = new EventSource('/api/sync/events');
-
-      dbEventSource.onmessage = function(e) {
-        try {
-          const payload = JSON.parse(e.data);
-          if (payload && payload.type && payload.type !== 'connected') {
-            window.lastSyncETag = null;
-            window.triggerDatabaseSync(true);
-          }
-        } catch (err) {}
-      };
-
-      dbEventSource.onerror = function() {
-        try { dbEventSource.close(); } catch (e) {}
-        setTimeout(initDatabaseEventSource, 5000);
-      };
-    } catch (err) {
-      console.warn("Database SSE stream notice:", err);
-      initAdaptiveSmartPolling();
-    }
-  }
-
-  window.triggerDatabaseSync = async function(forceReload = false) {
-    if (isSyncing) return;
-    isSyncing = true;
-    updateCloudSyncBadge("syncing");
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-    const gasSyncUrl = `${GOOGLE_SCRIPT_URL}?action=sync&token=${encodeURIComponent(API_SECRET_TOKEN)}`;
-
-    return fetch(gasSyncUrl, { signal: controller.signal, redirect: 'follow' })
-      .then(async res => {
-        clearTimeout(timeoutId);
-        if (!res.ok) throw new Error("HTTP sync error " + res.status);
-        const text = await res.text();
-        if (!text || (!text.trim().startsWith('{') && !text.trim().startsWith('['))) {
-          console.warn("Google Apps Script sync returned non-JSON/HTML challenge response. Retaining local cache.");
-          return null;
-        }
-        return JSON.parse(text);
-      })
-      .catch((err) => {
-        clearTimeout(timeoutId);
-        console.warn("Google Apps Script sync error:", err.message);
-        throw err;
-      })
-      .then(data => {
-        if (!data) return; // 304 Not Modified or HTML response
-        updateCloudSyncBadge("synced");
-
-        if (data.serverTime) {
-          window.lastSyncTimestamp = data.serverTime;
-          localStorage.setItem("aaryan_last_sync_time", String(data.serverTime));
-        }
-
-        let changed = false;
-
-        // --- CASE A: DELTA / INCREMENTAL UPDATE (< 1ms MERGE) ---
-        if (data.delta === true) {
-          if (Array.isArray(data.products) && data.products.length > 0) {
-            data.products.forEach(sp => {
-              const idx = productsDb.findIndex(p => p && p.id === sp.id);
-              if (idx > -1) productsDb[idx] = sp;
-              else productsDb.push(sp);
-            });
-            try { localStorage.setItem("products", JSON.stringify(productsDb)); } catch(e) {}
-            changed = true;
-          }
-
-          if (Array.isArray(data.parties) && data.parties.length > 0) {
-            data.parties.forEach(sp => {
-              const idx = partiesDb.findIndex(p => p && p.id === sp.id);
-              if (idx > -1) partiesDb[idx] = sp;
-              else partiesDb.push(sp);
-            });
-            try { localStorage.setItem("parties", JSON.stringify(partiesDb)); } catch(e) {}
-            changed = true;
-          }
-
-          if (Array.isArray(data.invoices) && data.invoices.length > 0) {
-            data.invoices.forEach(inv => {
-              const idx = invoicesDb.findIndex(i => i && (i.id === inv.id || i.invoiceNo === inv.invoiceNo));
-              if (idx > -1) invoicesDb[idx] = inv;
-              else invoicesDb.push(inv);
-            });
-            invoicesDb.sort((a, b) => String(a.invoiceNo || "").localeCompare(String(b.invoiceNo || "")));
-            try { localStorage.setItem("invoices", JSON.stringify(invoicesDb)); } catch(e) {}
-            changed = true;
-          }
-
-          if (data.globalSettings && Object.keys(data.globalSettings).length > 0) {
-            globalSettings = data.globalSettings;
-            try { localStorage.setItem("settings", JSON.stringify(globalSettings)); } catch(e) {}
-            changed = true;
-          }
-
-          if (window.AaryanDB && window.AaryanDB.isReady) {
-            AaryanDB.saveAllProducts(productsDb);
-            AaryanDB.saveAllParties(partiesDb);
-            AaryanDB.saveAllInvoices(invoicesDb);
-            AaryanDB.saveSettings(globalSettings);
-          }
-        } 
-        // --- CASE B: FULL SYNCHRONIZATION & INITIAL HYDRATION ---
-        else if (data) {
-          // 1. Smart Sync Products (Authoritative Google Sheets Master + Local Conflict Resolution)
-          const serverProducts = data.products || [];
-          let localProducts = productsDb || [];
-
-          const mergedProdMap = new Map();
-          let needsPushProducts = false;
-
-          serverProducts.forEach(sp => { if (sp && sp.id) mergedProdMap.set(sp.id, sp); });
-          localProducts.forEach(lp => {
-            if (!lp || !lp.id) return;
-            const sp = mergedProdMap.get(lp.id);
-            if (sp) {
-              // Master Rule: Default seed or old 42.5% discount must NEVER overwrite server!
-              if (lp.isSeed || lp.discount === 42.5 || (lp.id === "prod-1" && lp.discount !== 45)) {
-                return; // server product sp is authoritative
-              }
-              const localTime = new Date(lp.updatedAt || lp.updated_at || 0).getTime();
-              const serverTime = new Date(sp.updatedAt || sp.updated_at || data.timestamp || data.serverTime || 0).getTime();
-              if (localTime > serverTime) {
-                mergedProdMap.set(lp.id, lp);
-                needsPushProducts = true;
-              }
-            } else {
-              if (lp.isSeed || lp.discount === 42.5) return;
-              mergedProdMap.set(lp.id, lp);
-              needsPushProducts = true;
-            }
-          });
-
-          const mergedProducts = Array.from(mergedProdMap.values());
-          if (JSON.stringify(mergedProducts) !== JSON.stringify(productsDb)) {
-            productsDb = mergedProducts;
-            try { localStorage.setItem("products", JSON.stringify(mergedProducts)); } catch(e) {}
-            changed = true;
-          }
-
-          if (window.AaryanDB && window.AaryanDB.isReady) {
-            AaryanDB.saveAllProducts(productsDb);
-          }
-
-          if (needsPushProducts) {
-            syncDatabaseToServer("products", mergedProducts);
-          }
-
-          // 2. Smart Sync Parties
-          const serverParties = data.parties || [];
-          let localParties = partiesDb || [];
-
-          const mergedPartyMap = new Map();
-          let needsPushParties = false;
-
-          serverParties.forEach(sp => { if (sp && sp.id) mergedPartyMap.set(sp.id, sp); });
-          localParties.forEach(lp => {
-            if (!lp || !lp.id) return;
-            const sp = mergedPartyMap.get(lp.id);
-            if (sp) {
-              const localTime = new Date(lp.updatedAt || lp.updated_at || 0).getTime();
-              const serverTime = new Date(sp.updatedAt || sp.updated_at || 0).getTime();
-              if (localTime > serverTime) {
-                mergedPartyMap.set(lp.id, lp);
-                needsPushParties = true;
-              }
-            } else {
-              mergedPartyMap.set(lp.id, lp);
-              needsPushParties = true;
-            }
-          });
-
-          const mergedParties = Array.from(mergedPartyMap.values());
-          if (JSON.stringify(mergedParties) !== JSON.stringify(partiesDb)) {
-            partiesDb = mergedParties;
-            try { localStorage.setItem("parties", JSON.stringify(mergedParties)); } catch(e) {}
-            changed = true;
-          }
-
-          if (needsPushParties) {
-            syncDatabaseToServer("parties", mergedParties);
-          }
-
-          // 3. Smart Merge Invoices
-          const serverInvoices = data.invoices || [];
-          const serverIds = new Set(serverInvoices.map(inv => inv.id));
-
-          let localDeletedIds = [];
-          try { localDeletedIds = JSON.parse(localStorage.getItem("deleted_invoice_ids")) || []; } catch(e) {}
-          const serverDeletedIds = Array.isArray(data.deletedInvoiceIds) ? data.deletedInvoiceIds : [];
-          const allDeletedSet = new Set([...localDeletedIds, ...serverDeletedIds]);
-
-          const mergedInvoiceMap = new Map();
-          serverInvoices.forEach(inv => {
-            if (inv && inv.id && !allDeletedSet.has(inv.id)) {
-              mergedInvoiceMap.set(inv.id, inv);
-            }
-          });
-          (invoicesDb || []).forEach(inv => {
-            if (inv && inv.id && !allDeletedSet.has(inv.id) && !mergedInvoiceMap.has(inv.id)) {
-              mergedInvoiceMap.set(inv.id, inv);
-              syncDatabaseToServer("invoices", inv);
-            }
-          });
-
-          let mergedInvoices = Array.from(mergedInvoiceMap.values());
-          mergedInvoices.sort((a, b) => String(a.invoiceNo || "").localeCompare(String(b.invoiceNo || "")));
-
-          if (JSON.stringify(mergedInvoices) !== JSON.stringify(invoicesDb)) {
-            invoicesDb = mergedInvoices;
-            try { localStorage.setItem("invoices", JSON.stringify(mergedInvoices)); } catch(e) {}
-            changed = true;
-          }
-
-          // 4. Sync Settings
-          if (data.globalSettings && Object.keys(data.globalSettings).length > 0) {
-            const curStr = JSON.stringify(globalSettings || {});
-            const newStr = JSON.stringify(data.globalSettings);
-            if (curStr !== newStr) {
-              globalSettings = data.globalSettings;
-              try { localStorage.setItem("settings", newStr); } catch(e) {}
-              changed = true;
-            }
-          }
-
-          // Persist all merged data to IndexedDB
-          if (window.AaryanDB && window.AaryanDB.isReady) {
-            AaryanDB.saveAllProducts(productsDb);
-            AaryanDB.saveAllParties(partiesDb);
-            AaryanDB.saveAllInvoices(invoicesDb);
-            AaryanDB.saveSettings(globalSettings);
-          }
-        }
-
-        const isHistoryLoading = elements.historyInvoicesBody && elements.historyInvoicesBody.innerHTML.includes('Syncing');
-        const wasInitial = !window.isInitialSyncDone;
-        if (changed || isHistoryLoading || wasInitial) {
-          console.log("⚡ Database synchronized! Updating active UI views...");
-          loadProductsDatabaseTable();
-          loadPartiesDatabaseLists();
-          loadInvoicesHistoryTable();
-          updateDashboardOverview();
-          calculateSummaryAndTable();
-          autoSuggestInvoiceNo();
-          if (typeof window.broadcastDatabaseMutation === 'function') {
-            window.broadcastDatabaseMutation();
-          }
-        }
-        window.lastSyncTimeMs = Date.now();
-        if (typeof window.updateRealtimePresenceHUD === 'function') {
-          window.updateRealtimePresenceHUD("live");
-        }
-      })
-      .catch(err => {
-        if (err.name === 'AbortError') {
-          updateCloudSyncBadge("synced");
-          if (typeof window.updateRealtimePresenceHUD === 'function') {
-            window.updateRealtimePresenceHUD("live");
-          }
-        } else {
-          updateCloudSyncBadge("offline");
-          if (typeof window.updateRealtimePresenceHUD === 'function') {
-            window.updateRealtimePresenceHUD("offline");
-          }
-          console.warn("Sync notice:", err.message);
-        }
-      })
-      .finally(() => {
-        isSyncing = false;
-        window.isInitialSyncDone = true;
-        loadProductsDatabaseTable();
-        loadInvoicesHistoryTable();
-        updateDashboardOverview();
-      });
-  };
-
-  // ============================================================================
-  // ENTERPRISE REAL-TIME MULTI-USER SYNCHRONIZATION ENGINE (50+ CONCURRENT MEMBERS)
-  // ============================================================================
+  // --- ENTERPRISE BACKGROUND REFRESH & MULTI-DEVICE MESH POLLING ---
   let multiUserSyncTimer = null;
-  let interTabChannel = null;
-
-  try {
-    if (typeof BroadcastChannel !== "undefined") {
-      interTabChannel = new BroadcastChannel("aaryan_billing_mesh_sync");
-      interTabChannel.onmessage = (ev) => {
-        if (ev.data && ev.data.action === "DATABASE_MUTATED") {
-          try {
-            productsDb = JSON.parse(localStorage.getItem("products") || "[]");
-            partiesDb = JSON.parse(localStorage.getItem("parties") || "[]");
-            invoicesDb = JSON.parse(localStorage.getItem("invoices") || "[]");
-            globalSettings = JSON.parse(localStorage.getItem("settings") || "{}");
-            loadProductsDatabaseTable();
-            loadPartiesDatabaseLists();
-            loadInvoicesHistoryTable();
-            updateDashboardOverview();
-            calculateSummaryAndTable();
-            autoSuggestInvoiceNo();
-            if (typeof window.updateRealtimePresenceHUD === 'function') {
-              window.updateRealtimePresenceHUD("live");
-            }
-          } catch (err) {}
-        }
-      };
-    }
-  } catch (e) {}
-
-  window.broadcastDatabaseMutation = function() {
-    try {
-      if (interTabChannel) {
-        interTabChannel.postMessage({
-          action: "DATABASE_MUTATED",
-          timestamp: Date.now()
-        });
-      }
-    } catch (e) {}
-  };
-
-  window.updateRealtimePresenceHUD = function(status = "live") {
-    if (typeof window.updateCloudSyncBadge === "function") {
-      window.updateCloudSyncBadge(status);
-    }
-  };
 
   function scheduleNextRealtimeSync() {
     if (multiUserSyncTimer) clearTimeout(multiUserSyncTimer);
@@ -1752,7 +1532,7 @@ if (document.readyState === 'loading') {
   initializeApp();
 }
 
-// --- LOCAL STORAGE DATABASES SEEDING ---
+// --- LOCAL STORAGE DATABASES SEEDING (EXCLUSIVELY GOOGLE DATABASE ARCHITECTURE) ---
 function seedDatabasesIfEmpty() {
   try {
     const storedSettings = JSON.parse(localStorage.getItem("settings") || "null");
@@ -1761,84 +1541,6 @@ function seedDatabasesIfEmpty() {
     }
   } catch (err) {
     console.warn("Unable to parse saved settings:", err);
-  }
-
-  if (!localStorage.getItem("parties")) {
-    const sampleParties = [
-      {
-        id: "party-1",
-        type: "receiver",
-        name: "DEVI FISHERIES LIMITED",
-        company: "DEVI FISHERIES LIMITED",
-        address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTUR\nAndhra Pradesh - 522264, India",
-        gstin: "37AAACD7852Q1ZZ",
-        state: "Andhra Pradesh",
-        stateCode: "37",
-        phone: "9848012345",
-        updatedAt: new Date().toISOString()
-      },
-      {
-        id: "party-2",
-        type: "consignee",
-        name: "DEVI FISHERIES LIMITED",
-        company: "DEVI FISHERIES LIMITED",
-        address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTUR\nAndhra Pradesh - 522264, India",
-        gstin: "37AAACD7852Q1ZZ",
-        state: "Andhra Pradesh",
-        stateCode: "37",
-        phone: "9848012345",
-        updatedAt: new Date().toISOString()
-      }
-    ];
-    localStorage.setItem("parties", JSON.stringify(sampleParties));
-  }
-
-  let existingProducts = null;
-  try { existingProducts = JSON.parse(localStorage.getItem("products") || "[]"); } catch (e) {}
-  if (!Array.isArray(existingProducts) || existingProducts.length === 0 || existingProducts.some(p => p.discount === 42.5 || p.isSeed)) {
-    const sampleProducts = [
-      {
-        id: "prod-1",
-        description: "RALLIMIN ADV + 15 KGs",
-        hsn: "23099090",
-        packSize: "15 KG",
-        unit: "Bucket",
-        rate: 3600.00,
-        gstRate: 5,
-        discount: 45.00,
-        stock: 127,
-        updatedAt: "2020-01-01T00:00:00.000Z",
-        isSeed: true
-      },
-      {
-        id: "prod-2",
-        description: "AQUA PROBIOTIC FEED SUPPLEMENT 1KG",
-        hsn: "23099090",
-        packSize: "1 KG",
-        unit: "Can",
-        rate: 850.00,
-        gstRate: 5,
-        discount: 10.00,
-        stock: 100,
-        updatedAt: "2020-01-01T00:00:00.000Z",
-        isSeed: true
-      },
-      {
-        id: "prod-3",
-        description: "ZEOLITE POWDER 25KG BAG",
-        hsn: "28421000",
-        packSize: "25 KG",
-        unit: "Bag",
-        rate: 450.00,
-        gstRate: 12,
-        discount: 5.00,
-        stock: 100,
-        updatedAt: "2020-01-01T00:00:00.000Z",
-        isSeed: true
-      }
-    ];
-    localStorage.setItem("products", JSON.stringify(sampleProducts));
-    productsDb = sampleProducts;
   }
 
   if (!localStorage.getItem("settings")) {
@@ -1874,247 +1576,6 @@ function seedDatabasesIfEmpty() {
       ]
     };
     localStorage.setItem("settings", JSON.stringify(defaultSettings));
-  }
-
-  const existingInvoicesStr = localStorage.getItem("invoices");
-  let existingInvoices = null;
-  try { existingInvoices = JSON.parse(existingInvoicesStr); } catch (e) {}
-  if (!Array.isArray(existingInvoices) || existingInvoices.length === 0) {
-    const sampleInvoices = [
-      {
-        id: "inv_1789114669169_340",
-        invoiceNo: "0001",
-        invoiceDate: "2026-09-11",
-        customerName: "DEVI FISHERIES LIMITED",
-        itemsCount: 1,
-        total: 12600,
-        details: {
-          id: "inv_1789114669169_340",
-          invoiceType: "Bill of Supply",
-          headerLogo: "ganesha",
-          invoiceNo: "0001",
-          invoiceDate: "2026-09-11",
-          buyerOrderNo: "65tgyhj",
-          buyerOrderDate: "2026-09-11",
-          transportMode: "tyguhj",
-          destination: "Andhra Pradesh",
-          supplyStateCode: "37",
-          paymentStatus: "Partial",
-          paymentMode: "UPI / QR",
-          paidAmount: 1000,
-          balanceDue: 11600,
-          buyer: {
-            name: "DEVI FISHERIES LIMITED",
-            address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTUR\nAndhra Pradesh - 522264, India",
-            gstin: "37AAACD7852Q1ZZ",
-            state: "Andhra Pradesh",
-            stateCode: "37",
-            phone: "8367047947"
-          },
-          consignee: {
-            name: "DEVI FISHERIES LIMITED",
-            address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTUR\nAndhra Pradesh - 522264, India",
-            gstin: "37AAACD7852Q1ZZ",
-            state: "Andhra Pradesh",
-            stateCode: "37",
-            phone: "08367047947"
-          },
-          items: [
-            {
-              id: "1789114629262_738",
-              productId: "prod-1",
-              baleNo: "1",
-              description: "RALLIMIN ADV + 15 KGs",
-              hsn: "23099090",
-              packSize: "15 KG",
-              quantity: 5,
-              unit: "Bucket",
-              rate: 3600,
-              gstRate: 5,
-              discount: 30,
-              amount: 12600
-            }
-          ],
-          balancePaid: 0,
-          supplyPlace: "Andhra Pradesh",
-          taxable: 12600,
-          cgst: 0,
-          sgst: 0,
-          igst: 0,
-          roundOff: 0,
-          total: 12600
-        }
-      },
-      {
-        id: "inv_1789115952504_350",
-        invoiceNo: "0002",
-        invoiceDate: "2026-09-11",
-        customerName: "DEVI FISHERIES LIMITED",
-        itemsCount: 2,
-        total: 10395,
-        details: {
-          id: "inv_1789115952504_350",
-          invoiceType: "Bill of Supply",
-          headerLogo: "ganesha",
-          invoiceNo: "0002",
-          invoiceDate: "2026-09-11",
-          buyerOrderNo: "",
-          buyerOrderDate: "",
-          transportMode: "",
-          destination: "Andhra Pradesh",
-          supplyStateCode: "37",
-          paymentStatus: "Unpaid",
-          paymentMode: "UPI / QR",
-          paidAmount: 0,
-          balanceDue: 10395,
-          buyer: {
-            name: "DEVI FISHERIES LIMITED",
-            address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTUR\nAndhra Pradesh - 522264, India",
-            gstin: "37AAACD7852Q1ZZ",
-            state: "Andhra Pradesh",
-            stateCode: "37",
-            phone: "8367047947"
-          },
-          consignee: {
-            name: "DEVI FISHERIES LIMITED",
-            address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTUR\nAndhra Pradesh - 522264, India",
-            gstin: "37AAACD7852Q1ZZ",
-            state: "Andhra Pradesh",
-            stateCode: "37",
-            phone: "8688572332"
-          },
-          items: [
-            {
-              id: "1789115925427_204",
-              productId: "prod-2",
-              baleNo: "1",
-              description: "AQUA PROBIOTIC FEED SUPPLEMENT 1KG",
-              hsn: "23099090",
-              packSize: "1 KG",
-              quantity: 11,
-              unit: "Can",
-              rate: 850,
-              gstRate: 5,
-              discount: 10,
-              amount: 8415
-            },
-            {
-              id: "1789115942418_641",
-              productId: "prod-1",
-              baleNo: "2",
-              description: "RALLIMIN ADV + 15 KGs",
-              hsn: "23099090",
-              packSize: "15 KG",
-              quantity: 1,
-              unit: "Bucket",
-              rate: 3600,
-              gstRate: 5,
-              discount: 45,
-              amount: 1980
-            }
-          ],
-          balancePaid: 0,
-          supplyPlace: "Andhra Pradesh",
-          taxable: 10395,
-          cgst: 0,
-          sgst: 0,
-          igst: 0,
-          roundOff: 0,
-          total: 10395
-        }
-      },
-      {
-        id: "inv_1789124481510_975",
-        invoiceNo: "0003",
-        invoiceDate: "2026-09-11",
-        customerName: "DEVI FISHERIES LIMITED",
-        itemsCount: 2,
-        total: 62730,
-        details: {
-          id: "inv_1789124481510_975",
-          invoiceType: "Bill of Supply",
-          headerLogo: "ganesha",
-          invoiceNo: "0003",
-          invoiceDate: "2026-09-11",
-          buyerOrderNo: "",
-          buyerOrderDate: "",
-          transportMode: "",
-          destination: "Andhra Pradesh",
-          supplyStateCode: "37",
-          paymentStatus: "Unpaid",
-          paymentMode: "UPI / QR",
-          paidAmount: 0,
-          balanceDue: 62730,
-          buyer: {
-            name: "DEVI FISHERIES LIMITED",
-            address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTUR\nAndhra Pradesh - 522264, India",
-            gstin: "37AAACD7852Q1ZZ",
-            state: "Andhra Pradesh",
-            stateCode: "37",
-            phone: "8367047947"
-          },
-          consignee: {
-            name: "DEVI FISHERIES LIMITED",
-            address: "LANKEVANIDIBBA\nREPALLE MANDAL\nGUNTUR\nAndhra Pradesh - 522264, India",
-            gstin: "37AAACD7852Q1ZZ",
-            state: "Andhra Pradesh",
-            stateCode: "37",
-            phone: "8688572332"
-          },
-          items: [
-            {
-              id: "1789124391603_264",
-              productId: "prod-2",
-              baleNo: "1",
-              description: "AQUA PROBIOTIC FEED SUPPLEMENT 1KG",
-              hsn: "23099090",
-              packSize: "1 KG",
-              quantity: 81,
-              unit: "Can",
-              rate: 850,
-              gstRate: 5,
-              discount: 10,
-              amount: 61965
-            },
-            {
-              id: "1789124472954_119",
-              productId: "prod-2",
-              baleNo: "2",
-              description: "AQUA PROBIOTIC FEED SUPPLEMENT 1KG",
-              hsn: "23099090",
-              packSize: "1 KG",
-              quantity: 1,
-              unit: "Can",
-              rate: 850,
-              gstRate: 5,
-              discount: 10,
-              amount: 765
-            }
-          ],
-          balancePaid: 0,
-          supplyPlace: "Andhra Pradesh",
-          taxable: 62730,
-          cgst: 0,
-          sgst: 0,
-          igst: 0,
-          roundOff: 0,
-          total: 62730
-        }
-      }
-    ];
-    localStorage.setItem("invoices", JSON.stringify(sampleInvoices));
-  }
-
-  if (!localStorage.getItem("deleted_invoice_ids")) {
-    const initialDeletedIds = [
-      "0009", "0007", "0005", "0006", "0008", "9999", "0012",
-      "test_check_1789026128766", "inv_1789022651338_929", "inv_1788969299973_728",
-      "inv_1788979067280_919", "inv_1788975524151_277", "inv_1789026099436_409",
-      "inv_test_verify", "inv_live_test_1789043577981", "inv_1789047516965_428",
-      "inv_1788969452505_13", "inv_1789047384849_421", "inv_1789047955981_151",
-      "inv_1789060416686_725"
-    ];
-    localStorage.setItem("deleted_invoice_ids", JSON.stringify(initialDeletedIds));
   }
 }
 
@@ -4571,6 +4032,7 @@ window.saveCurrentInvoiceRecord = async function(actionType = 'save_only', btnEl
         window.AaryanDB.saveInvoice(invoiceRecord);
       }
       syncDatabaseToServer("invoices", invoiceRecord);
+      if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
       if (typeof window.triggerDatabaseSync === 'function') window.triggerDatabaseSync();
     } catch (err) {
       console.warn("Unable to persist invoices:", err);
@@ -7240,6 +6702,15 @@ function loadInvoicesHistoryTable() {
         renderHistoryTableRows(invoicesDb);
       }).catch(() => {});
     }
+
+    // Snappy Failsafe: max 3.5s loading spinner to guarantee zero-hang
+    setTimeout(() => {
+      if (!window.isInitialSyncDone) {
+        window.isInitialSyncDone = true;
+        if (elements.historyCount) elements.historyCount.textContent = (invoicesDb && invoicesDb.length) || "0";
+        renderHistoryTableRows(invoicesDb || []);
+      }
+    }, 3500);
   } else {
     if (elements.historyCount) elements.historyCount.textContent = "0";
     renderHistoryTableRows([]);
@@ -7429,6 +6900,8 @@ window.deleteSavedInvoice = function(id) {
     if (!elements.historyInvoicesBody.closest('.content-view').classList.contains('hidden')) {
       loadInvoicesHistoryTable();
     }
+    if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
+    if (window.triggerDatabaseSync) window.triggerDatabaseSync();
   }
 };
 
@@ -7661,10 +7134,12 @@ window.saveProductModal = function(e) {
   }
 
   localStorage.setItem("products", JSON.stringify(productsDb));
+  if (window.AaryanDB && window.AaryanDB.isReady) AaryanDB.saveAllProducts(productsDb);
   syncDatabaseToServer("products", productsDb);
   closeProductModal();
   loadProductsDatabaseTable();
   populateBillingSelectors();
+  if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
   if (window.triggerDatabaseSync) window.triggerDatabaseSync();
 
   const stockMsg = id && oldStock !== finalStock 
@@ -7695,9 +7170,11 @@ window.quickRestockProduct = function(id) {
   prod.updatedAt = new Date().toISOString();
 
   localStorage.setItem("products", JSON.stringify(productsDb));
+  if (window.AaryanDB && window.AaryanDB.isReady) AaryanDB.saveAllProducts(productsDb);
   syncDatabaseToServer("products", productsDb);
   loadProductsDatabaseTable();
   populateBillingSelectors();
+  if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
   if (window.triggerDatabaseSync) window.triggerDatabaseSync();
 
   showFloatingToast(`📦 Restocked! Added +${addQty} ${unit} to "${prod.description}". New Total: ${newStock} ${unit}`, 4000);
@@ -7712,8 +7189,10 @@ window.adjustProductStock = function(id, delta) {
   prod.updatedAt = new Date().toISOString();
   
   localStorage.setItem("products", JSON.stringify(productsDb));
+  if (window.AaryanDB && window.AaryanDB.isReady) AaryanDB.saveAllProducts(productsDb);
   syncDatabaseToServer("products", productsDb);
   loadProductsDatabaseTable();
+  if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
   if (window.triggerDatabaseSync) window.triggerDatabaseSync();
 
   const actionText = delta > 0 ? `Inline Stock Added (+${delta})` : `Inline Stock Reduced (${delta})`;
@@ -7727,9 +7206,11 @@ window.updateProductDiscountInline = function(id, newDiscount) {
   prod.discount = parsedDisc;
   prod.updatedAt = new Date().toISOString();
   localStorage.setItem("products", JSON.stringify(productsDb));
+  if (window.AaryanDB && window.AaryanDB.isReady) AaryanDB.saveAllProducts(productsDb);
   syncDatabaseToServer("products", productsDb);
   loadProductsDatabaseTable();
   populateBillingSelectors();
+  if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
   if (window.triggerDatabaseSync) window.triggerDatabaseSync();
   showFloatingToast(`🏷️ Discount for "${prod.description}" set to ${parsedDisc}%!`);
 };
@@ -7754,6 +7235,13 @@ function renderProductsTable(records) {
           </td>
         </tr>
       `;
+      // Snappy Failsafe: max 3.5s loading spinner to guarantee zero-hang
+      setTimeout(() => {
+        if (!window.isInitialSyncDone) {
+          window.isInitialSyncDone = true;
+          renderProductsTable(productsDb || []);
+        }
+      }, 3500);
     } else {
       elements.productsListBody.innerHTML = `
         <tr>
@@ -7907,7 +7395,9 @@ window.deleteProductRowDb = function(id) {
     }
 
     deleteProductFromServer(id);
+    if (window.AaryanDB && window.AaryanDB.isReady) AaryanDB.saveAllProducts(productsDb);
     loadProductsDatabaseTable();
+    if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
     if (window.triggerDatabaseSync) window.triggerDatabaseSync();
   }
 };
@@ -8003,10 +7493,12 @@ window.savePartyModal = function(e) {
   }
 
   localStorage.setItem("parties", JSON.stringify(partiesDb));
+  if (window.AaryanDB && window.AaryanDB.isReady) AaryanDB.saveAllParties(partiesDb);
   syncDatabaseToServer("parties", partiesDb);
   closePartyModal();
   loadPartiesDatabaseLists();
   populateBillingSelectors();
+  if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
   if (window.triggerDatabaseSync) window.triggerDatabaseSync();
 
   sendPartyTelegramReport(party, isNew);
@@ -8178,8 +7670,10 @@ window.deletePartyRowDb = function(id) {
     }
 
     deletePartyFromServer(id);
+    if (window.AaryanDB && window.AaryanDB.isReady) AaryanDB.saveAllParties(partiesDb);
     loadPartiesDatabaseLists();
     populateBillingSelectors();
+    if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
     if (window.triggerDatabaseSync) window.triggerDatabaseSync();
   }
 };
