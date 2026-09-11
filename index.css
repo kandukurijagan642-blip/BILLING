@@ -4958,5 +4958,657 @@ body {
   border-radius: 4px;
 }
 
+/* ==========================================================================
+   ULTRA-PREMIUM SAAS / ERP BILLING UIX & COMBINATION ENHANCEMENTS
+   ========================================================================== */
+
+/* Audio FX Toggle Pill in Header */
+.audio-fx-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(14, 165, 233, 0.12);
+  color: #0284c7;
+  border: 1px solid rgba(14, 165, 233, 0.35);
+  transition: all 0.2s ease;
+  user-select: none;
+}
+.audio-fx-pill:hover {
+  background: rgba(14, 165, 233, 0.22);
+  transform: translateY(-1px);
+}
+.audio-fx-pill.muted {
+  background: #f1f5f9;
+  color: #94a3b8;
+  border-color: #cbd5e1;
+}
+
+/* Keyboard Hint Tag */
+.kbd-hint-tag kbd {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 9px;
+  font-family: inherit;
+  font-weight: 700;
+  color: #64748b;
+  box-shadow: 0 1px 0 #cbd5e1;
+}
+
+/* --- Smart Product Combobox & Popover --- */
+.smart-picker-container {
+  position: relative;
+  width: 100%;
+}
+
+.smart-search-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.search-leading-icon {
+  position: absolute;
+  left: 10px;
+  color: #94a3b8;
+  font-size: 13px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.smart-search-input {
+  width: 100%;
+  height: 38px;
+  padding: 7px 32px 7px 32px !important;
+  border: 1.5px solid #cbd5e1 !important;
+  border-radius: 8px !important;
+  font-size: 13px !important;
+  font-family: 'Inter', sans-serif !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  font-weight: 600 !important;
+  transition: all 0.2s ease !important;
+  box-sizing: border-box !important;
+}
+
+.smart-search-input:focus {
+  border-color: #0284c7 !important;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.18) !important;
+  outline: none !important;
+}
+
+.btn-picker-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: #64748b;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-picker-toggle:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+/* Selected Product Chip */
+.smart-picker-selected-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 38px;
+  padding: 4px 10px;
+  background: linear-gradient(135deg, #f0fdfa, #e0f2fe);
+  border: 1.5px solid #38bdf8;
+  border-radius: 8px;
+  box-sizing: border-box;
+  animation: fadeIn 0.2s ease;
+}
+
+.chip-main-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.chip-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chip-pack {
+  background: #0284c7;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.btn-clear-selection {
+  background: rgba(239, 68, 68, 0.12);
+  border: none;
+  color: #ef4444;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.btn-clear-selection:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+/* Floating Glassmorphic Popover */
+.smart-product-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 100%;
+  min-width: 360px;
+  max-width: 480px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  box-shadow: 0 14px 34px -4px rgba(15, 23, 42, 0.2), 0 4px 12px rgba(0, 0, 0, 0.08);
+  z-index: 1000;
+  overflow: hidden;
+  animation: modalEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.popover-quick-header {
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.03em;
+}
+
+.popover-nav-hint {
+  font-size: 10px;
+  color: #94a3b8;
+}
+.popover-nav-hint kbd {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+.smart-product-results-list {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.popover-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  margin-bottom: 2px;
+  gap: 10px;
+}
+
+.popover-item:hover,
+.popover-item.active {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+}
+
+.popover-item.out-of-stock {
+  opacity: 0.65;
+  background: #fff1f2;
+}
+
+.popover-item-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.popover-item-desc {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.popover-item-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.popover-badge-pack {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.popover-badge-hsn {
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.popover-item-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.popover-price {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+  font-family: 'Outfit', sans-serif;
+}
+
+.popover-stock-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.popover-stock-tag.in {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.popover-stock-tag.low {
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fde68a;
+}
+
+.popover-stock-tag.out {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.popover-custom-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: #faf5ff;
+  border: 1px dashed #d8b4fe;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #7e22ce;
+  font-weight: 700;
+  font-size: 12px;
+  margin-top: 4px;
+}
+.popover-custom-item-row:hover {
+  background: #f3e8ff;
+}
+
+/* --- QTY Stepper & Presets --- */
+.qty-quick-chips,
+.disc-quick-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.qty-chip,
+.disc-chip {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  user-select: none;
+}
+
+.qty-chip:hover,
+.disc-chip:hover {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #0284c7;
+  transform: translateY(-1px);
+}
+
+.qty-stepper-box {
+  display: flex;
+  align-items: stretch;
+  height: 38px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #ffffff;
+  transition: all 0.15s ease;
+}
+
+.qty-stepper-box:focus-within {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.18);
+}
+
+.btn-qty-step {
+  width: 28px;
+  background: #f8fafc;
+  border: none;
+  color: #475569;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s ease;
+  user-select: none;
+}
+
+.btn-qty-step:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.btn-qty-step:active {
+  background: #cbd5e1;
+}
+
+.qty-stepper-box input {
+  flex: 1;
+  border: none !important;
+  box-shadow: none !important;
+  text-align: center;
+  font-weight: 800 !important;
+  font-size: 14px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  color: #0f172a !important;
+}
+
+/* In-Table Interactive Quantity Stepper */
+.table-qty-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 2px 4px;
+}
+
+.table-btn-step {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  line-height: 1;
+  padding: 0;
+}
+
+.table-btn-step:hover {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #0284c7;
+}
+
+.table-qty-val {
+  min-width: 22px;
+  text-align: center;
+  font-weight: 800;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+/* --- Segmented Payment Status Bar --- */
+.payment-segmented-bar {
+  display: flex;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 3px;
+  margin-bottom: 6px;
+}
+
+.btn-seg-pill {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  user-select: none;
+}
+
+.btn-seg-pill:hover {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.btn-seg-pill.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.btn-seg-pill.active[data-status="Paid"] {
+  color: #059669;
+  border-bottom: 2px solid #059669;
+}
+
+.btn-seg-pill.active[data-status="Partial"] {
+  color: #d97706;
+  border-bottom: 2px solid #d97706;
+}
+
+.btn-seg-pill.active[data-status="Unpaid"] {
+  color: #e11d48;
+  border-bottom: 2px solid #e11d48;
+}
+
+.badge-status-pill {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 8px;
+  border-radius: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.badge-status-pill.paid {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+.badge-status-pill.partial {
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fde68a;
+}
+.badge-status-pill.unpaid {
+  background: #fef2f2;
+  color: #e11d48;
+  border: 1px solid #fecaca;
+}
+
+/* Quick Cash Shortcuts Bar */
+.quick-cash-bar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.btn-quick-cash {
+  flex: 1;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.btn-quick-cash:hover {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #0284c7;
+  transform: translateY(-1px);
+}
+
+/* --- Floating Keyboard Shortcuts Pill & Modal --- */
+.floating-shortcuts-pill {
+  position: fixed;
+  bottom: 18px;
+  right: 18px;
+  z-index: 1000;
+  background: #0f172a;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.floating-shortcuts-pill:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 30px -5px rgba(0, 0, 0, 0.4);
+  background: #1e293b;
+}
+
+.floating-shortcuts-pill kbd {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-family: inherit;
+  color: #38bdf8;
+}
+
+.shortcuts-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shortcut-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.shortcut-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.shortcut-keys {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.shortcut-keys kbd {
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 5px;
+  padding: 2px 7px;
+  font-weight: 800;
+  font-size: 11px;
+  color: #0f172a;
+  box-shadow: 0 2px 0 #cbd5e1;
+}
+
+
 
 

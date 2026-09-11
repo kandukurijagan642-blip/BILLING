@@ -769,6 +769,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   seedDatabasesIfEmpty();
   loadAllDatabases();
+  if (typeof initAudioFeedback === 'function') initAudioFeedback();
+  if (typeof initKeyboardShortcuts === 'function') initKeyboardShortcuts();
   if (window.AaryanDB && typeof window.AaryanDB.init === 'function') {
     window.AaryanDB.init().then(() => {
       updateDashboardOverview();
@@ -2276,6 +2278,574 @@ function bindBillingFormInputs() {
     }
   };
 
+  // --- PRO AUDIO FEEDBACK SYNTHESIZER (WEB AUDIO API) ---
+  let audioCtx = null;
+  let audioFxEnabled = localStorage.getItem("billing_audio_fx_enabled") !== "false";
+
+  window.initAudioFeedback = function() {
+    const pill = document.getElementById("live-audio-fx-pill");
+    const icon = document.getElementById("audio-fx-icon");
+    const text = document.getElementById("audio-fx-text");
+    if (pill && icon && text) {
+      if (audioFxEnabled) {
+        pill.classList.remove("muted");
+        pill.classList.add("active");
+        icon.className = "fa-solid fa-volume-high";
+        text.textContent = "Audio ON";
+      } else {
+        pill.classList.add("muted");
+        pill.classList.remove("active");
+        icon.className = "fa-solid fa-volume-xmark";
+        text.textContent = "Audio OFF";
+      }
+    }
+  };
+
+  window.toggleAudioFeedback = function() {
+    audioFxEnabled = !audioFxEnabled;
+    localStorage.setItem("billing_audio_fx_enabled", audioFxEnabled ? "true" : "false");
+    window.initAudioFeedback();
+    if (audioFxEnabled) {
+      window.playAudioFeedback("click");
+      if (typeof showFloatingToast === 'function') showFloatingToast("🔊 Billing Sound FX Enabled", 2000);
+    } else {
+      if (typeof showFloatingToast === 'function') showFloatingToast("🔇 Billing Sound FX Muted", 2000);
+    }
+  };
+
+  window.playAudioFeedback = function(type) {
+    if (!audioFxEnabled) return;
+    try {
+      if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) audioCtx = new AudioContext();
+      }
+      if (!audioCtx) return;
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      if (type === "add") {
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.exponentialRampToValueAtTime(1100, now + 0.09);
+        gain.gain.setValueAtTime(0.18, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+        osc.start(now);
+        osc.stop(now + 0.12);
+      } else if (type === "warn") {
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.setValueAtTime(170, now + 0.08);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+      } else if (type === "success") {
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(523.25, now);
+        osc.frequency.setValueAtTime(659.25, now + 0.12);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+        osc.start(now);
+        osc.stop(now + 0.35);
+      } else if (type === "click") {
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(880, now);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.04);
+        osc.start(now);
+        osc.stop(now + 0.04);
+      }
+    } catch (e) {
+      console.warn("Audio FX note:", e);
+    }
+  };
+
+  // --- SMART PRODUCT COMBOBOX CONTROLLER ---
+  let smartPickerActiveIndex = -1;
+
+  window.openSmartProductPopover = function() {
+    const popover = document.getElementById("smart-product-popover");
+    if (popover) {
+      popover.classList.remove("hidden");
+      const query = document.getElementById("smart-product-search")?.value || "";
+      window.renderSmartProductResults(query);
+    }
+  };
+
+  window.closeSmartProductPopover = function() {
+    const popover = document.getElementById("smart-product-popover");
+    if (popover) popover.classList.add("hidden");
+    smartPickerActiveIndex = -1;
+  };
+
+  window.toggleSmartProductPopover = function() {
+    const popover = document.getElementById("smart-product-popover");
+    if (popover && popover.classList.contains("hidden")) {
+      window.openSmartProductPopover();
+      document.getElementById("smart-product-search")?.focus();
+    } else {
+      window.closeSmartProductPopover();
+    }
+  };
+
+  window.handleSmartProductSearch = function(query) {
+    window.openSmartProductPopover();
+    window.renderSmartProductResults(query);
+  };
+
+  window.renderSmartProductResults = function(query = "") {
+    const container = document.getElementById("smart-product-results");
+    const countSpan = document.getElementById("smart-popover-count");
+    if (!container) return;
+
+    const q = (query || "").trim().toLowerCase();
+    const matched = productsDb.filter(p => {
+      if (!p) return false;
+      if (!q) return true;
+      const desc = (p.description || "").toLowerCase();
+      const hsn = (p.hsn || "").toLowerCase();
+      const pack = (p.packSize || "").toLowerCase();
+      return desc.includes(q) || hsn.includes(q) || pack.includes(q);
+    });
+
+    if (countSpan) countSpan.textContent = matched.length;
+    container.innerHTML = "";
+
+    if (matched.length === 0) {
+      container.innerHTML = `
+        <div style="padding: 16px 12px; text-align: center; color: #64748b; font-size: 12px;">
+          <i class="fa-solid fa-magnifying-glass" style="font-size: 20px; color: #cbd5e1; margin-bottom: 6px; display: block;"></i>
+          No catalog items matching "<strong>${escapeHtml(query)}</strong>"
+        </div>
+      `;
+    } else {
+      matched.forEach((prod, idx) => {
+        const stockVal = prod.stock !== undefined && prod.stock !== null && prod.stock !== "" ? parseInt(prod.stock, 10) || 0 : null;
+        let stockTag = "";
+        let stockClass = "";
+        if (stockVal === null) {
+          stockTag = `<span class="popover-stock-tag in"><i class="fa-solid fa-circle-check"></i> Ready</span>`;
+        } else if (stockVal <= 0) {
+          stockTag = `<span class="popover-stock-tag out"><i class="fa-solid fa-circle-xmark"></i> 0 Out</span>`;
+          stockClass = "out-of-stock";
+        } else if (stockVal <= 10) {
+          stockTag = `<span class="popover-stock-tag low"><i class="fa-solid fa-triangle-exclamation"></i> ${stockVal} Left</span>`;
+        } else {
+          stockTag = `<span class="popover-stock-tag in"><i class="fa-solid fa-boxes-stacked"></i> ${stockVal} in stock</span>`;
+        }
+
+        const packBadge = prod.packSize ? `<span class="popover-badge-pack">${prod.packSize}</span>` : "";
+        const hsnBadge = prod.hsn ? `<span class="popover-badge-hsn">HSN: ${prod.hsn}</span>` : "";
+        const unitStr = prod.unit ? ` / ${prod.unit}` : "";
+
+        const itemEl = document.createElement("div");
+        itemEl.className = `popover-item ${stockClass}`;
+        itemEl.dataset.prodId = prod.id;
+        itemEl.dataset.index = idx;
+        itemEl.innerHTML = `
+          <div class="popover-item-left">
+            <span class="popover-item-desc">${escapeHtml(prod.description)}</span>
+            <div class="popover-item-sub">
+              ${packBadge}
+              ${hsnBadge}
+            </div>
+          </div>
+          <div class="popover-item-right">
+            <span class="popover-price">₹ ${formatCurrency(prod.rate)}${unitStr}</span>
+            ${stockTag}
+          </div>
+        `;
+
+        itemEl.addEventListener("click", () => {
+          window.selectSmartProduct(prod.id);
+        });
+
+        container.appendChild(itemEl);
+      });
+    }
+
+    if (q) {
+      const customRow = document.createElement("div");
+      customRow.className = "popover-custom-item-row";
+      customRow.innerHTML = `
+        <i class="fa-solid fa-circle-plus"></i>
+        <span>Use Custom Item: "<strong>${escapeHtml(query)}</strong>"</span>
+      `;
+      customRow.addEventListener("click", () => {
+        window.selectCustomSmartProduct(query);
+      });
+      container.appendChild(customRow);
+    }
+
+    smartPickerActiveIndex = -1;
+  };
+
+  window.selectSmartProduct = function(prodId) {
+    const prod = productsDb.find(p => p && p.id === prodId);
+    if (!prod) return;
+
+    if (elements.billItemSelect) {
+      elements.billItemSelect.value = prod.id;
+      elements.billItemSelect.dispatchEvent(new Event("change"));
+    }
+
+    const selectedChip = document.getElementById("smart-picker-selected");
+    const inputWrap = document.getElementById("smart-picker-input-wrap");
+    const titleSpan = document.getElementById("smart-picker-selected-title");
+    const packSpan = document.getElementById("smart-picker-selected-pack");
+
+    if (selectedChip && inputWrap && titleSpan) {
+      titleSpan.textContent = prod.description;
+      if (packSpan) {
+        packSpan.textContent = prod.packSize || prod.unit || "";
+        packSpan.style.display = (prod.packSize || prod.unit) ? "inline-block" : "none";
+      }
+      selectedChip.classList.remove("hidden");
+      inputWrap.classList.add("hidden");
+    }
+
+    window.closeSmartProductPopover();
+    window.playAudioFeedback("click");
+
+    setTimeout(() => {
+      const qtyInput = elements.billItemQty || document.getElementById("bill-item-qty");
+      if (qtyInput) {
+        qtyInput.focus();
+        qtyInput.select();
+      }
+    }, 60);
+  };
+
+  window.selectCustomSmartProduct = function(customDesc) {
+    const cleanDesc = (customDesc || "").trim();
+    if (!cleanDesc) return;
+
+    if (elements.billItemSelect) elements.billItemSelect.value = "__custom__";
+    if (elements.billItemName) elements.billItemName.value = cleanDesc;
+
+    const selectedChip = document.getElementById("smart-picker-selected");
+    const inputWrap = document.getElementById("smart-picker-input-wrap");
+    const titleSpan = document.getElementById("smart-picker-selected-title");
+    const packSpan = document.getElementById("smart-picker-selected-pack");
+
+    if (selectedChip && inputWrap && titleSpan) {
+      titleSpan.textContent = cleanDesc;
+      if (packSpan) packSpan.style.display = "none";
+      selectedChip.classList.remove("hidden");
+      inputWrap.classList.add("hidden");
+    }
+
+    window.closeSmartProductPopover();
+    window.updateBillingStockTelemetry(null);
+    window.playAudioFeedback("click");
+
+    setTimeout(() => {
+      const rateInput = elements.billItemRate || document.getElementById("bill-item-rate");
+      if (rateInput) {
+        rateInput.focus();
+        rateInput.select();
+      }
+    }, 60);
+  };
+
+  window.clearSmartProductSelection = function() {
+    const selectedChip = document.getElementById("smart-picker-selected");
+    const inputWrap = document.getElementById("smart-picker-input-wrap");
+    const searchInput = document.getElementById("smart-product-search");
+
+    if (selectedChip && inputWrap) {
+      selectedChip.classList.add("hidden");
+      inputWrap.classList.remove("hidden");
+    }
+
+    if (searchInput) {
+      searchInput.value = "";
+      searchInput.focus();
+    }
+
+    if (elements.billItemSelect) {
+      elements.billItemSelect.value = "";
+      elements.billItemSelect.dispatchEvent(new Event("change"));
+    }
+    if (elements.billItemName) elements.billItemName.value = "";
+
+    window.updateBillingStockTelemetry(null);
+    window.playAudioFeedback("click");
+  };
+
+  window.handleSmartPickerKeydown = function(e) {
+    const popover = document.getElementById("smart-product-popover");
+    const isVisible = popover && !popover.classList.contains("hidden");
+
+    if (e.key === "Escape") {
+      window.closeSmartProductPopover();
+      return;
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!isVisible) {
+        window.openSmartProductPopover();
+        return;
+      }
+      const items = popover.querySelectorAll(".popover-item, .popover-custom-item-row");
+      if (items.length === 0) return;
+      smartPickerActiveIndex = (smartPickerActiveIndex + 1) % items.length;
+      items.forEach((it, i) => it.classList.toggle("active", i === smartPickerActiveIndex));
+      items[smartPickerActiveIndex]?.scrollIntoView({ block: "nearest" });
+      return;
+    }
+
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (!isVisible) return;
+      const items = popover.querySelectorAll(".popover-item, .popover-custom-item-row");
+      if (items.length === 0) return;
+      smartPickerActiveIndex = (smartPickerActiveIndex - 1 + items.length) % items.length;
+      items.forEach((it, i) => it.classList.toggle("active", i === smartPickerActiveIndex));
+      items[smartPickerActiveIndex]?.scrollIntoView({ block: "nearest" });
+      return;
+    }
+
+    if (e.key === "Enter") {
+      if (isVisible) {
+        e.preventDefault();
+        const items = popover.querySelectorAll(".popover-item, .popover-custom-item-row");
+        if (smartPickerActiveIndex >= 0 && items[smartPickerActiveIndex]) {
+          items[smartPickerActiveIndex].click();
+        } else if (items.length > 0) {
+          items[0].click();
+        } else {
+          const val = document.getElementById("smart-product-search")?.value;
+          if (val) window.selectCustomSmartProduct(val);
+        }
+      }
+    }
+  };
+
+  // Close popover when clicking outside
+  document.addEventListener("click", (e) => {
+    const picker = document.getElementById("smart-picker-container");
+    if (picker && !picker.contains(e.target)) {
+      window.closeSmartProductPopover();
+    }
+  });
+
+  // --- QTY STEPPERS & PRESETS ---
+  window.stepBillingQty = function(delta) {
+    const qtyInput = elements.billItemQty || document.getElementById("bill-item-qty");
+    if (!qtyInput) return;
+    const curVal = parseInt(qtyInput.value, 10) || 1;
+    const newVal = Math.max(1, curVal + delta);
+    qtyInput.value = newVal;
+    window.handleBillingQtyInput();
+    if (typeof calculateBillingItemNetVal === 'function') calculateBillingItemNetVal();
+    window.playAudioFeedback("click");
+  };
+
+  window.setBillingQtyPreset = function(delta) {
+    const qtyInput = elements.billItemQty || document.getElementById("bill-item-qty");
+    if (!qtyInput) return;
+    const curVal = parseInt(qtyInput.value, 10) || 0;
+    const newVal = Math.max(1, curVal + delta);
+    qtyInput.value = newVal;
+    window.handleBillingQtyInput();
+    if (typeof calculateBillingItemNetVal === 'function') calculateBillingItemNetVal();
+    window.playAudioFeedback("click");
+  };
+
+  window.setBillingDiscountPreset = function(pct) {
+    const discInput = elements.billItemDiscount || document.getElementById("bill-item-discount");
+    if (discInput) {
+      discInput.value = pct;
+      if (typeof calculateBillingItemNetVal === 'function') calculateBillingItemNetVal();
+      window.playAudioFeedback("click");
+    }
+  };
+
+  // --- IN-TABLE QUANTITY STEPPER CONTROLLER ---
+  window.stepTableItemQty = function(itemId, delta) {
+    if (!currentInvoice || !Array.isArray(currentInvoice.items)) return;
+    const item = currentInvoice.items.find(it => it.id === itemId);
+    if (!item) return;
+
+    const oldQty = parseFloat(item.quantity) || 1;
+    const newQty = oldQty + delta;
+
+    if (newQty <= 0) {
+      window.deleteBillingItemRow(itemId);
+      return;
+    }
+
+    if (delta > 0) {
+      const prod = productsDb.find(p => (item.productId && p.id === item.productId) || ((p.description || '').trim().toLowerCase() === (item.description || '').trim().toLowerCase()));
+      if (prod && prod.stock !== undefined && prod.stock !== null && prod.stock !== '') {
+        const liveStock = parseInt(prod.stock, 10) || 0;
+        let previouslyInvoicedQty = 0;
+        if (currentInvoice && currentInvoice.isEditing && currentInvoice.id) {
+          const origInv = invoicesDb.find(inv => inv && inv.id === currentInvoice.id);
+          if (origInv && origInv.details && Array.isArray(origInv.details.items)) {
+            const matchOld = origInv.details.items.find(it => (it.productId && prod.id && it.productId === prod.id) || (it.description && prod.description && it.description.trim().toLowerCase() === prod.description.trim().toLowerCase()));
+            if (matchOld) previouslyInvoicedQty = parseFloat(matchOld.quantity) || 0;
+          }
+        }
+        const effectiveAvailable = liveStock + previouslyInvoicedQty;
+        const totalOtherInCart = currentInvoice.items
+          .filter(it => it.id !== itemId && ((it.productId && prod.id && it.productId === prod.id) || ((it.description || '').trim().toLowerCase() === (prod.description || '').trim().toLowerCase())))
+          .reduce((sum, it) => sum + (parseFloat(it.quantity) || 0), 0);
+
+        if (totalOtherInCart + newQty > effectiveAvailable) {
+          const maxCan = Math.max(0, effectiveAvailable - totalOtherInCart);
+          showFloatingToast(`❌ Cannot increase: "${prod.description}" has only ${effectiveAvailable} in stock. Maximum total is ${maxCan}.`, "warning");
+          window.playAudioFeedback("warn");
+          return;
+        }
+      }
+    }
+
+    item.quantity = newQty;
+    const rate = item.rate || 0;
+    const disc = item.discount || 0;
+    const netRate = Math.max(0, rate - (rate * disc / 100));
+    item.amount = Math.round((netRate * newQty) * 100) / 100;
+
+    calculateSummaryAndTable();
+    if (typeof handleBillingQtyInput === 'function') handleBillingQtyInput();
+    window.playAudioFeedback("click");
+  };
+
+  // --- SEGMENTED PAYMENT STATUS & QUICK CASH ---
+  window.setPaymentStatusSegment = function(status) {
+    const sel = elements.billPaymentStatus || document.getElementById("bill-payment-status");
+    if (sel) {
+      sel.value = status;
+      if (typeof handlePaymentStatusChange === 'function') handlePaymentStatusChange();
+    }
+
+    const pills = document.querySelectorAll(".btn-seg-pill");
+    pills.forEach(p => p.classList.toggle("active", p.dataset.status === status));
+
+    const badge = document.getElementById("payment-status-badge");
+    if (badge) {
+      badge.textContent = status.toUpperCase();
+      badge.className = `badge-status-pill ${status.toLowerCase()}`;
+    }
+
+    window.playAudioFeedback("click");
+  };
+
+  window.applyQuickCash = function(mode) {
+    const totalSpan = document.getElementById("sum-grand-total");
+    const grandTotal = currentInvoice && currentInvoice.grandTotal ? currentInvoice.grandTotal : (parseFloat((totalSpan?.textContent || "0").replace(/[^0-9.]/g, '')) || 0);
+
+    const paidInput = elements.billPaidAmount || document.getElementById("bill-paid-amount");
+    const balInput = elements.billBalancePaid || document.getElementById("bill-balance-paid");
+
+    if (mode === "full") {
+      window.setPaymentStatusSegment("Paid");
+      if (paidInput) paidInput.value = grandTotal.toFixed(2);
+      if (balInput) balInput.value = "0.00";
+    } else if (mode === "round") {
+      window.setPaymentStatusSegment("Partial");
+      const rounded = Math.floor(grandTotal / 100) * 100;
+      if (paidInput) paidInput.value = rounded.toFixed(2);
+    } else if (mode === "zero") {
+      window.setPaymentStatusSegment("Unpaid");
+      if (paidInput) paidInput.value = "0.00";
+      if (balInput) balInput.value = "0.00";
+    }
+
+    calculateSummaryAndTable();
+    window.playAudioFeedback("click");
+  };
+
+  // --- KEYBOARD SHORTCUTS ENGINE ---
+  window.openKeyboardShortcutsModal = function() {
+    const modal = document.getElementById("keyboard-shortcuts-modal");
+    if (modal) {
+      modal.classList.remove("hidden");
+      modal.style.display = "flex";
+    }
+  };
+
+  window.closeKeyboardShortcutsModal = function() {
+    const modal = document.getElementById("keyboard-shortcuts-modal");
+    if (modal) {
+      modal.classList.add("hidden");
+      modal.style.display = "none";
+    }
+  };
+
+  window.initKeyboardShortcuts = function() {
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        window.closeSmartProductPopover();
+        window.closeKeyboardShortcutsModal();
+        return;
+      }
+
+      if (e.altKey && (e.key === "p" || e.key === "P")) {
+        e.preventDefault();
+        const searchInput = document.getElementById("smart-product-search");
+        if (searchInput) {
+          const selectedChip = document.getElementById("smart-picker-selected");
+          if (selectedChip && !selectedChip.classList.contains("hidden")) {
+            window.clearSmartProductSelection();
+          } else {
+            searchInput.focus();
+            window.openSmartProductPopover();
+          }
+        }
+        return;
+      }
+
+      if (e.altKey && e.key === "/") {
+        e.preventDefault();
+        window.openKeyboardShortcutsModal();
+        return;
+      }
+
+      if (e.altKey && (e.key === "m" || e.key === "M")) {
+        e.preventDefault();
+        window.toggleAudioFeedback();
+        return;
+      }
+
+      if (e.key === "F2") {
+        e.preventDefault();
+        if (typeof triggerQuickInwardFromBilling === 'function') triggerQuickInwardFromBilling();
+        return;
+      }
+
+      if ((e.ctrlKey && e.key === "Enter") || (e.altKey && (e.key === "a" || e.key === "A"))) {
+        e.preventDefault();
+        if (typeof addBillingItemRow === 'function') addBillingItemRow();
+        return;
+      }
+
+      if (e.ctrlKey && (e.key === "s" || e.key === "S")) {
+        e.preventDefault();
+        const saveBtn = document.getElementById("btn-save-generate-invoice");
+        if (saveBtn) saveBtn.click();
+        return;
+      }
+
+      if (e.ctrlKey && (e.key === "p" || e.key === "P") && !e.shiftKey) {
+        const billingView = document.getElementById("view-billing");
+        if (billingView && !billingView.classList.contains("hidden")) {
+          e.preventDefault();
+          if (typeof generateAndPrintInvoice === 'function') generateAndPrintInvoice();
+        }
+      }
+    });
+  };
+
   window.updateBillingStockTelemetry = function(prod) {
     const stockPill = document.getElementById("bill-stock-pill");
     const stockPillText = document.getElementById("bill-stock-pill-text");
@@ -2610,6 +3180,9 @@ function populateBillingSelectors() {
     opt.textContent = `${p.description}${packStr}${unitStr} - ₹${formatCurrency(p.rate)}${stockBadge}`;
     elements.billItemSelect.appendChild(opt);
   });
+  if (typeof window.renderSmartProductResults === 'function') {
+    window.renderSmartProductResults(document.getElementById("smart-product-search")?.value || "");
+  }
 }
 
 window.copyBuyerToConsignee = function() {
@@ -2845,6 +3418,8 @@ window.addBillingItemRow = function() {
     if (typeof calculateBillingItemNetVal === 'function') calculateBillingItemNetVal();
     if (typeof updateBillingStockTelemetry === 'function') updateBillingStockTelemetry(null);
     if (typeof handleBillingQtyInput === 'function') handleBillingQtyInput();
+    if (typeof clearSmartProductSelection === 'function') clearSmartProductSelection();
+    if (typeof playAudioFeedback === 'function') playAudioFeedback('add');
 
     calculateSummaryAndTable();
     return true;
@@ -2861,6 +3436,7 @@ window.deleteBillingItemRow = function(id) {
   });
   calculateSummaryAndTable();
   if (typeof handleBillingQtyInput === 'function') handleBillingQtyInput();
+  if (typeof playAudioFeedback === 'function') playAudioFeedback('click');
 };
 
 // --- CALCULATE SUMMARY & TABLE ---
@@ -2923,7 +3499,11 @@ function calculateSummaryAndTable() {
       </td>
       <td>${item.hsn || "—"}</td>
       <td>
-        <div style="font-weight: 700;">${item.quantity}</div>
+        <div class="table-qty-stepper">
+          <button type="button" class="table-btn-step" onclick="stepTableItemQty('${item.id}', -1)" title="Decrease Qty">–</button>
+          <span class="table-qty-val">${item.quantity}</span>
+          <button type="button" class="table-btn-step" onclick="stepTableItemQty('${item.id}', 1)" title="Increase Qty">+</button>
+        </div>
         ${remStockBadge}
       </td>
       <td>${item.unit || "Bucket"}</td>
@@ -3075,6 +3655,8 @@ function resetBillingForm() {
   }
 
   populateBillingSelectors();
+  if (typeof clearSmartProductSelection === 'function') clearSmartProductSelection();
+  if (typeof setPaymentStatusSegment === 'function') setPaymentStatusSegment("Paid");
   autoSuggestInvoiceNo();
   calculateSummaryAndTable();
 }

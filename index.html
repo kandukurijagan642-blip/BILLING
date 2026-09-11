@@ -39,7 +39,7 @@
     }
   </script>
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=108">
+  <link rel="stylesheet" href="index.css?v=109">
   <script src="invoice_utils_v5.js?v=96"></script>
 </head>
 <body>
@@ -185,6 +185,10 @@
             <span class="radar-dot tg-dot" style="display: inline-block;"></span>
             <i class="fa-brands fa-telegram" style="color: #0284c7;"></i>
             <span id="tg-bot-status-text" style="font-weight: 700; font-size: 12px;">Telegram Active</span>
+          </div>
+          <div id="live-audio-fx-pill" class="audio-fx-pill active cursor-pointer" onclick="toggleAudioFeedback()" title="Billing Audio FX (Click to Mute / Unmute)">
+            <i class="fa-solid fa-volume-high" id="audio-fx-icon"></i>
+            <span id="audio-fx-text">Audio ON</span>
           </div>
           <span id="current-datetime"></span>
         </div>
@@ -467,23 +471,66 @@
               </div>
             </div>
 
-            <!-- Section 4: Product Insertion Row -->
+            <!-- Section 4: Product Insertion Row (Ultra-Premium SaaS Combobox & Steppers) -->
             <div class="billing-card-form margin-top-12">
               <div class="product-input-row">
-                <div class="form-group flex-item-desc">
-                  <label>PRODUCT / ITEM</label>
-                  <div class="item-desc-combo" style="display: flex; flex-direction: column; gap: 4px;">
-                    <select id="bill-item-select" style="width: 100%;">
-                      <option value="">-- Choose from Catalog --</option>
-                    </select>
-                    <input type="text" id="bill-item-name" placeholder="Or type item description here..." style="width: 100%;">
+                
+                <!-- Smart Unified Product Combobox -->
+                <div class="form-group flex-item-desc smart-combo-group" style="position: relative;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <label style="margin: 0;">PRODUCT / ITEM</label>
+                    <span class="kbd-hint-tag" title="Keyboard Shortcut: Alt + P"><kbd>Alt+P</kbd></span>
+                  </div>
+                  
+                  <div class="smart-picker-container" id="smart-picker-container">
+                    <!-- Selected State Pill (Shown when product is locked in) -->
+                    <div id="smart-picker-selected" class="smart-picker-selected-chip hidden">
+                      <div class="chip-main-info">
+                        <i class="fa-solid fa-cube text-teal"></i>
+                        <span id="smart-picker-selected-title" class="chip-title">—</span>
+                        <span id="smart-picker-selected-pack" class="chip-pack"></span>
+                      </div>
+                      <button type="button" class="btn-clear-selection" onclick="clearSmartProductSelection()" title="Change / Clear Product">
+                        <i class="fa-solid fa-xmark"></i>
+                      </button>
+                    </div>
+
+                    <!-- Interactive Search Input -->
+                    <div id="smart-picker-input-wrap" class="smart-search-input-wrap">
+                      <i class="fa-solid fa-magnifying-glass search-leading-icon"></i>
+                      <input type="text" id="smart-product-search" class="smart-search-input" placeholder="Search catalog or type item..." autocomplete="off" onfocus="openSmartProductPopover()" oninput="handleSmartProductSearch(this.value)" onkeydown="handleSmartPickerKeydown(event)">
+                      <button type="button" id="btn-smart-picker-toggle" class="btn-picker-toggle" onclick="toggleSmartProductPopover()" title="Browse Catalog">
+                        <i class="fa-solid fa-chevron-down"></i>
+                      </button>
+                    </div>
+
+                    <!-- Floating Glassmorphic Popover Dropdown -->
+                    <div id="smart-product-popover" class="smart-product-popover hidden">
+                      <div class="popover-quick-header">
+                        <span><i class="fa-solid fa-cubes"></i> PRODUCT CATALOG (<span id="smart-popover-count">0</span>)</span>
+                        <span class="popover-nav-hint"><kbd>↑↓</kbd> navigate <kbd>Enter</kbd> select <kbd>Esc</kbd></span>
+                      </div>
+                      <div id="smart-product-results" class="smart-product-results-list">
+                        <!-- Populated by JavaScript -->
+                      </div>
+                    </div>
+
+                    <!-- Hidden native inputs to ensure 100% full compatibility with existing logic -->
+                    <div style="display: none;">
+                      <select id="bill-item-select">
+                        <option value="">-- Choose from Catalog --</option>
+                      </select>
+                      <input type="text" id="bill-item-name">
+                    </div>
                   </div>
                 </div>
+
+                <!-- Stock Telemetry Pill -->
                 <div class="form-group flex-item-stock">
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                     <label style="margin: 0;">STOCK</label>
-                    <button type="button" id="btn-quick-inward-billing" class="btn-micro-restock hidden" onclick="triggerQuickInwardFromBilling()" title="Quick 1-Click Restock (Inward)">
-                      <i class="fa-solid fa-plus"></i> Restock
+                    <button type="button" id="btn-quick-inward-billing" class="btn-micro-restock hidden" onclick="triggerQuickInwardFromBilling()" title="Quick 1-Click Restock (F2)">
+                      <i class="fa-solid fa-plus"></i> Restock <kbd style="font-size: 8px; opacity: 0.8;">F2</kbd>
                     </button>
                   </div>
                   <div class="live-stock-pill-wrapper">
@@ -494,18 +541,35 @@
                     <input type="hidden" id="bill-item-stock-qty" value="—">
                   </div>
                 </div>
+
+                <!-- HSN Code -->
                 <div class="form-group flex-item-hsn">
                   <label>HSN</label>
                   <input type="text" id="bill-item-hsn" placeholder="HSN (e.g. 23099090)">
                 </div>
+
+                <!-- QTY with Interactive Micro-Steppers & Quick Presets -->
                 <div class="form-group flex-item-qty" style="position: relative;">
-                  <label>QTY</label>
-                  <input type="number" id="bill-item-qty" value="1" min="1" step="1" oninput="handleBillingQtyInput()">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <label style="margin: 0;">QTY</label>
+                    <div class="qty-quick-chips">
+                      <span class="qty-chip" onclick="setBillingQtyPreset(5)" title="Add 5">+5</span>
+                      <span class="qty-chip" onclick="setBillingQtyPreset(10)" title="Add 10">+10</span>
+                      <span class="qty-chip" onclick="setMaxAvailableQty()" title="Set to Max Available">Max</span>
+                    </div>
+                  </div>
+                  <div class="qty-stepper-box">
+                    <button type="button" class="btn-qty-step minus" onclick="stepBillingQty(-1)" title="Decrease Qty">–</button>
+                    <input type="number" id="bill-item-qty" value="1" min="1" step="1" oninput="handleBillingQtyInput()">
+                    <button type="button" class="btn-qty-step plus" onclick="stepBillingQty(1)" title="Increase Qty">+</button>
+                  </div>
                   <div id="qty-stock-warning" class="qty-warning-bubble hidden">
                     <span id="qty-warning-text"><i class="fa-solid fa-triangle-exclamation"></i> Exceeds stock!</span>
                     <button type="button" class="btn-set-max-stock" onclick="setMaxAvailableQty()">Set to Max (<span id="qty-max-count">0</span>)</button>
                   </div>
                 </div>
+
+                <!-- Unit -->
                 <div class="form-group flex-item-unit">
                   <label>UNIT</label>
                   <input type="text" id="bill-item-unit" placeholder="Unit" list="billing-units-datalist" value="Bucket">
@@ -523,10 +587,13 @@
                     <option value="Bundle">
                   </datalist>
                 </div>
+
+                <!-- Pack Size -->
                 <div class="form-group flex-item-pack">
                   <label>PACK</label>
                   <input type="text" id="bill-item-pack" placeholder="Pack Size (e.g. 15 KG)">
                 </div>
+
                 <div class="form-group flex-item-gstrate" style="display: none;">
                   <label>GST %</label>
                   <select id="bill-item-gstrate">
@@ -537,18 +604,33 @@
                     <option value="28">28%</option>
                   </select>
                 </div>
+
+                <!-- Discount % with Quick Toggle Chips -->
                 <div class="form-group flex-item-discount">
-                  <label>DISC %</label>
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <label style="margin: 0;">DISC %</label>
+                    <div class="disc-quick-chips">
+                      <span class="disc-chip" onclick="setBillingDiscountPreset(0)">0%</span>
+                      <span class="disc-chip" onclick="setBillingDiscountPreset(5)">5%</span>
+                      <span class="disc-chip" onclick="setBillingDiscountPreset(10)">10%</span>
+                    </div>
+                  </div>
                   <input type="number" step="0.01" id="bill-item-discount" value="0" oninput="calculateBillingItemNetVal()">
                 </div>
+
+                <!-- Base Rate -->
                 <div class="form-group flex-item-rate">
                   <label>BASE RATE (₹)</label>
                   <input type="number" step="0.01" id="bill-item-rate" placeholder="0.00" oninput="calculateBillingItemNetVal()">
                 </div>
+
+                <!-- Value After Discount -->
                 <div class="form-group flex-item-netrate" style="min-width: 120px;">
                   <label style="color: #059669; font-weight: 700;">VAL AFTER DISC</label>
                   <input type="text" id="bill-item-net-val" placeholder="₹ 0.00" readonly style="background-color: #f0fdf4; color: #15803d; font-weight: 800; text-align: right; border: 1.5px solid #86efac; cursor: default;" title="Unit price after applying discount">
                 </div>
+
+                <!-- Add Row Button with Hotkey Badge -->
                 <button type="button" class="btn btn-primary btn-add-row" onclick="addBillingItemRow()">
                   <i class="fa-solid fa-plus"></i> Add Item
                 </button>
@@ -611,13 +693,44 @@
 
                 <div class="summary-payment-inputs margin-bottom-15">
                   <div class="form-group margin-bottom-8">
-                    <label style="font-size: 11px; font-weight: 700; color: var(--text-muted);">PAYMENT STATUS</label>
-                    <select id="bill-payment-status" class="summary-select" onchange="handlePaymentStatusChange()">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                      <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin: 0;">PAYMENT STATUS</label>
+                      <span id="payment-status-badge" class="badge-status-pill paid">PAID</span>
+                    </div>
+                    
+                    <!-- Segmented Pills Bar -->
+                    <div class="payment-segmented-bar" id="payment-segmented-bar">
+                      <button type="button" class="btn-seg-pill active" data-status="Paid" onclick="setPaymentStatusSegment('Paid')">
+                        <i class="fa-solid fa-circle-check"></i> Paid
+                      </button>
+                      <button type="button" class="btn-seg-pill" data-status="Partial" onclick="setPaymentStatusSegment('Partial')">
+                        <i class="fa-solid fa-clock-rotate-left"></i> Partial
+                      </button>
+                      <button type="button" class="btn-seg-pill" data-status="Unpaid" onclick="setPaymentStatusSegment('Unpaid')">
+                        <i class="fa-solid fa-circle-exclamation"></i> Credit
+                      </button>
+                    </div>
+
+                    <select id="bill-payment-status" class="summary-select hidden" onchange="handlePaymentStatusChange()">
                       <option value="Paid" selected>Paid</option>
                       <option value="Partial">Partial Payment</option>
                       <option value="Unpaid">Unpaid / Credit</option>
                     </select>
                   </div>
+
+                  <!-- Quick Cash & Due Filler Shortcuts -->
+                  <div class="quick-cash-bar" id="quick-cash-bar">
+                    <button type="button" class="btn-quick-cash" onclick="applyQuickCash('full')" title="Auto-fill exact bill amount as fully paid">
+                      <i class="fa-solid fa-bolt"></i> Full Paid
+                    </button>
+                    <button type="button" class="btn-quick-cash" onclick="applyQuickCash('round')" title="Round down to nearest 100">
+                      <i class="fa-solid fa-coins"></i> Round 100
+                    </button>
+                    <button type="button" class="btn-quick-cash" onclick="applyQuickCash('zero')" title="Clear paid amount">
+                      <i class="fa-solid fa-rotate-left"></i> Clear
+                    </button>
+                  </div>
+
                   <div class="form-group margin-bottom-8">
                     <label style="font-size: 11px; font-weight: 700; color: var(--text-muted);">PAYMENT MODE</label>
                     <select id="bill-payment-mode" class="summary-select">
@@ -2485,8 +2598,66 @@
         <button type="button" class="btn btn-secondary" onclick="closeDatabaseTelemetryModal()" style="padding: 6px 16px; font-size: 12.5px; cursor: pointer;">Close</button>
       </div>
     </div>
+  <!-- FLOATING KEYBOARD SHORTCUTS BADGE (Bottom Right) -->
+  <div id="floating-shortcuts-pill" class="floating-shortcuts-pill cursor-pointer" onclick="openKeyboardShortcutsModal()" title="Billing Keyboard Shortcuts (Alt+/)">
+    <i class="fa-solid fa-bolt-lightning" style="color: #f59e0b;"></i>
+    <span>Shortcuts <kbd>Alt+/</kbd></span>
   </div>
 
-  <script src="index_v5.js?v=157"></script>
+  <!-- KEYBOARD SHORTCUTS MODAL -->
+  <div id="keyboard-shortcuts-modal" class="modal-overlay hidden" onclick="if(event.target === this) closeKeyboardShortcutsModal();" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(6px); display: none; align-items: center; justify-content: center; z-index: 2147483640;">
+    <div class="modal-card" style="max-width: 520px; width: 92%; background: #ffffff; border-radius: 14px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); border: 1px solid #e2e8f0; overflow: hidden; animation: popIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);">
+      <div class="modal-header" style="background: linear-gradient(135deg, #0f172a, #1e293b); color: #ffffff; padding: 18px 22px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <i class="fa-solid fa-keyboard" style="font-size: 20px; color: #38bdf8;"></i>
+          <div>
+            <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #ffffff;">Power Biller Hotkeys</h3>
+            <p style="margin: 2px 0 0 0; font-size: 12px; color: #94a3b8;">High-speed billing hotkeys for pro cashiers</p>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeKeyboardShortcutsModal()" style="background: rgba(255,255,255,0.1); border: none; color: #ffffff; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="modal-body" style="padding: 20px;">
+        <div class="shortcuts-grid">
+          <div class="shortcut-row">
+            <span class="shortcut-label">Search / Select Product</span>
+            <div class="shortcut-keys"><kbd>Alt</kbd> + <kbd>P</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-label">Add Item to Bill</span>
+            <div class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> <em>or</em> <kbd>Alt</kbd> + <kbd>A</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-label">Generate &amp; Save Invoice</span>
+            <div class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>S</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-label">Print A4 Invoice</span>
+            <div class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>P</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-label">Quick Inward Restock</span>
+            <div class="shortcut-keys"><kbd>F2</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-label">Toggle Audio FX</span>
+            <div class="shortcut-keys"><kbd>Alt</kbd> + <kbd>M</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span class="shortcut-label">Close Popovers / Modals</span>
+            <div class="shortcut-keys"><kbd>Esc</kbd></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="padding: 12px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 11px; color: #64748b;"><i class="fa-solid fa-circle-info text-teal"></i> Works instantly across billing view</span>
+        <button type="button" class="btn btn-secondary" onclick="closeKeyboardShortcutsModal()" style="padding: 6px 16px; font-size: 12.5px; cursor: pointer;">Got It</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="index_v5.js?v=158"></script>
 </body>
 </html>
