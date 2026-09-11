@@ -214,6 +214,67 @@
   border: 1px solid rgba(148, 163, 184, 0.35) !important;
 }
 
+/* Telegram Sync Pill */
+.telegram-sync-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 5px 13px !important;
+  border-radius: 20px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  background: rgba(14, 165, 233, 0.12) !important;
+  color: #0284c7 !important;
+  border: 1px solid rgba(14, 165, 233, 0.4) !important;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  user-select: none !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+  cursor: pointer !important;
+  position: relative !important;
+}
+
+.telegram-sync-pill:hover {
+  transform: translateY(-1.5px);
+  box-shadow: 0 3px 10px rgba(14, 165, 233, 0.25) !important;
+  border-color: #0284c7 !important;
+}
+
+.tg-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #0284c7;
+  display: inline-block;
+  animation: tgPulse 1.8s infinite ease-in-out;
+  flex-shrink: 0;
+}
+
+@keyframes tgPulse {
+  0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.7); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 7px rgba(2, 132, 199, 0); }
+  100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(2, 132, 199, 0); }
+}
+
+.telegram-sync-pill.connected {
+  background: #f0f9ff !important;
+  color: #0369a1 !important;
+  border: 1.5px solid #0284c7 !important;
+  box-shadow: 0 1px 6px rgba(2, 132, 199, 0.2) !important;
+}
+
+.telegram-sync-pill.dispatching {
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  border: 1.5px solid #2563eb !important;
+  animation: tgPulse 1s infinite ease-in-out !important;
+}
+
+.telegram-sync-pill.disconnected {
+  background: rgba(148, 163, 184, 0.12) !important;
+  color: #64748b !important;
+  border: 1px solid rgba(148, 163, 184, 0.35) !important;
+}
+
 /* WhatsApp Modal Styles */
 .wa-status-card {
   border-radius: 10px;
@@ -766,10 +827,12 @@ body {
   color: var(--primary-teal);
 }
 
-.action-btn.edit:hover { color: var(--accent-cyan); }
-.action-btn.print:hover { color: var(--primary-teal); }
-.action-btn.share:hover { color: var(--accent-emerald); }
-.action-btn.delete:hover { color: var(--accent-rose); }
+.action-btn.edit:hover { color: var(--accent-cyan); transform: scale(1.15); }
+.action-btn.print:hover { color: var(--primary-teal); transform: scale(1.15); }
+.action-btn.share:hover { color: var(--accent-emerald); transform: scale(1.15); }
+.action-btn.btn-whatsapp:hover { color: #16a34a !important; transform: scale(1.18); }
+.action-btn.btn-telegram:hover { color: #0284c7 !important; transform: scale(1.18); }
+.action-btn.delete:hover { color: var(--accent-rose); transform: scale(1.15); }
 
 /* Search Box */
 .search-box {
@@ -3731,7 +3794,8 @@ body {
 
   .stock-alert-pill,
   .cloud-sync-pill,
-  .whatsapp-sync-pill {
+  .whatsapp-sync-pill,
+  .telegram-sync-pill {
     padding: 4px 8px !important;
     font-size: 10.5px !important;
     gap: 4px !important;
@@ -4112,12 +4176,14 @@ body {
   }
 
   .app-top-header-meta .stock-alert-pill span,
-  .app-top-header-meta .whatsapp-sync-pill span:not(.wa-radar-dot) {
+  .app-top-header-meta .whatsapp-sync-pill span:not(.wa-radar-dot),
+  .app-top-header-meta .telegram-sync-pill span:not(.tg-dot) {
     display: none !important;
   }
 
   .stock-alert-pill,
-  .whatsapp-sync-pill {
+  .whatsapp-sync-pill,
+  .telegram-sync-pill {
     padding: 5px 8px !important;
   }
 

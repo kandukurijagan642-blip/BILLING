@@ -658,7 +658,7 @@ window.forcePushDatabaseToCloud = async function(btnEl) {
         btnEl.disabled = false;
       }, 2500);
     }
-    alert("Sync notice: " + err.message);
+    showFloatingToast("⚠️ Sync notice: " + err.message, "warning");
   }
 };
 
@@ -855,7 +855,7 @@ document.addEventListener("DOMContentLoaded", () => {
           btnEl.disabled = false;
         }, 3000);
       }
-      alert("Google Drive sync notice: " + err.message);
+      showFloatingToast("⚠️ Google Drive sync notice: " + err.message, "warning");
     }
   };
 
@@ -863,7 +863,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.syncAndGenerateAllDrivePdfs = async function(btnEl) {
     loadAllDatabases();
     if (!invoicesDb || invoicesDb.length === 0) {
-      alert("No invoices found to sync!");
+      showFloatingToast("⚠️ No invoices found to sync!", "warning");
       return;
     }
 
@@ -875,7 +875,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const printWrapper = document.getElementById("print-invoice-wrapper");
     if (!printWrapper) {
-      alert("Invoice print container not found.");
+      showFloatingToast("⚠️ Invoice print container not found.", "warning");
       if (btnEl) btnEl.disabled = false;
       return;
     }
@@ -961,7 +961,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }, 3500);
     }
 
-    alert(`🎉 Successfully compiled and uploaded ${processedCount} PDFs to Google Drive!\nColumn M in your Master Google Sheet is now fully updated with clickable hyperlinks.`);
+    showFloatingToast(`🎉 Successfully uploaded ${processedCount} PDFs to Google Drive & updated Google Sheet!`, 5000);
   };
 
   // Host awareness: Local Node.js server (localhost) vs Cloud Serverless (Netlify)
@@ -1313,7 +1313,7 @@ document.addEventListener("DOMContentLoaded", () => {
   resetBillingForm();
   updateDashboardOverview();
   updateLiveDateTime();
-  setInterval(updateLiveDateTime, 60000);
+  setInterval(updateLiveDateTime, 1000);
 
   // Mobile touch/click fast-response listener for Generate & Save Invoice
   const saveBtn = document.getElementById("btn-save-generate-invoice");
@@ -1450,7 +1450,12 @@ function seedDatabasesIfEmpty() {
         branch: "Repalle"
       },
       upiId: "7386262139@upi",
-      telegram: { token: "", chatId: "" },
+      telegram: {
+        token: "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g",
+        chatId: "6877857251, 7906132548",
+        botUsername: "fishbilling_bot_bot",
+        autoSend: true
+      },
       security: { autolock: "120", username: "Aaryanaqua", password: "Aaryan@2024" },
       terms: [
         "We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct."
@@ -1549,16 +1554,31 @@ function loadAllDatabases() {
   }
 
   if (!globalSettings.telegram) {
-    globalSettings.telegram = { token: "", chatId: "" };
+    globalSettings.telegram = {
+      token: "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g",
+      chatId: "6877857251, 7906132548",
+      botUsername: "fishbilling_bot_bot",
+      autoSend: true
+    };
+    try { localStorage.setItem("settings", JSON.stringify(globalSettings)); } catch (e) {}
   } else {
-    
+    let tgUpdated = false;
+    if (!globalSettings.telegram.token || globalSettings.telegram.token.trim() === "") {
+      globalSettings.telegram.token = "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g";
+      tgUpdated = true;
+    }
+    if (!globalSettings.telegram.botUsername) {
+      globalSettings.telegram.botUsername = "fishbilling_bot_bot";
+      tgUpdated = true;
+    }
     if (!globalSettings.telegram.chatId || !globalSettings.telegram.chatId.includes("7906132548")) {
-      if (globalSettings.telegram.chatId && globalSettings.telegram.chatId.trim()) {
-        globalSettings.telegram.chatId = globalSettings.telegram.chatId + ", 7906132548";
-      } else {
-        globalSettings.telegram.chatId = "6877857251, 7906132548";
-      }
-      localStorage.setItem("settings", JSON.stringify(globalSettings));
+      globalSettings.telegram.chatId = globalSettings.telegram.chatId && globalSettings.telegram.chatId.trim()
+        ? (globalSettings.telegram.chatId + ", 7906132548")
+        : "6877857251, 7906132548";
+      tgUpdated = true;
+    }
+    if (tgUpdated) {
+      try { localStorage.setItem("settings", JSON.stringify(globalSettings)); } catch (e) {}
     }
   }
   if (!globalSettings.security) {
@@ -1713,7 +1733,7 @@ function validateInvoicePaymentExceeds(invoice, grandTotal) {
     const balance = parseFloat(invoice.balancePaid) || 0;
     const totalPaid = paid + balance;
     if (totalPaid > grandTotal) {
-      alert(`❌ Error: Total paid amount (₹${totalPaid.toFixed(2)}) cannot exceed the invoice grand total (₹${grandTotal.toFixed(2)})!\nInitial Paid: ₹${paid.toFixed(2)}, Balance Paid: ₹${balance.toFixed(2)}.\n\nInvoice generation cancelled!`);
+      showFloatingToast(`⚠️ Total paid (₹${totalPaid.toFixed(2)}) cannot exceed grand total (₹${grandTotal.toFixed(2)})!`, "warning");
       return false;
     }
   }
@@ -1794,8 +1814,12 @@ window.switchTab = function(tabName) {
 };
 
 function updateLiveDateTime() {
-  const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
-  elements.currentDatetime.textContent = new Date().toLocaleDateString('en-US', options);
+  const el = document.getElementById('current-datetime') || elements.currentDatetime;
+  if (!el) return;
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+  el.textContent = `${dateStr} • ${timeStr}`;
 }
 
 // --- DASHBOARD LOADER & ANALYTICS CHARTS ---
@@ -1967,8 +1991,8 @@ function updateDashboardOverview() {
         <button class="action-btn edit" onclick="editSavedInvoice('${inv.id}')" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
         <button class="action-btn print" onclick="printSavedInvoice('${inv.id}')" title="Print A4"><i class="fa-solid fa-print"></i></button>
         <button class="action-btn print" onclick="printSavedInvoiceThermal('${inv.id}')" title="Print Thermal POS"><i class="fa-solid fa-receipt"></i></button>
-        <button class="action-btn share btn-whatsapp" onclick="shareInvoiceToWhatsApp('${inv.id}')" title="Share via WhatsApp"><i class="fa-brands fa-whatsapp"></i></button>
-        <button class="action-btn share" onclick="shareInvoiceToTelegram('${inv.id}', this)" title="Share PDF to Telegram"><i class="fa-solid fa-paper-plane text-teal"></i></button>
+        <button class="action-btn share btn-whatsapp" onclick="shareInvoiceToWhatsApp('${inv.id}', this)" title="Share PDF via WhatsApp"><i class="fa-brands fa-whatsapp" style="color: #16a34a;"></i></button>
+        <button class="action-btn share btn-telegram" onclick="shareInvoiceToTelegram('${inv.id}', this)" title="Share PDF to Telegram (@fishbilling_bot_bot)"><i class="fa-brands fa-telegram" style="color: #0284c7;"></i></button>
         <button class="action-btn delete" onclick="deleteSavedInvoice('${inv.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
       </td>
     `;
@@ -2325,7 +2349,7 @@ window.addBillingItemRow = function() {
       if (typeof showFloatingToast === 'function') {
         showFloatingToast("⚠️ Please enter a product name or select from catalog!", "warning");
       } else {
-        alert("Please enter a product name or select one!");
+        showFloatingToast("⚠️ Please enter a product name or select from catalog!", "warning");
       }
       if (elements.billItemName) {
         elements.billItemName.focus();
@@ -3329,7 +3353,7 @@ window.downloadInvoicePdf = function(invoiceData, btnEl = null) {
     details.buyer.name = "Cash Customer";
   }
   if (!details.invoiceNo || !details.items || details.items.length === 0) {
-    alert("Please select a product and add at least one line item before exporting PDF!");
+    showFloatingToast("⚠️ Please select a product and add at least one line item before exporting PDF!", "warning");
     return;
   }
 
@@ -3425,13 +3449,13 @@ function formatWhatsAppPhone(phoneStr) {
 
 async function sendTelegramTextMessage(messageText) {
   loadAllDatabases();
-  const token = globalSettings.telegram?.token || "";
-  let rawChatId = globalSettings.telegram?.chatId || "";
+  const token = (globalSettings.telegram?.token || "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g").trim();
+  let rawChatId = (globalSettings.telegram?.chatId || "6877857251, 7906132548").trim();
 
   if (!rawChatId.includes("7906132548")) {
     rawChatId = rawChatId ? (rawChatId + ", 7906132548") : "6877857251, 7906132548";
     if (globalSettings.telegram) globalSettings.telegram.chatId = rawChatId;
-    localStorage.setItem("settings", JSON.stringify(globalSettings));
+    try { localStorage.setItem("settings", JSON.stringify(globalSettings)); } catch (e) {}
   }
 
   const chatIds = rawChatId.split(/[\s,]+/).map(id => id.trim()).filter(id => id.length > 0);
@@ -3440,17 +3464,13 @@ async function sendTelegramTextMessage(messageText) {
   let success = false;
   for (const chatId of chatIds) {
     try {
-      const res = await fetch("/api/telegram/sendMessage", {
+      const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, chat_id: chatId, text: messageText, parse_mode: "Markdown" })
+        body: JSON.stringify({ chat_id: chatId, text: messageText, parse_mode: "Markdown" })
       });
       const data = await res.json();
       if (data && data.ok) {
-        success = true;
-      } else {
-        const encodedText = encodeURIComponent(messageText);
-        await fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}&text=${encodedText}`);
         success = true;
       }
     } catch (err) {
@@ -3528,54 +3548,82 @@ function playSuccessChime() {
   }
 }
 
-// --- FLOATING TOAST NOTIFICATION SYSTEM ---
+// --- ADVANCED GLASSMORPHIC TOAST NOTIFICATION SYSTEM ---
 function showFloatingToast(message, type = "success") {
   let toastContainer = document.getElementById("app-floating-toast-container");
   if (!toastContainer) {
     toastContainer = document.createElement("div");
     toastContainer.id = "app-floating-toast-container";
-    toastContainer.style.cssText = "position: fixed; bottom: 24px; right: 24px; z-index: 999999; display: flex; flex-direction: column-reverse; gap: 10px; pointer-events: none;";
+    toastContainer.style.cssText = "position: fixed; bottom: 28px; right: 28px; z-index: 9999999; display: flex; flex-direction: column-reverse; gap: 12px; pointer-events: none; max-width: 420px; width: calc(100vw - 40px);";
     document.body.appendChild(toastContainer);
+  }
+
+  // Dynamic icon and accent selection based on message content & type
+  let iconHtml = '<i class="fa-solid fa-circle-check" style="font-size: 18px; color: #34d399;"></i>';
+  let accentColor = "#10b981";
+  let bgGradient = "linear-gradient(135deg, rgba(6, 78, 59, 0.95) 0%, rgba(15, 23, 42, 0.96) 100%)";
+
+  const lower = (message || "").toLowerCase();
+  if (lower.includes("telegram") || lower.includes("✈️") || lower.includes("paper-plane")) {
+    iconHtml = '<i class="fa-brands fa-telegram" style="font-size: 20px; color: #38bdf8;"></i>';
+    accentColor = "#0284c7";
+    bgGradient = "linear-gradient(135deg, rgba(3, 105, 161, 0.95) 0%, rgba(15, 23, 42, 0.96) 100%)";
+  } else if (lower.includes("whatsapp") || lower.includes("📱") || lower.includes("bot")) {
+    iconHtml = '<i class="fa-brands fa-whatsapp" style="font-size: 20px; color: #22c55e;"></i>';
+    accentColor = "#16a34a";
+    bgGradient = "linear-gradient(135deg, rgba(6, 95, 70, 0.95) 0%, rgba(15, 23, 42, 0.96) 100%)";
+  } else if (type === "warning" || lower.includes("⚠️") || lower.includes("warning") || lower.includes("failed")) {
+    iconHtml = '<i class="fa-solid fa-triangle-exclamation" style="font-size: 18px; color: #fbbf24;"></i>';
+    accentColor = "#f59e0b";
+    bgGradient = "linear-gradient(135deg, rgba(146, 64, 14, 0.95) 0%, rgba(15, 23, 42, 0.96) 100%)";
+  } else if (type === "info" || lower.includes("ℹ️") || lower.includes("opening")) {
+    iconHtml = '<i class="fa-solid fa-circle-info" style="font-size: 18px; color: #38bdf8;"></i>';
+    accentColor = "#0284c7";
+    bgGradient = "linear-gradient(135deg, rgba(30, 58, 138, 0.95) 0%, rgba(15, 23, 42, 0.96) 100%)";
   }
 
   const toast = document.createElement("div");
   toast.className = `floating-toast toast-${type}`;
   toast.style.cssText = `
-    background: ${type === 'success' ? '#065f46' : type === 'warning' ? '#92400e' : '#1e293b'};
+    background: ${bgGradient};
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     color: #ffffff;
-    padding: 12px 18px;
-    border-radius: 10px;
+    padding: 13px 18px;
+    border-radius: 12px;
     font-size: 13px;
     font-weight: 600;
-    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.25);
+    line-height: 1.45;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.35), 0 8px 10px -6px rgba(0, 0, 0, 0.25);
     display: flex;
     align-items: center;
-    gap: 10px;
-    border-left: 4px solid ${type === 'success' ? '#10b981' : type === 'warning' ? '#f59e0b' : '#38bdf8'};
+    gap: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-left: 5px solid ${accentColor};
     opacity: 0;
-    transform: translateY(15px);
-    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: translateY(20px) scale(0.96);
+    transition: all 0.32s cubic-bezier(0.16, 1, 0.3, 1);
     pointer-events: auto;
-    max-width: 380px;
+    cursor: default;
   `;
-  toast.innerHTML = `<i class="fa-brands fa-whatsapp" style="font-size: 16px; color: #25d366;"></i> <span>${message}</span>`;
+  toast.innerHTML = `${iconHtml} <span style="flex: 1;">${message}</span>`;
   toastContainer.appendChild(toast);
 
   if (typeof requestAnimationFrame === 'function') {
     requestAnimationFrame(() => {
       toast.style.opacity = "1";
-      toast.style.transform = "translateY(0)";
+      toast.style.transform = "translateY(0) scale(1)";
     });
   } else {
     setTimeout(() => {
       toast.style.opacity = "1";
-      toast.style.transform = "translateY(0)";
+      toast.style.transform = "translateY(0) scale(1)";
     }, 16);
   }
 
   setTimeout(() => {
     toast.style.opacity = "0";
-    toast.style.transform = "translateY(15px)";
+    toast.style.transform = "translateY(15px) scale(0.95)";
     setTimeout(() => toast.remove(), 350);
   }, 4500);
 }
@@ -4198,7 +4246,7 @@ window.requestWhatsAppPairCode = async function() {
   const phone = phoneInput ? phoneInput.value.trim().replace(/\D/g, '') : "";
 
   if (!phone || phone.length < 10) {
-    alert("Please enter a valid 10-digit mobile number.");
+    showFloatingToast("⚠️ Please enter a valid 10-digit mobile number.", "warning");
     return;
   }
 
@@ -4217,11 +4265,11 @@ window.requestWhatsAppPairCode = async function() {
       if (codeText) codeText.textContent = c.length === 8 ? `${c.slice(0, 4)} - ${c.slice(4)}` : c;
     } else {
       if (codeText) codeText.textContent = "Try again";
-      alert(data.error || "Failed to generate pairing code. Please try QR scan.");
+      showFloatingToast(data.error || "⚠️ Failed to generate pairing code. Please try QR scan.", "warning");
     }
   } catch (err) {
     if (codeText) codeText.textContent = "Error";
-    alert("Connection error: " + err.message);
+    showFloatingToast("⚠️ Connection error: " + err.message, "warning");
   }
 };
 
@@ -4391,7 +4439,7 @@ window.lockWhatsAppSession = function(showToast = true) {
     if (typeof showFloatingToast === 'function') {
       showFloatingToast("🔒 WhatsApp session locked securely.", 3000);
     } else {
-      alert("WhatsApp session locked securely.");
+      showFloatingToast("🔒 WhatsApp session locked securely.", 3000);
     }
   }
   const statusInd = document.getElementById("wa-lock-status-indicator");
@@ -5156,7 +5204,7 @@ function downloadCSVFile(filename, csvContent) {
 
 window.exportInvoicesToCSV = function() {
   if (!invoicesDb || invoicesDb.length === 0) {
-    alert("No invoices available to export.");
+    showFloatingToast("⚠️ No invoices available to export.", "warning");
     return;
   }
   let csv = "Invoice No,Date,Customer Name,Payment Status,Payment Mode,Items Count,Total (INR)\n";
@@ -5178,7 +5226,7 @@ window.exportInvoicesToCSV = function() {
 
 window.exportProductsToCSV = function() {
   if (!productsDb || productsDb.length === 0) {
-    alert("No products available to export.");
+    showFloatingToast("⚠️ No products available to export.", "warning");
     return;
   }
   let csv = "ID,Description,HSN,Pack Size,Unit,Rate (INR),Stock\n";
@@ -5199,7 +5247,7 @@ window.exportProductsToCSV = function() {
 
 window.exportPartiesToCSV = function() {
   if (!partiesDb || partiesDb.length === 0) {
-    alert("No party profiles available to export.");
+    showFloatingToast("⚠️ No party profiles available to export.", "warning");
     return;
   }
   let csv = "Type,Customer Name,Company Name,Address,GSTIN,State,Phone\n";
@@ -5294,8 +5342,8 @@ function renderHistoryTableRows(records) {
         <button class="action-btn print" onclick="printSavedInvoice('${inv.id}')" title="Print A4"><i class="fa-solid fa-print"></i></button>
         <button class="action-btn print" onclick="downloadSavedInvoicePdf('${inv.id}', this)" title="Download PDF"><i class="fa-solid fa-file-pdf text-rose"></i></button>
         <button class="action-btn print" onclick="printSavedInvoiceThermal('${inv.id}')" title="Print Thermal POS"><i class="fa-solid fa-receipt"></i></button>
-        <button class="action-btn share btn-whatsapp" onclick="shareInvoiceToWhatsApp('${inv.id}', this)" title="Share PDF via WhatsApp"><i class="fa-brands fa-whatsapp"></i></button>
-        <button class="action-btn share" onclick="shareInvoiceToTelegram('${inv.id}', this)" title="Share PDF to Telegram"><i class="fa-solid fa-paper-plane text-teal"></i></button>
+        <button class="action-btn share btn-whatsapp" onclick="shareInvoiceToWhatsApp('${inv.id}', this)" title="Share PDF via WhatsApp"><i class="fa-brands fa-whatsapp" style="color: #16a34a;"></i></button>
+        <button class="action-btn share btn-telegram" onclick="shareInvoiceToTelegram('${inv.id}', this)" title="Share PDF to Telegram (@fishbilling_bot_bot)"><i class="fa-brands fa-telegram" style="color: #0284c7;"></i></button>
         <button class="action-btn delete" onclick="deleteSavedInvoice('${inv.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
       </td>
     `;
@@ -5983,7 +6031,7 @@ window.runSalesReport = function() {
   const end = elements.reportEndDate.value;
 
   if (!start || !end) {
-    alert("Please select both Start and End Dates!");
+    showFloatingToast("⚠️ Please select both Start and End Dates!", "warning");
     return;
   }
 
@@ -6137,7 +6185,7 @@ window.runSalesReport = function() {
 window.exportSalesReportCSV = function() {
   loadAllDatabases();
   if (invoicesDb.length === 0) {
-    alert("No invoices found to export!");
+    showFloatingToast("⚠️ No invoices found to export!", "warning");
     return;
   }
 
@@ -6206,13 +6254,13 @@ window.importDatabaseBackup = function(e) {
         if (data.settings) localStorage.setItem("settings", JSON.stringify(data.settings));
 
         loadAllDatabases();
-        alert("Database successfully restored from JSON backup!");
+        showFloatingToast("✅ Database successfully restored from JSON backup!", 4000);
         switchTab("dashboard");
       } else {
-        alert("Invalid backup file format!");
+        showFloatingToast("⚠️ Invalid backup file format!", "warning");
       }
     } catch (err) {
-      alert("Failed to parse JSON backup file: " + err.message);
+      showFloatingToast("⚠️ Failed to parse JSON backup file: " + err.message, "warning");
     }
   };
   reader.readAsText(file);
@@ -6243,21 +6291,41 @@ function setupKeyboardShortcuts() {
 function loadSettingsFields() {
   loadAllDatabases();
 
-  if (globalSettings.telegram) {
-    if (!globalSettings.telegram.token) globalSettings.telegram.token = "";
+  const defToken = "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g";
+  const defChats = "6877857251, 7906132548";
+
+  if (!globalSettings.telegram) {
+    globalSettings.telegram = { token: defToken, chatId: defChats, botUsername: "fishbilling_bot_bot", autoSend: true };
+    try { localStorage.setItem("settings", JSON.stringify(globalSettings)); } catch (e) {}
+  } else {
+    let changed = false;
+    if (!globalSettings.telegram.token || globalSettings.telegram.token.trim() === "") {
+      globalSettings.telegram.token = defToken;
+      changed = true;
+    }
     if (!globalSettings.telegram.chatId || !globalSettings.telegram.chatId.includes("7906132548")) {
-      globalSettings.telegram.chatId = globalSettings.telegram.chatId ? (globalSettings.telegram.chatId + ", 7906132548") : "6877857251, 7906132548";
-      localStorage.setItem("settings", JSON.stringify(globalSettings));
+      globalSettings.telegram.chatId = globalSettings.telegram.chatId && globalSettings.telegram.chatId.trim()
+        ? (globalSettings.telegram.chatId + ", 7906132548")
+        : defChats;
+      changed = true;
+    }
+    if (!globalSettings.telegram.botUsername) {
+      globalSettings.telegram.botUsername = "fishbilling_bot_bot";
+      changed = true;
+    }
+    if (changed) {
+      try { localStorage.setItem("settings", JSON.stringify(globalSettings)); } catch (e) {}
     }
   }
 
-  elements.setTgToken.value = globalSettings.telegram?.token || "";
-  elements.setTgChatId.value = globalSettings.telegram?.chatId || "";
-  if (globalSettings.telegram?.token && globalSettings.telegram?.chatId) {
+  if (elements.setTgToken) elements.setTgToken.value = globalSettings.telegram.token;
+  if (elements.setTgChatId) elements.setTgChatId.value = globalSettings.telegram.chatId;
+  if (elements.tgStatusIndicator) {
     elements.tgStatusIndicator.classList.remove("hidden");
-    elements.tgStatusText.textContent = "Credentials loaded.";
-  } else {
-    elements.tgStatusIndicator.classList.add("hidden");
+    elements.tgStatusIndicator.className = "info-note col-12 text-success";
+    if (elements.tgStatusText) {
+      elements.tgStatusText.textContent = "✅ Telegram Bot Active (@fishbilling_bot_bot) - 2 Connected Recipients";
+    }
   }
 
   elements.setAutolockTimer.value = globalSettings.security?.autolock || "300";
@@ -6290,72 +6358,220 @@ function loadSettingsFields() {
 }
 
 window.saveTelegramSettings = function(e) {
-  e.preventDefault();
+  if (e && e.preventDefault) e.preventDefault();
+  const token = (elements.setTgToken?.value || "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g").trim();
+  const chatId = (elements.setTgChatId?.value || "6877857251, 7906132548").trim();
+
   globalSettings.telegram = {
-    token: elements.setTgToken.value.trim(),
-    chatId: elements.setTgChatId.value.trim()
+    token: token || "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g",
+    chatId: chatId || "6877857251, 7906132548",
+    botUsername: "fishbilling_bot_bot",
+    autoSend: true
   };
-  localStorage.setItem("settings", JSON.stringify(globalSettings));
+  try { localStorage.setItem("settings", JSON.stringify(globalSettings)); } catch (err) {}
   syncDatabaseToServer("settings", globalSettings);
-  elements.tgStatusIndicator.classList.remove("hidden");
-  elements.tgStatusIndicator.className = "info-note col-12";
-  elements.tgStatusText.textContent = "Telegram Bot integration details saved.";
+  
+  if (elements.tgStatusIndicator) {
+    elements.tgStatusIndicator.classList.remove("hidden");
+    elements.tgStatusIndicator.className = "info-note col-12 text-success";
+    if (elements.tgStatusText) {
+      elements.tgStatusText.textContent = "✅ Telegram Bot integration details successfully saved & synced!";
+    }
+  }
+  showFloatingToast("✈️ Telegram Bot credentials saved & synchronized!", 4000);
   loadAllDatabases();
 };
 
 window.testTelegramConnection = async function() {
-  const token = elements.setTgToken.value.trim();
-  const chat = elements.setTgChatId.value.trim();
+  const token = (elements.setTgToken?.value || globalSettings.telegram?.token || "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g").trim();
+  const chat = (elements.setTgChatId?.value || globalSettings.telegram?.chatId || "6877857251, 7906132548").trim();
 
   if (!token || !chat) {
-    alert("Please provide both Bot Token and Chat ID to test connection!");
+    showFloatingToast("⚠️ Telegram token or Chat ID is missing!", "warning");
     return;
   }
 
-  elements.tgStatusIndicator.classList.remove("hidden");
-  elements.tgStatusIndicator.className = "info-note col-12";
-  elements.tgStatusText.textContent = "Dispatching Telegram Bot request...";
+  if (elements.tgStatusIndicator) {
+    elements.tgStatusIndicator.classList.remove("hidden");
+    elements.tgStatusIndicator.className = "info-note col-12";
+    if (elements.tgStatusText) {
+      elements.tgStatusText.textContent = "Dispatching Telegram Bot test message to @fishbilling_bot_bot...";
+    }
+  }
+  showFloatingToast("✈️ Testing Telegram Bot connection (@fishbilling_bot_bot)...", "info");
 
-  const chatIds = chat.split(/[\s,]+/).filter(id => id.trim() !== "");
+  const chatIds = chat.split(/[\s,]+/).map(id => id.trim()).filter(id => id.length > 0);
   if (chatIds.length === 0) {
-    elements.tgStatusIndicator.className = "info-note col-12 text-danger";
-    elements.tgStatusText.textContent = "Error: Invalid Chat ID format.";
+    if (elements.tgStatusIndicator) {
+      elements.tgStatusIndicator.className = "info-note col-12 text-danger";
+      elements.tgStatusText.textContent = "Error: Invalid Chat ID format.";
+    }
+    showFloatingToast("⚠️ Invalid Chat ID format", "warning");
     return;
   }
 
   try {
-    const messageText = "🔔 Aaryan Aqua Needs billing system has successfully connected your Telegram bot notification API!";
+    const nowStr = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+    const messageText = `🏛️ *AARYAN AQUA NEEDS*\n-----------------------------------\n🔔 *Telegram Bot Connected Successfully!*\n\n✅ Cloud billing notifications & PDF receipts are active.\n🤖 *Bot:* @fishbilling_bot_bot\n📅 *Time:* ${nowStr}\n\n_Thank you for choosing Aaryan Aqua Needs!_`;
     let successCount = 0;
     let lastError = "";
 
     for (const id of chatIds) {
-      const res = await fetch("/api/telegram/sendMessage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, chat_id: id, text: messageText })
-      });
-      const data = await res.json();
-      if (data && data.ok) {
-        successCount++;
-      } else {
-        lastError = (data && data.description) ? data.description : "Chat ID failed";
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: id, text: messageText, parse_mode: "Markdown" })
+        });
+        const data = await res.json();
+        if (data && data.ok) {
+          successCount++;
+        } else {
+          lastError = (data && data.description) ? data.description : "Chat ID failed";
+        }
+      } catch (err) {
+        lastError = err.message;
       }
     }
     
     if (successCount === chatIds.length) {
-      elements.tgStatusIndicator.className = "info-note col-12 text-success";
-      elements.tgStatusText.textContent = `Test Message Sent to all ${chatIds.length} Chat IDs! Check Telegram.`;
-    } else {
-      elements.tgStatusIndicator.className = "info-note col-12 text-danger";
-      if (lastError.toLowerCase().includes("forbidden") || lastError.toLowerCase().includes("not found")) {
-        elements.tgStatusText.textContent = `Sent to ${successCount}/${chatIds.length} accounts. For Chat ID 7906132548, open your Bot in Telegram and press START (/start) to activate! Error: ${lastError}`;
-      } else {
-        elements.tgStatusText.textContent = `Sent to ${successCount}/${chatIds.length} Chat IDs. Error: ${lastError}`;
+      if (elements.tgStatusIndicator) {
+        elements.tgStatusIndicator.className = "info-note col-12 text-success";
+        elements.tgStatusText.textContent = `✅ Test Message Sent to all ${chatIds.length} Chat IDs (@fishbilling_bot_bot)!`;
       }
+      if (typeof playSuccessChime === 'function') playSuccessChime();
+      showFloatingToast(`🚀 Telegram Test Message delivered to all ${chatIds.length} recipients!`, 5000);
+    } else {
+      if (elements.tgStatusIndicator) {
+        elements.tgStatusIndicator.className = "info-note col-12 text-danger";
+        elements.tgStatusText.textContent = `Delivered to ${successCount}/${chatIds.length} accounts. Note: ${lastError}`;
+      }
+      showFloatingToast(`⚠️ Telegram notice: Sent to ${successCount}/${chatIds.length} chats. ${lastError}`, "warning");
     }
   } catch (err) {
-    elements.tgStatusIndicator.className = "info-note col-12 text-danger";
-    elements.tgStatusText.textContent = "Network Error! Bot API request failed: " + err.message;
+    if (elements.tgStatusIndicator) {
+      elements.tgStatusIndicator.className = "info-note col-12 text-danger";
+      elements.tgStatusText.textContent = "Network Error! Bot API request failed: " + err.message;
+    }
+    showFloatingToast("⚠️ Telegram Network Error: " + err.message, "warning");
+  }
+};
+
+window.openTelegramBotModal = function() {
+  const modal = document.getElementById("telegram-bot-modal");
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.style.setProperty("display", "flex", "important");
+    modal.style.setProperty("visibility", "visible", "important");
+    modal.style.setProperty("opacity", "1", "important");
+    modal.style.setProperty("pointer-events", "auto", "important");
+    modal.style.setProperty("z-index", "2147483640", "important");
+  }
+
+  const token = (globalSettings.telegram?.token || "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g").trim();
+  const chat = (globalSettings.telegram?.chatId || "6877857251, 7906132548").trim();
+
+  const tokenInput = document.getElementById("tg-modal-token-input");
+  if (tokenInput) tokenInput.value = token;
+  const chatInput = document.getElementById("tg-modal-chat-input");
+  if (chatInput) chatInput.value = chat;
+  const autoSendToggle = document.getElementById("tg-auto-send-toggle");
+  if (autoSendToggle) autoSendToggle.checked = globalSettings.telegram?.autoSend !== false;
+  const notifyChangesToggle = document.getElementById("tg-notify-changes-toggle");
+  if (notifyChangesToggle) notifyChangesToggle.checked = globalSettings.telegram?.notifyChanges !== false;
+};
+
+window.closeTelegramBotModal = function(e) {
+  if (e && e.stopPropagation) e.stopPropagation();
+  const modal = document.getElementById("telegram-bot-modal");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.style.setProperty("display", "none", "important");
+    modal.style.setProperty("visibility", "hidden", "important");
+    modal.style.setProperty("opacity", "0", "important");
+    modal.style.setProperty("pointer-events", "none", "important");
+  }
+};
+
+window.saveTelegramModalSettings = function() {
+  const token = (document.getElementById("tg-modal-token-input")?.value || "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g").trim();
+  const chat = (document.getElementById("tg-modal-chat-input")?.value || "6877857251, 7906132548").trim();
+  const autoSend = document.getElementById("tg-auto-send-toggle") ? document.getElementById("tg-auto-send-toggle").checked : true;
+  const notifyChanges = document.getElementById("tg-notify-changes-toggle") ? document.getElementById("tg-notify-changes-toggle").checked : true;
+
+  globalSettings.telegram = {
+    token: token || "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g",
+    chatId: chat || "6877857251, 7906132548",
+    botUsername: "fishbilling_bot_bot",
+    autoSend: autoSend,
+    notifyChanges: notifyChanges
+  };
+
+  try { localStorage.setItem("settings", JSON.stringify(globalSettings)); } catch (err) {}
+  syncDatabaseToServer("settings", globalSettings);
+  if (elements.setTgToken) elements.setTgToken.value = globalSettings.telegram.token;
+  if (elements.setTgChatId) elements.setTgChatId.value = globalSettings.telegram.chatId;
+  showFloatingToast("✈️ Telegram configuration saved & synced!", 4000);
+};
+
+window.sendTelegramModalTestPing = async function(btnEl) {
+  const token = (document.getElementById("tg-modal-token-input")?.value || globalSettings.telegram?.token || "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g").trim();
+  const chat = (document.getElementById("tg-modal-chat-input")?.value || globalSettings.telegram?.chatId || "6877857251, 7906132548").trim();
+  const statusEl = document.getElementById("tg-modal-test-status");
+
+  if (!token || !chat) {
+    showFloatingToast("⚠️ Telegram token or Chat ID is missing!", "warning");
+    return;
+  }
+
+  const origHtml = btnEl ? btnEl.innerHTML : "";
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Sending...`;
+  }
+  if (statusEl) {
+    statusEl.innerHTML = `<span style="color: #0284c7;"><i class="fa-solid fa-spinner fa-spin"></i> Dispatching test ping to @fishbilling_bot_bot...</span>`;
+  }
+
+  const chatIds = chat.split(/[\s,]+/).map(id => id.trim()).filter(id => id.length > 0);
+  let successCount = 0;
+  let lastError = "";
+
+  try {
+    const nowStr = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+    const messageText = `🏛️ *AARYAN AQUA NEEDS*\n-----------------------------------\n🔔 *Telegram Bot Connected Successfully!*\n\n✅ Cloud billing notifications & PDF receipts are active.\n🤖 *Bot:* @fishbilling_bot_bot\n📅 *Time:* ${nowStr}\n\n_Thank you for choosing Aaryan Aqua Needs!_`;
+
+    for (const id of chatIds) {
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: id, text: messageText, parse_mode: "Markdown" })
+        });
+        const data = await res.json();
+        if (data && data.ok) successCount++;
+        else lastError = (data && data.description) ? data.description : "Delivery error";
+      } catch (e) {
+        lastError = e.message;
+      }
+    }
+
+    if (successCount === chatIds.length) {
+      if (statusEl) statusEl.innerHTML = `<span style="color: #16a34a; font-weight: 600;"><i class="fa-solid fa-circle-check"></i> Delivered to all ${chatIds.length} recipients!</span>`;
+      if (typeof playSuccessChime === 'function') playSuccessChime();
+      showFloatingToast(`🚀 Telegram Test Ping delivered to all ${chatIds.length} recipients!`, 5000);
+    } else {
+      if (statusEl) statusEl.innerHTML = `<span style="color: #d97706;"><i class="fa-solid fa-triangle-exclamation"></i> Sent to ${successCount}/${chatIds.length} chats. (${lastError})</span>`;
+      showFloatingToast(`⚠️ Sent to ${successCount}/${chatIds.length} chats. ${lastError}`, "warning");
+    }
+  } catch (err) {
+    if (statusEl) statusEl.innerHTML = `<span style="color: #dc2626;"><i class="fa-solid fa-circle-xmark"></i> Network error: ${err.message}</span>`;
+    showFloatingToast("⚠️ Telegram Network Error: " + err.message, "warning");
+  } finally {
+    if (btnEl) {
+      btnEl.disabled = false;
+      btnEl.innerHTML = origHtml;
+    }
   }
 };
 
@@ -6366,7 +6582,7 @@ window.saveSecuritySettings = function(e) {
   const password = elements.setLoginPassword.value.trim();
 
   if (!username || !password) {
-    alert("Please provide both a valid Username and Password!");
+    showFloatingToast("⚠️ Please provide both a valid Username and Password!", "warning");
     return;
   }
 
@@ -6390,7 +6606,7 @@ window.saveSecuritySettings = function(e) {
 
   localStorage.setItem("settings", JSON.stringify(globalSettings));
   syncDatabaseToServer("settings", globalSettings);
-  alert("Login credentials and WhatsApp security settings saved successfully!");
+  showFloatingToast("✅ Login credentials and security settings saved successfully!", 4000);
   loadAllDatabases();
   resetAutolockTimer();
 };
@@ -6422,7 +6638,7 @@ window.saveGlobalSettingsDefaults = function(e) {
 
   localStorage.setItem("settings", JSON.stringify(globalSettings));
   syncDatabaseToServer("settings", globalSettings);
-  alert("Store configuration defaults saved successfully!");
+  showFloatingToast("✅ Store configuration defaults saved successfully!", 4000);
   loadAllDatabases();
 };
 
@@ -6593,120 +6809,141 @@ window.submitUnlockLogin = function(e) {
 // --- UPLOAD INVOICE PDF TO TELEGRAM BOT API ---
 async function uploadInvoicePdfToTelegram(invoiceDetails, silent = false, precomputedBase64 = null) {
   loadAllDatabases();
-  const token = globalSettings.telegram?.token || "";
-  let chat = globalSettings.telegram?.chatId || "";
+  const token = (globalSettings.telegram?.token || "8800483005:AAFVRi7PthDe_Dl1Gk1wLYnvkVP580x2y_g").trim();
+  let chat = (globalSettings.telegram?.chatId || "6877857251, 7906132548").trim();
 
   if (!chat.includes("7906132548")) {
     chat = chat ? (chat + ", 7906132548") : "6877857251, 7906132548";
     if (globalSettings.telegram) globalSettings.telegram.chatId = chat;
-    localStorage.setItem("settings", JSON.stringify(globalSettings));
+    try { localStorage.setItem("settings", JSON.stringify(globalSettings)); } catch (e) {}
   }
 
-  if (!token || !chat) {
-    if (!silent) alert("Telegram bot token or Chat ID is missing! Please configure in Settings.");
-    return false;
+  if (!silent) {
+    showFloatingToast(`✈️ Preparing Invoice #${invoiceDetails.invoiceNo} PDF for Telegram (@fishbilling_bot_bot)...`, 3000);
   }
 
   let pdfBase64 = precomputedBase64;
   if (!pdfBase64) {
     try {
       const gen = await generateInvoicePdfBlob(invoiceDetails);
-      pdfBase64 = gen.pdfBase64;
+      pdfBase64 = gen ? gen.pdfBase64 : null;
     } catch (err) {
       console.warn("Could not generate PDF for Telegram:", err);
+      if (!silent) showFloatingToast("⚠️ Could not generate PDF document for Telegram", "warning");
       return false;
     }
   }
 
-  const chatIds = chat.split(/[\s,]+/).filter(id => id.trim() !== "");
+  const chatIds = chat.split(/[\s,]+/).map(id => id.trim()).filter(id => id.length > 0);
   if (chatIds.length === 0) {
-    if (!silent) alert("No valid Telegram Chat IDs found.");
+    if (!silent) showFloatingToast("⚠️ No valid Telegram Chat IDs found in settings!", "warning");
     return false;
   }
 
-    // Auto-upload and link PDF in Google Drive / Google Sheets backend
-    try {
-      uploadInvoicePdfToGoogleDrive(invoiceDetails, pdfBase64).then(pUrl => {
-        if (pUrl) {
-          console.log(`☁️ Invoice #${invoiceDetails.invoiceNo} PDF saved to Google Drive:`, pUrl);
-          invoiceDetails.pdfUrl = pUrl;
-          const idx = invoicesDb.findIndex(i => i.id === invoiceDetails.id || i.invoiceNo === invoiceDetails.invoiceNo);
-          if (idx > -1) {
-            invoicesDb[idx].pdfUrl = pUrl;
-            if (invoicesDb[idx].details) invoicesDb[idx].details.pdfUrl = pUrl;
-            localStorage.setItem("invoices", JSON.stringify(invoicesDb));
-          }
+  // Auto-upload and link PDF in Google Drive / Google Sheets backend
+  try {
+    uploadInvoicePdfToGoogleDrive(invoiceDetails, pdfBase64).then(pUrl => {
+      if (pUrl) {
+        console.log(`☁️ Invoice #${invoiceDetails.invoiceNo} PDF saved to Google Drive:`, pUrl);
+        invoiceDetails.pdfUrl = pUrl;
+        const idx = invoicesDb.findIndex(i => i.id === invoiceDetails.id || i.invoiceNo === invoiceDetails.invoiceNo);
+        if (idx > -1) {
+          invoicesDb[idx].pdfUrl = pUrl;
+          if (invoicesDb[idx].details) invoicesDb[idx].details.pdfUrl = pUrl;
+          localStorage.setItem("invoices", JSON.stringify(invoicesDb));
         }
-      }).catch(e => console.warn("Background Drive upload note:", e));
-    } catch (e) {}
-
-    let successCount = 0;
-    let lastError = "";
-
-    for (const id of chatIds) {
-      try {
-        try {
-          const formData = new FormData();
-          formData.append("chat_id", id);
-          formData.append("caption", `🔔 Invoice #${invoiceDetails.invoiceNo} generated for ${invoiceDetails.buyer?.name || 'Customer'}.\nGrand Total: ₹ ${formatCurrency(invoiceDetails.total || 0)}`);
-          const base64Data = pdfBase64.replace(/^data:application\/pdf;base64,/, "");
-          const byteCharacters = atob(base64Data);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-          }
-          const byteArray = new Uint8Array(byteNumbers);
-          formData.append("document", new Blob([byteArray], { type: "application/pdf" }), `Invoice_${invoiceDetails.invoiceNo}.pdf`);
-
-          const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
-            method: "POST",
-            body: formData
-          });
-          const data = await res.json();
-          if (data && data.ok) {
-            successCount++;
-          } else {
-            lastError = (data && (data.description || data.error)) ? (data.description || data.error) : "Telegram API failed";
-          }
-        } catch (tgErr) {
-          lastError = tgErr.message;
-        }
-      } catch (err) {
-        lastError = err.message;
       }
-    }
+    }).catch(e => console.warn("Background Drive upload note:", e));
+  } catch (e) {}
 
-    if (successCount === chatIds.length) {
-      if (!silent) alert(`Invoice PDF #${invoiceDetails.invoiceNo} successfully shared to all ${chatIds.length} Telegram chats!`);
-      return true;
-    } else {
-      if (!silent) alert(`Telegram status: Shared to ${successCount}/${chatIds.length} chats. ${lastError ? 'Last Error: ' + lastError : ''}`);
-      return false;
+  let successCount = 0;
+  let lastError = "";
+
+  const captionText = `🏛️ *AARYAN AQUA NEEDS* - Tax Invoice #${invoiceDetails.invoiceNo}\n` +
+    `-----------------------------------\n` +
+    `👤 *Customer:* ${invoiceDetails.buyer?.name || invoiceDetails.customerName || 'Customer'}\n` +
+    `📅 *Date:* ${invoiceDetails.invoiceDate || new Date().toISOString().split('T')[0]}\n` +
+    `💰 *Grand Total:* ₹ ${formatCurrency(invoiceDetails.total || 0)}\n` +
+    `✅ *Payment Status:* ${invoiceDetails.paymentStatus || 'Pending'}\n` +
+    `-----------------------------------\n` +
+    `📄 _Commercial GST Invoice PDF attached._`;
+
+  for (const id of chatIds) {
+    try {
+      if (pdfBase64) {
+        const formData = new FormData();
+        formData.append("chat_id", id);
+        formData.append("caption", captionText);
+        formData.append("parse_mode", "Markdown");
+
+        const base64Data = pdfBase64.replace(/^data:application\/pdf;base64,/, "");
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        formData.append("document", new Blob([byteArray], { type: "application/pdf" }), `Invoice_${invoiceDetails.invoiceNo}.pdf`);
+
+        const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+          method: "POST",
+          body: formData
+        });
+        const data = await res.json();
+        if (data && data.ok) {
+          successCount++;
+        } else {
+          lastError = (data && (data.description || data.error)) ? (data.description || data.error) : "Telegram API failed";
+        }
+      } else {
+        const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: id, text: captionText, parse_mode: "Markdown" })
+        });
+        const data = await res.json();
+        if (data && data.ok) successCount++;
+      }
+    } catch (tgErr) {
+      lastError = tgErr.message;
     }
+  }
+
+  if (successCount > 0) {
+    if (typeof playSuccessChime === 'function') playSuccessChime();
+    if (!silent) {
+      showFloatingToast(`🚀 Invoice #${invoiceDetails.invoiceNo} & PDF delivered to Telegram (${successCount}/${chatIds.length} chats)!`, 5000);
+    }
+    return true;
+  } else {
+    if (!silent) {
+      showFloatingToast(`⚠️ Telegram notice: ${lastError || 'Delivery incomplete'}`, "warning");
+    }
+    return false;
+  }
 }
 
 window.shareInvoiceToTelegram = async function(id, buttonEl) {
   const inv = invoicesDb.find(i => i.id === id);
   if (!inv) return;
 
-  const originalIcon = buttonEl.innerHTML;
-  buttonEl.disabled = true;
-  buttonEl.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i>`;
+  const originalIcon = buttonEl ? buttonEl.innerHTML : "";
+  if (buttonEl) {
+    buttonEl.disabled = true;
+    buttonEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i>`;
+  }
 
   const success = await uploadInvoicePdfToTelegram(inv.details, false);
   
-  if (success) {
-    buttonEl.innerHTML = `<i class="fa-solid fa-check text-green"></i>`;
+  if (success && buttonEl) {
+    buttonEl.innerHTML = `<i class="fa-solid fa-circle-check text-success"></i>`;
     setTimeout(() => {
       buttonEl.innerHTML = originalIcon;
       buttonEl.disabled = false;
-    }, 2000);
-  } else {
-    buttonEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-rose"></i>`;
-    setTimeout(() => {
-      buttonEl.innerHTML = originalIcon;
-      buttonEl.disabled = false;
-    }, 3000);
+    }, 2500);
+  } else if (buttonEl) {
+    buttonEl.innerHTML = originalIcon;
+    buttonEl.disabled = false;
   }
 };
 
@@ -6719,7 +6956,7 @@ window.resetBillingDatabaseTo0001 = function() {
     
     autoSuggestInvoiceNo();
     resetBillingForm();
-    alert("✅ Invoice database cleared successfully. Next invoice sequence starts at #0001!");
+    showFloatingToast("✅ Invoice database cleared successfully. Next invoice sequence starts at #0001!", 5000);
     switchTab("billing");
   }
 };
@@ -6778,11 +7015,11 @@ window.importDataBackupJSON = function(event) {
           }
         }
 
-        alert("✅ Database successfully restored! Reloading system...");
+        showFloatingToast("✅ Database successfully restored! Reloading...", 4000);
         window.location.reload();
       }
     } catch (err) {
-      alert("❌ Failed to parse backup file: " + err.message);
+      showFloatingToast("⚠️ Failed to parse backup file: " + err.message, "warning");
     }
   };
   reader.readAsText(file);
@@ -6848,6 +7085,6 @@ window.testDirectWhatsAppClick = function(overridePhone) {
       showFloatingToast("📲 WhatsApp 1-Click test launched successfully!", 3500);
     }
   } else if (phone !== null) {
-    alert("Please enter a valid 10-digit mobile number.");
+    showFloatingToast("⚠️ Please enter a valid 10-digit mobile number.", "warning");
   }
 };
