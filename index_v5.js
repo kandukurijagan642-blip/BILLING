@@ -1014,7 +1014,7 @@ window.triggerDatabaseSync = async function(forceReload = false) {
       const mergedProds = cleanProds.map(serverProd => {
         const localProd = productsDb.find(p => p.id === serverProd.id);
         const mutationTime = (window.recentProductMutations && window.recentProductMutations[serverProd.id]) || 0;
-        const isRecentlyMutated = (Date.now() - mutationTime) < 10000;
+        const isRecentlyMutated = (Date.now() - mutationTime) < 20000;
         if (localProd && isRecentlyMutated) {
           return {
             ...serverProd,
@@ -1026,8 +1026,16 @@ window.triggerDatabaseSync = async function(forceReload = false) {
         return serverProd;
       });
 
-      if (JSON.stringify(mergedProds) !== JSON.stringify(productsDb)) {
-        productsDb = mergedProds;
+      // Retain newly created local products that haven't reached server snapshot yet
+      const recentlyAddedLocalProds = productsDb.filter(localP => {
+        const isRecent = (Date.now() - ((window.recentProductMutations && window.recentProductMutations[localP.id]) || 0)) < 20000;
+        const inServer = cleanProds.some(sp => sp.id === localP.id);
+        return isRecent && !inServer;
+      });
+      const allMergedProds = mergedProds.concat(recentlyAddedLocalProds);
+
+      if (JSON.stringify(allMergedProds) !== JSON.stringify(productsDb)) {
+        productsDb = allMergedProds;
         try { localStorage.setItem("products", JSON.stringify(productsDb)); } catch(e) {}
         changed = true;
       }
@@ -1036,8 +1044,24 @@ window.triggerDatabaseSync = async function(forceReload = false) {
     // 2. Authoritative Parties directly from Google Database
     if (Array.isArray(data.parties) && data.parties.length > 0) {
       const cleanParties = data.parties.filter(p => p && (p.id || p.name));
-      if (JSON.stringify(cleanParties) !== JSON.stringify(partiesDb)) {
-        partiesDb = cleanParties;
+      const mergedParties = cleanParties.map(serverP => {
+        const localP = partiesDb.find(p => p.id === serverP.id);
+        const mutationTime = (window.recentPartyMutations && window.recentPartyMutations[serverP.id]) || 0;
+        const isRecentlyMutated = (Date.now() - mutationTime) < 20000;
+        if (localP && isRecentlyMutated) {
+          return Object.assign({}, serverP, localP);
+        }
+        return serverP;
+      });
+      const recentlyAddedLocalParties = partiesDb.filter(localP => {
+        const isRecent = (Date.now() - ((window.recentPartyMutations && window.recentPartyMutations[localP.id]) || 0)) < 20000;
+        const inServer = cleanParties.some(sp => sp.id === localP.id);
+        return isRecent && !inServer;
+      });
+      const allMergedParties = mergedParties.concat(recentlyAddedLocalParties);
+
+      if (JSON.stringify(allMergedParties) !== JSON.stringify(partiesDb)) {
+        partiesDb = allMergedParties;
         try { localStorage.setItem("parties", JSON.stringify(partiesDb)); } catch(e) {}
         changed = true;
       }
@@ -2151,7 +2175,6 @@ function reconcileProductInventoryStock(oldInvoice, newInvoice) {
     try {
       localStorage.setItem("products", JSON.stringify(productsDb));
       syncDatabaseToServer("products", productsDb);
-      if (typeof window.triggerDatabaseSync === 'function') window.triggerDatabaseSync();
     } catch (err) {
       console.warn("Unable to save products db:", err);
     }
@@ -3436,9 +3459,11 @@ function bindBillingFormInputs() {
     prod.stock = newStock;
     prod.updatedAt = new Date().toISOString();
 
+    if (!window.recentProductMutations) window.recentProductMutations = {};
+    window.recentProductMutations[prod.id] = Date.now();
+
     localStorage.setItem("products", JSON.stringify(productsDb));
     syncDatabaseToServer("products", productsDb);
-    if (window.triggerDatabaseSync) window.triggerDatabaseSync();
     populateBillingSelectors();
 
     if (elements.billItemSelect) {
@@ -4271,7 +4296,6 @@ window.saveCurrentInvoiceRecord = async function(actionType = 'save_only', btnEl
       }
       syncDatabaseToServer("invoices", invoiceRecord);
       if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
-      if (typeof window.triggerDatabaseSync === 'function') window.triggerDatabaseSync();
     } catch (err) {
       console.warn("Unable to persist invoices:", err);
     }
@@ -7139,7 +7163,6 @@ window.deleteSavedInvoice = function(id) {
       loadInvoicesHistoryTable();
     }
     if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
-    if (window.triggerDatabaseSync) window.triggerDatabaseSync();
   }
 };
 
@@ -7371,14 +7394,22 @@ window.saveProductModal = function(e) {
     productsDb.push(product);
   }
 
+  if (!window.recentProductMutations) window.recentProductMutations = {};
+  window.recentProductMutations[product.id] = Date.now();
+
   localStorage.setItem("products", JSON.stringify(productsDb));
   if (window.AaryanDB && window.AaryanDB.isReady) AaryanDB.saveAllProducts(productsDb);
-  syncDatabaseToServer("products", productsDb);
+  
   closeProductModal();
   loadProductsDatabaseTable();
   populateBillingSelectors();
-  if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
-  if (window.triggerDatabaseSync) window.triggerDatabaseSync();
+  if (typeof updateDashboardOverview === 'function') updateDashboardOverview();
+
+  // Instant Cross-Browser Broadcast (< 15ms)
+  broadcastInterTabEvent('products_saved', { products: productsDb });
+
+  // Direct Push to Google Cloud Database (< 1s)
+  pushDirectToGoogleDatabase("save_products", { products: productsDb });
 
   const stockMsg = id && oldStock !== finalStock 
     ? `Stock updated: ${oldStock} ➔ ${finalStock} ${unit}`
@@ -7636,7 +7667,6 @@ window.deleteProductRowDb = function(id) {
     if (window.AaryanDB && window.AaryanDB.isReady) AaryanDB.saveAllProducts(productsDb);
     loadProductsDatabaseTable();
     if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
-    if (window.triggerDatabaseSync) window.triggerDatabaseSync();
   }
 };
 
@@ -7730,14 +7760,21 @@ window.savePartyModal = function(e) {
     partiesDb.push(party);
   }
 
+  if (!window.recentPartyMutations) window.recentPartyMutations = {};
+  window.recentPartyMutations[party.id] = Date.now();
+
   localStorage.setItem("parties", JSON.stringify(partiesDb));
   if (window.AaryanDB && window.AaryanDB.isReady) AaryanDB.saveAllParties(partiesDb);
-  syncDatabaseToServer("parties", partiesDb);
+  
   closePartyModal();
   loadPartiesDatabaseLists();
   populateBillingSelectors();
-  if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
-  if (window.triggerDatabaseSync) window.triggerDatabaseSync();
+
+  // Instant Cross-Browser Broadcast (< 15ms)
+  broadcastInterTabEvent('parties_saved', { parties: partiesDb });
+
+  // Direct Push to Google Cloud Database (< 1s)
+  pushDirectToGoogleDatabase("save_parties", { parties: partiesDb });
 
   sendPartyTelegramReport(party, isNew);
 };
@@ -7912,7 +7949,6 @@ window.deletePartyRowDb = function(id) {
     loadPartiesDatabaseLists();
     populateBillingSelectors();
     if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
-    if (window.triggerDatabaseSync) window.triggerDatabaseSync();
   }
 };
 
