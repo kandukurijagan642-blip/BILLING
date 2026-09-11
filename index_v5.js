@@ -844,8 +844,10 @@ async function pushDirectToGoogleDatabase(action, payload) {
     });
 
     if (res.ok) {
-      const data = await res.json();
-      if (data && data.ok) {
+      const text = await res.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch (pe) {}
+      if (data && (data.ok || data.success)) {
         window.lastSyncTimeMs = Date.now();
         if (typeof window.updateCloudSyncBadge === "function") {
           window.updateCloudSyncBadge("synced");
@@ -1017,26 +1019,42 @@ window.triggerDatabaseSync = async function(forceReload = false) {
     if (Array.isArray(data.products) && data.products.length > 0) {
       const cleanProds = data.products.filter(p => p && (p.id || p.description));
       
-      // Preserve recent local optimistic mutations (within 10 seconds)
+      // Preserve recent local optimistic mutations (within 30 seconds)
       const mergedProds = cleanProds.map(serverProd => {
-        const localProd = productsDb.find(p => p.id === serverProd.id);
-        const mutationTime = (window.recentProductMutations && window.recentProductMutations[serverProd.id]) || 0;
-        const isRecentlyMutated = (Date.now() - mutationTime) < 20000;
-        if (localProd && isRecentlyMutated) {
-          return {
-            ...serverProd,
-            stock: localProd.stock,
-            discount: localProd.discount,
-            updatedAt: localProd.updatedAt
-          };
-        }
-        return serverProd;
+        const localProd = productsDb.find(p => p && (p.id === serverProd.id || (p.description && serverProd.description && p.description.trim().toLowerCase() === serverProd.description.trim().toLowerCase())));
+        const mutationTime = Math.max(
+          (window.recentProductMutations && window.recentProductMutations[serverProd.id]) || 0,
+          (window.recentProductMutations && serverProd.description && window.recentProductMutations[serverProd.description]) || 0,
+          (localProd && window.recentProductMutations && window.recentProductMutations[localProd.id]) || 0
+        );
+        const isRecentlyMutated = (Date.now() - mutationTime) < 30000;
+        
+        const rate = Number((isRecentlyMutated && localProd && localProd.rate !== undefined ? localProd.rate : serverProd.rate) || 0);
+        const disc = Number((isRecentlyMutated && localProd && localProd.discount !== undefined ? localProd.discount : (serverProd.discount !== undefined ? serverProd.discount : 0)) || 0);
+        const valAfterDisc = Math.round(Math.max(0, rate - (rate * disc / 100)) * 100) / 100;
+        const stock = Number((isRecentlyMutated && localProd && localProd.stock !== undefined ? localProd.stock : serverProd.stock) || 0);
+        const totalVal = Math.round((stock * valAfterDisc) * 100) / 100;
+
+        return {
+          ...serverProd,
+          id: (localProd && localProd.id) || serverProd.id,
+          rate,
+          discount: disc,
+          price: valAfterDisc,
+          stock,
+          totalValue: totalVal,
+          updatedAt: (isRecentlyMutated && localProd && localProd.updatedAt) || serverProd.updatedAt || new Date().toISOString()
+        };
       });
 
       // Retain newly created local products that haven't reached server snapshot yet
       const recentlyAddedLocalProds = productsDb.filter(localP => {
-        const isRecent = (Date.now() - ((window.recentProductMutations && window.recentProductMutations[localP.id]) || 0)) < 20000;
-        const inServer = cleanProds.some(sp => sp.id === localP.id);
+        if (!localP) return false;
+        const isRecent = (Date.now() - Math.max(
+          ((window.recentProductMutations && window.recentProductMutations[localP.id]) || 0),
+          ((window.recentProductMutations && localP.description && window.recentProductMutations[localP.description]) || 0)
+        )) < 30000;
+        const inServer = cleanProds.some(sp => sp && (sp.id === localP.id || (sp.description && localP.description && sp.description.trim().toLowerCase() === localP.description.trim().toLowerCase())));
         return isRecent && !inServer;
       });
       const allMergedProds = mergedProds.concat(recentlyAddedLocalProds);
@@ -1077,9 +1095,26 @@ window.triggerDatabaseSync = async function(forceReload = false) {
     // 3. Authoritative Invoices directly from Google Database
     if (Array.isArray(data.invoices)) {
       const cleanInvoices = data.invoices.filter(i => i && (i.id || i.invoiceNo));
-      cleanInvoices.sort((a, b) => String(a.invoiceNo || "").localeCompare(String(b.invoiceNo || "")));
-      if (JSON.stringify(cleanInvoices) !== JSON.stringify(invoicesDb)) {
-        invoicesDb = cleanInvoices;
+      
+      // Retain newly saved local invoices that haven't reached server snapshot yet (within 30 seconds)
+      if (!window.recentInvoiceMutations) window.recentInvoiceMutations = {};
+      const recentlyAddedLocalInvoices = invoicesDb.filter(localInv => {
+        if (!localInv) return false;
+        const invId = localInv.id;
+        const invNo = String(localInv.invoiceNo || (localInv.details && localInv.details.invoiceNo) || "").trim();
+        const mutationTime = Math.max(
+          (window.recentInvoiceMutations[invId]) || 0,
+          (window.recentInvoiceMutations[invNo]) || 0
+        );
+        const isRecent = (Date.now() - mutationTime) < 30000;
+        const inServer = cleanInvoices.some(si => si && (si.id === invId || String(si.invoiceNo || (si.details && si.details.invoiceNo) || "").trim() === invNo));
+        return isRecent && !inServer;
+      });
+
+      const allMergedInvoices = cleanInvoices.concat(recentlyAddedLocalInvoices);
+      allMergedInvoices.sort((a, b) => String(a.invoiceNo || "").localeCompare(String(b.invoiceNo || "")));
+      if (JSON.stringify(allMergedInvoices) !== JSON.stringify(invoicesDb)) {
+        invoicesDb = allMergedInvoices;
         try { localStorage.setItem("invoices", JSON.stringify(invoicesDb)); } catch(e) {}
         changed = true;
       }
@@ -4322,8 +4357,24 @@ window.saveCurrentInvoiceRecord = async function(actionType = 'save_only', btnEl
       invoiceNo: currentInvoice.invoiceNo,
       invoiceDate: currentInvoice.invoiceDate,
       customerName: primaryCustomerDisplay,
+      buyer: currentInvoice.buyer,
+      consignee: currentInvoice.consignee,
+      items: currentInvoice.items,
       itemsCount: currentInvoice.items.length,
+      taxable: taxableVal,
+      cgst: totalCgst,
+      sgst: totalSgst,
+      igst: totalIgst,
+      roundOff: roundOff,
       total: grandTotal,
+      paymentStatus: currentInvoice.paymentStatus,
+      paymentMode: currentInvoice.paymentMode,
+      paidAmount: currentInvoice.paidAmount,
+      balancePaid: currentInvoice.balancePaid,
+      balanceDue: currentInvoice.balanceDue,
+      transportMode: currentInvoice.transportMode,
+      destination: currentInvoice.destination,
+      supplyStateCode: currentInvoice.supplyStateCode,
       details: JSON.parse(JSON.stringify(currentInvoice))
     };
 
@@ -4342,6 +4393,10 @@ window.saveCurrentInvoiceRecord = async function(actionType = 'save_only', btnEl
       reconcileProductInventoryStock(null, currentInvoice);
       invoicesDb.push(invoiceRecord);
     }
+
+    if (!window.recentInvoiceMutations) window.recentInvoiceMutations = {};
+    window.recentInvoiceMutations[invoiceRecord.id] = Date.now();
+    window.recentInvoiceMutations[invoiceRecord.invoiceNo] = Date.now();
 
     // Persist to localStorage, IndexedDB & push to Google Sheets master database
     try {
@@ -7445,6 +7500,9 @@ window.saveProductModal = function(e) {
     actionReportType = `New Product Added (Opening Stock: ${finalStock} ${unit})`;
   }
 
+  const valAfterDisc = Math.round(Math.max(0, rate - (rate * disc / 100)) * 100) / 100;
+  const totalVal = Math.round((finalStock * valAfterDisc) * 100) / 100;
+
   const product = { 
     id: id || "prod-" + Date.now(), 
     description: desc, 
@@ -7452,9 +7510,11 @@ window.saveProductModal = function(e) {
     packSize: pack, 
     unit, 
     rate, 
+    price: valAfterDisc,
     gstRate: 0, 
     discount: disc, 
     stock: finalStock, 
+    totalValue: totalVal,
     updatedAt: new Date().toISOString() 
   };
 
@@ -7467,12 +7527,13 @@ window.saveProductModal = function(e) {
 
   if (!window.recentProductMutations) window.recentProductMutations = {};
   window.recentProductMutations[product.id] = Date.now();
+  if (product.description) window.recentProductMutations[product.description] = Date.now();
 
   localStorage.setItem("products", JSON.stringify(productsDb));
   if (window.AaryanDB && window.AaryanDB.isReady) AaryanDB.saveAllProducts(productsDb);
   
   closeProductModal();
-  loadProductsDatabaseTable();
+  renderProductsTable(productsDb);
   populateBillingSelectors();
   if (typeof updateDashboardOverview === 'function') updateDashboardOverview();
 
@@ -7540,19 +7601,67 @@ window.adjustProductStock = function(id, delta) {
 };
 
 window.updateProductDiscountInline = function(id, newDiscount) {
-  const prod = productsDb.find(p => p.id === id);
+  const prod = productsDb.find(p => p && (p.id === id || (p.description && p.description.trim().toLowerCase() === String(id).trim().toLowerCase())));
   if (!prod) return;
-  const parsedDisc = Math.max(0, Math.min(100, parseFloat(newDiscount) || 0));
+  const parsedDisc = Math.max(0, Math.min(100, Math.round((parseFloat(newDiscount) || 0) * 10) / 10));
   prod.discount = parsedDisc;
+  const rate = parseFloat(prod.rate) || 0;
+  const valAfterDisc = Math.round(Math.max(0, rate - (rate * parsedDisc / 100)) * 100) / 100;
+  prod.price = valAfterDisc;
+  const stock = parseInt(prod.stock, 10) || 0;
+  prod.totalValue = Math.round((stock * valAfterDisc) * 100) / 100;
   prod.updatedAt = new Date().toISOString();
-  window.recentProductMutations[id] = Date.now();
+
+  if (!window.recentProductMutations) window.recentProductMutations = {};
+  window.recentProductMutations[prod.id] = Date.now();
+  if (prod.description) window.recentProductMutations[prod.description] = Date.now();
+
   localStorage.setItem("products", JSON.stringify(productsDb));
   if (window.AaryanDB && window.AaryanDB.isReady) AaryanDB.saveAllProducts(productsDb);
-  syncDatabaseToServer("products", productsDb);
-  loadProductsDatabaseTable();
-  populateBillingSelectors();
+
+  // Push directly to Google Cloud immediately
+  pushDirectToGoogleDatabase("save_products", { products: productsDb });
+
+  // Instant cross-browser broadcast (<15ms)
+  broadcastInterTabEvent('products_saved', { products: productsDb });
   if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
-  showFloatingToast(`🏷️ Discount for "${prod.description}" set to ${parsedDisc}%!`);
+
+  renderProductsTable(productsDb);
+  populateBillingSelectors();
+  if (typeof updateDashboardOverview === 'function') updateDashboardOverview();
+  showFloatingToast(`🏷️ Discount for "${prod.description}" saved: ${parsedDisc}% (Price: ₹ ${formatCurrency(valAfterDisc)})!`, "success");
+};
+
+window.updateProductPriceAfterDiscountInline = function(id, newPrice) {
+  const prod = productsDb.find(p => p && (p.id === id || (p.description && p.description.trim().toLowerCase() === String(id).trim().toLowerCase())));
+  if (!prod) return;
+  const rate = parseFloat(prod.rate) || 0;
+  const targetPrice = Math.max(0, Math.round((parseFloat(newPrice) || 0) * 100) / 100);
+  let computedDisc = 0;
+  if (rate > 0 && targetPrice <= rate) {
+    computedDisc = Math.round(((rate - targetPrice) / rate) * 1000) / 10;
+  }
+  prod.discount = computedDisc;
+  prod.price = targetPrice;
+  const stock = parseInt(prod.stock, 10) || 0;
+  prod.totalValue = Math.round((stock * targetPrice) * 100) / 100;
+  prod.updatedAt = new Date().toISOString();
+
+  if (!window.recentProductMutations) window.recentProductMutations = {};
+  window.recentProductMutations[prod.id] = Date.now();
+  if (prod.description) window.recentProductMutations[prod.description] = Date.now();
+
+  localStorage.setItem("products", JSON.stringify(productsDb));
+  if (window.AaryanDB && window.AaryanDB.isReady) AaryanDB.saveAllProducts(productsDb);
+
+  pushDirectToGoogleDatabase("save_products", { products: productsDb });
+  broadcastInterTabEvent('products_saved', { products: productsDb });
+  if (typeof window.broadcastDatabaseMutation === 'function') window.broadcastDatabaseMutation();
+
+  renderProductsTable(productsDb);
+  populateBillingSelectors();
+  if (typeof updateDashboardOverview === 'function') updateDashboardOverview();
+  showFloatingToast(`🏷️ Price for "${prod.description}" saved: ₹ ${formatCurrency(targetPrice)} (${computedDisc}% disc)!`, "success");
 };
 
 function loadProductsDatabaseTable() {
@@ -7659,17 +7768,20 @@ function renderProductsTable(records) {
       </td>
       <td style="text-align: right; font-weight: 600; color: #334155; font-size: 13px;">₹ ${formatCurrency(rate)}</td>
       <td style="text-align: center;">
-        <div class="prod-discount-badge" title="Click to edit discount percentage">
+        <div class="prod-discount-badge" title="Click to edit promotional discount percentage">
           <input type="number" step="0.1" min="0" max="100" value="${disc}" 
             onchange="updateProductDiscountInline('${p.id}', this.value)" 
+            onkeydown="if(event.key==='Enter'){this.blur();}"
             class="prod-discount-input">
           <span class="prod-discount-pct">%</span>
         </div>
       </td>
       <td style="text-align: right;">
-        <div style="display: flex; flex-direction: column; align-items: flex-end;">
+        <div style="display: flex; flex-direction: column; align-items: flex-end; cursor: pointer;" 
+             onclick="const pr = prompt('Set direct Price After Discount for \\'${p.description}\\':', '${valAfterDisc}'); if(pr!==null) updateProductPriceAfterDiscountInline('${p.id}', pr);"
+             title="Click to directly set price after discount (₹)">
           <span style="font-weight: 800; color: #16a34a; font-size: 13.5px;">₹ ${formatCurrency(valAfterDisc)}</span>
-          ${disc > 0 ? `<span style="font-size: 10px; color: #059669; font-weight: 600;">(-${disc}%)</span>` : ''}
+          ${disc > 0 ? `<span style="font-size: 10px; color: #059669; font-weight: 600;">(-${disc}%)</span>` : '<span style="font-size: 10px; color: #94a3b8;">(0% disc)</span>'}
         </div>
       </td>
       <td style="text-align: center;">

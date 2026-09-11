@@ -106,15 +106,17 @@ function validateAndComputeInvoice(invoiceData, existingInvoices) {
     return { valid: false, error: "Invalid invoice payload: Object required" };
   }
 
+  var d = (invoiceData.details && typeof invoiceData.details === 'object') ? invoiceData.details : invoiceData;
+
   // 1. Validate Customer Information
-  var buyer = invoiceData.buyer || {};
-  var customerName = String(buyer.name || invoiceData.customerName || "").trim();
+  var buyer = invoiceData.buyer || d.buyer || {};
+  var customerName = String(buyer.name || invoiceData.customerName || d.customerName || "").trim();
   if (!customerName) {
     return { valid: false, error: "Validation failed: Customer/Party name is required" };
   }
 
   // 2. Validate Items Array
-  var items = invoiceData.items || [];
+  var items = invoiceData.items || d.items || [];
   if (!Array.isArray(items) || items.length === 0) {
     return { valid: false, error: "Validation failed: Invoice must contain at least one line item" };
   }

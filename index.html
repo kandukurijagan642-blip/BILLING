@@ -43,7 +43,7 @@
       });
     }
     // Build Version Enforcement: Clears stale caches when new build is deployed
-    window.__APP_BUILD_VERSION__ = "v304_smart_invoice_rollback";
+    window.__APP_BUILD_VERSION__ = "v305_instant_save";
     try {
       const storedBuild = localStorage.getItem("aaryan_app_build_version");
       if (storedBuild !== window.__APP_BUILD_VERSION__) {
@@ -57,8 +57,8 @@
   <link rel="preconnect" href="https://script.google.com" crossorigin>
   <link rel="dns-prefetch" href="https://script.google.com">
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=304">
-  <script src="invoice_utils_v5.js?v=97"></script>
+  <link rel="stylesheet" href="index.css?v=305">
+  <script src="invoice_utils_v5.js?v=98"></script>
 </head>
 <body>
 
@@ -2920,6 +2920,6 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=304"></script>
+  <script src="index_v5.js?v=305"></script>
 </body>
 </html>
