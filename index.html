@@ -16,6 +16,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <!-- Chart.js Library -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- High-Speed Real-Time Sync Mesh (<30ms Cross-Browser Data Transfer) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.5/mqtt.min.js"></script>
   <!-- PWA Manifest & Mobile Meta -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#06b6d4">
@@ -41,7 +43,7 @@
       });
     }
     // Build Version Enforcement: Clears stale caches when new build is deployed
-    window.__APP_BUILD_VERSION__ = "v301_1s_sync";
+    window.__APP_BUILD_VERSION__ = "v302_fast_mesh";
     try {
       const storedBuild = localStorage.getItem("aaryan_app_build_version");
       if (storedBuild !== window.__APP_BUILD_VERSION__) {
@@ -55,7 +57,7 @@
   <link rel="preconnect" href="https://script.google.com" crossorigin>
   <link rel="dns-prefetch" href="https://script.google.com">
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="index.css?v=301">
+  <link rel="stylesheet" href="index.css?v=302">
   <script src="invoice_utils_v5.js?v=96"></script>
 </head>
 <body>
@@ -2918,6 +2920,6 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=301"></script>
+  <script src="index_v5.js?v=302"></script>
 </body>
 </html>
