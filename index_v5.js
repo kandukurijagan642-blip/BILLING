@@ -960,6 +960,9 @@ function initializeApp() {
   if (typeof initKeyboardShortcuts === 'function') initKeyboardShortcuts();
   if (window.AaryanDB && typeof window.AaryanDB.init === 'function') {
     window.AaryanDB.init().then(() => {
+      if (invoicesDb && invoicesDb.length > 0) {
+        window.isInitialSyncDone = true;
+      }
       updateDashboardOverview();
       calculateSummaryAndTable();
       autoSuggestInvoiceNo();
@@ -968,6 +971,17 @@ function initializeApp() {
       loadInvoicesHistoryTable();
     });
   }
+
+  // Hard Safety Fallback: Never allow initial loading spinners to hang for more than 10s
+  setTimeout(() => {
+    if (!window.isInitialSyncDone) {
+      console.warn("Initial sync timeout safety triggered — clearing loading spinners");
+      window.isInitialSyncDone = true;
+      updateDashboardOverview();
+      loadInvoicesHistoryTable();
+    }
+  }, 10000);
+
   setupRouting();
   bindBillingFormInputs();
   setupKeyboardShortcuts();
@@ -1262,7 +1276,7 @@ function initializeApp() {
     updateCloudSyncBadge("syncing");
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
 
     const gasSyncUrl = `${GOOGLE_SCRIPT_URL}?action=sync&token=${encodeURIComponent(API_SECRET_TOKEN)}`;
 
@@ -1492,12 +1506,9 @@ function initializeApp() {
       })
       .finally(() => {
         isSyncing = false;
-        const wasInitial = !window.isInitialSyncDone;
         window.isInitialSyncDone = true;
-        if (wasInitial || (elements.historyInvoicesBody && elements.historyInvoicesBody.innerHTML.includes('Syncing'))) {
-          loadInvoicesHistoryTable();
-          updateDashboardOverview();
-        }
+        loadInvoicesHistoryTable();
+        updateDashboardOverview();
       });
   };
 
@@ -1570,7 +1581,7 @@ function initializeApp() {
   }
 
   // Run initial database sync & start the adaptive multi-user poller
-  window.triggerDatabaseSync();
+  window.triggerDatabaseSync(true);
   scheduleNextRealtimeSync();
 
   // Keep HUD elapsed timer updated every 3s
@@ -2498,7 +2509,7 @@ window.calculateMarginWidget = function() {
 function updateDashboardOverview() {
   loadAllDatabases();
 
-  const isSyncLoading = invoicesDb.length === 0 && (!window.isInitialSyncDone || isSyncing);
+  const isSyncLoading = invoicesDb.length === 0 && !window.isInitialSyncDone;
 
   if (isSyncLoading) {
     if (elements.statTotalInvoices) elements.statTotalInvoices.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="font-size: 16px;"></i>`;
@@ -6910,7 +6921,7 @@ function loadInvoicesHistoryTable() {
   }
 
   // If empty before initial sync finishes, show loading spinner — NEVER show "0 / No invoices found"
-  if (!window.isInitialSyncDone || isSyncing) {
+  if (!window.isInitialSyncDone) {
     if (elements.historyCount) {
       elements.historyCount.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="font-size: 11px;"></i>`;
     }
@@ -6944,7 +6955,7 @@ function renderHistoryTableRows(records) {
   elements.historyInvoicesBody.innerHTML = "";
   if (!records || records.length === 0) {
     const isSearching = elements.searchHistoryInput && elements.searchHistoryInput.value.trim().length > 0;
-    if (!isSearching && (!window.isInitialSyncDone || isSyncing)) {
+    if (!isSearching && !window.isInitialSyncDone) {
       elements.historyInvoicesBody.innerHTML = `
         <tr>
           <td colspan="7" class="text-center" style="padding: 40px 16px; color: #64748b;">
