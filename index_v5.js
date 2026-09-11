@@ -333,6 +333,63 @@ const AaryanDB = {
     }
   },
 
+  async saveInvoice(inv) {
+    if (!this.db || !inv || !inv.id) return;
+    try {
+      const tx = this.db.transaction(['invoices'], 'readwrite');
+      tx.objectStore('invoices').put(inv);
+      await new Promise(r => { tx.oncomplete = r; tx.onerror = r; });
+    } catch(e) { console.warn("AaryanDB saveInvoice notice:", e); }
+  },
+
+  async saveAllInvoices(invoices) {
+    if (!this.db || !Array.isArray(invoices) || invoices.length === 0) return;
+    try {
+      const tx = this.db.transaction(['invoices'], 'readwrite');
+      const store = tx.objectStore('invoices');
+      invoices.forEach(inv => { if (inv && inv.id) store.put(inv); });
+      await new Promise(r => { tx.oncomplete = r; tx.onerror = r; });
+    } catch(e) { console.warn("AaryanDB saveAllInvoices notice:", e); }
+  },
+
+  async deleteInvoice(id) {
+    if (!this.db || !id) return;
+    try {
+      const tx = this.db.transaction(['invoices'], 'readwrite');
+      tx.objectStore('invoices').delete(id);
+      await new Promise(r => { tx.oncomplete = r; tx.onerror = r; });
+    } catch(e) { console.warn("AaryanDB deleteInvoice notice:", e); }
+  },
+
+  async saveAllProducts(products) {
+    if (!this.db || !Array.isArray(products) || products.length === 0) return;
+    try {
+      const tx = this.db.transaction(['products'], 'readwrite');
+      const store = tx.objectStore('products');
+      products.forEach(p => { if (p && p.id) store.put(p); });
+      await new Promise(r => { tx.oncomplete = r; tx.onerror = r; });
+    } catch(e) { console.warn("AaryanDB saveAllProducts notice:", e); }
+  },
+
+  async saveAllParties(parties) {
+    if (!this.db || !Array.isArray(parties) || parties.length === 0) return;
+    try {
+      const tx = this.db.transaction(['parties'], 'readwrite');
+      const store = tx.objectStore('parties');
+      parties.forEach(pt => { if (pt && pt.id) store.put(pt); });
+      await new Promise(r => { tx.oncomplete = r; tx.onerror = r; });
+    } catch(e) { console.warn("AaryanDB saveAllParties notice:", e); }
+  },
+
+  async saveSettings(settings) {
+    if (!this.db || !settings) return;
+    try {
+      const tx = this.db.transaction(['settings'], 'readwrite');
+      tx.objectStore('settings').put({ key: 'globalSettings', data: settings });
+      await new Promise(r => { tx.oncomplete = r; tx.onerror = r; });
+    } catch(e) { console.warn("AaryanDB saveSettings notice:", e); }
+  },
+
   async loadAllToMemory() {
     if (!this.db) return;
     try {
@@ -346,17 +403,36 @@ const AaryanDB = {
       await new Promise(res => { tx.oncomplete = res; tx.onerror = res; });
 
       if (Array.isArray(invReq.result) && invReq.result.length > 0) {
-        invoicesDb = invReq.result;
-        invoicesDb.sort((a, b) => String(a.invoiceNo || "").localeCompare(String(b.invoiceNo || "")));
+        if (!invoicesDb || invoicesDb.length < invReq.result.length) {
+          invoicesDb = invReq.result;
+          invoicesDb.sort((a, b) => String(a.invoiceNo || "").localeCompare(String(b.invoiceNo || "")));
+          try { localStorage.setItem("invoices", JSON.stringify(invoicesDb)); } catch(e) {}
+        }
+      } else if (invoicesDb && invoicesDb.length > 0) {
+        this.saveAllInvoices(invoicesDb);
       }
+
       if (Array.isArray(prodReq.result) && prodReq.result.length > 0) {
-        productsDb = prodReq.result;
+        if (!productsDb || productsDb.length < prodReq.result.length) {
+          productsDb = prodReq.result;
+          try { localStorage.setItem("products", JSON.stringify(productsDb)); } catch(e) {}
+        }
+      } else if (productsDb && productsDb.length > 0) {
+        this.saveAllProducts(productsDb);
       }
+
       if (Array.isArray(partReq.result) && partReq.result.length > 0) {
-        partiesDb = partReq.result;
+        if (!partiesDb || partiesDb.length < partReq.result.length) {
+          partiesDb = partReq.result;
+          try { localStorage.setItem("parties", JSON.stringify(partiesDb)); } catch(e) {}
+        }
+      } else if (partiesDb && partiesDb.length > 0) {
+        this.saveAllParties(partiesDb);
       }
+
       if (setReq.result && setReq.result.data) {
         globalSettings = setReq.result.data;
+        try { localStorage.setItem("settings", JSON.stringify(globalSettings)); } catch(e) {}
       }
     } catch (e) {
       console.warn("loadAllToMemory notice:", e);
@@ -380,12 +456,19 @@ const AaryanDB = {
 
   async searchInvoicesCursor(query = '', limit = 50) {
     const q = (query || '').toLowerCase().trim();
-    if (!this.db) {
-      return (invoicesDb || []).filter(i => {
-        if (!q) return true;
-        return (i.invoiceNo && String(i.invoiceNo).toLowerCase().includes(q)) ||
-               (i.customerName && i.customerName.toLowerCase().includes(q));
-      }).slice(0, limit);
+    if (!q) {
+      return (invoicesDb || []).slice(0, limit);
+    }
+
+    // Fast search in memory
+    const memoryResults = (invoicesDb || []).filter(i => {
+      const invNo = String(i.invoiceNo || "").toLowerCase();
+      const custName = String(i.customerName || (i.details?.buyer?.name) || (i.details?.consignee?.name) || "").toLowerCase();
+      return invNo.includes(q) || custName.includes(q);
+    }).slice(0, limit);
+
+    if (memoryResults.length > 0 || !this.db) {
+      return memoryResults;
     }
 
     return new Promise((resolve) => {
@@ -399,18 +482,19 @@ const AaryanDB = {
           const cursor = e.target.result;
           if (cursor && results.length < limit) {
             const inv = cursor.value;
-            if (!q || (inv.invoiceNo && String(inv.invoiceNo).toLowerCase().includes(q)) ||
-                (inv.customerName && inv.customerName.toLowerCase().includes(q))) {
+            const invNo = String(inv.invoiceNo || "").toLowerCase();
+            const custName = String(inv.customerName || (inv.details?.buyer?.name) || (inv.details?.consignee?.name) || "").toLowerCase();
+            if (invNo.includes(q) || custName.includes(q)) {
               results.push(inv);
             }
             cursor.continue();
           } else {
-            resolve(results);
+            resolve(results.length > 0 ? results : memoryResults);
           }
         };
-        req.onerror = () => resolve((invoicesDb || []).slice(0, limit));
+        req.onerror = () => resolve(memoryResults);
       } catch (e) {
-        resolve((invoicesDb || []).slice(0, limit));
+        resolve(memoryResults);
       }
     });
   },
@@ -894,6 +978,11 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize Real-Time Database Sync Stream (SSE) for 0ms sub-millisecond cloud updates
   initDatabaseEventSource();
 
+  // Kick off immediate cloud sync in parallel so data hydrates instantly on startup
+  if (typeof window.triggerDatabaseSync === 'function') {
+    window.triggerDatabaseSync(true).catch(e => console.warn("Initial sync note:", e));
+  }
+
   // Helper to update top header cloud sync pill indicator with auto-revert safety
   let syncBadgeTimer = null;
   window.updateCloudSyncBadge = function(status) {
@@ -1122,7 +1211,7 @@ document.addEventListener("DOMContentLoaded", () => {
       scheduleNextAdaptivePoll(true);
     });
 
-    scheduleNextAdaptivePoll();
+    scheduleNextAdaptivePoll(true);
   }
 
   // Real-time Database EventStream Listener (Server-Sent Events for Localhost, Smart Adaptive Polling for Cloud)
@@ -1236,6 +1325,13 @@ document.addEventListener("DOMContentLoaded", () => {
             try { localStorage.setItem("settings", JSON.stringify(globalSettings)); } catch(e) {}
             changed = true;
           }
+
+          if (window.AaryanDB && window.AaryanDB.isReady) {
+            AaryanDB.saveAllProducts(productsDb);
+            AaryanDB.saveAllParties(partiesDb);
+            AaryanDB.saveAllInvoices(invoicesDb);
+            AaryanDB.saveSettings(globalSettings);
+          }
         } 
         // --- CASE B: FULL SYNCHRONIZATION & INITIAL HYDRATION ---
         else if (data) {
@@ -1313,16 +1409,25 @@ document.addEventListener("DOMContentLoaded", () => {
           const serverInvoices = data.invoices || [];
           const serverIds = new Set(serverInvoices.map(inv => inv.id));
 
+          let localDeletedIds = [];
+          try { localDeletedIds = JSON.parse(localStorage.getItem("deleted_invoice_ids")) || []; } catch(e) {}
+          const serverDeletedIds = Array.isArray(data.deletedInvoiceIds) ? data.deletedInvoiceIds : [];
+          const allDeletedSet = new Set([...localDeletedIds, ...serverDeletedIds]);
+
           const mergedInvoiceMap = new Map();
-          serverInvoices.forEach(inv => { if (inv && inv.id) mergedInvoiceMap.set(inv.id, inv); });
+          serverInvoices.forEach(inv => {
+            if (inv && inv.id && !allDeletedSet.has(inv.id)) {
+              mergedInvoiceMap.set(inv.id, inv);
+            }
+          });
           (invoicesDb || []).forEach(inv => {
-            if (inv && inv.id && !mergedInvoiceMap.has(inv.id)) {
+            if (inv && inv.id && !allDeletedSet.has(inv.id) && !mergedInvoiceMap.has(inv.id)) {
               mergedInvoiceMap.set(inv.id, inv);
               syncDatabaseToServer("invoices", inv);
             }
           });
 
-          const mergedInvoices = Array.from(mergedInvoiceMap.values());
+          let mergedInvoices = Array.from(mergedInvoiceMap.values());
           mergedInvoices.sort((a, b) => String(a.invoiceNo || "").localeCompare(String(b.invoiceNo || "")));
 
           if (JSON.stringify(mergedInvoices) !== JSON.stringify(invoicesDb)) {
@@ -1341,9 +1446,18 @@ document.addEventListener("DOMContentLoaded", () => {
               changed = true;
             }
           }
+
+          // Persist all merged data to IndexedDB
+          if (window.AaryanDB && window.AaryanDB.isReady) {
+            AaryanDB.saveAllProducts(productsDb);
+            AaryanDB.saveAllParties(partiesDb);
+            AaryanDB.saveAllInvoices(invoicesDb);
+            AaryanDB.saveSettings(globalSettings);
+          }
         }
 
-        if (changed) {
+        const isHistoryLoading = elements.historyInvoicesBody && elements.historyInvoicesBody.innerHTML.includes('Syncing');
+        if (changed || isHistoryLoading) {
           console.log("⚡ Database synchronized! Updating active UI views...");
           loadProductsDatabaseTable();
           loadPartiesDatabaseLists();
@@ -1376,6 +1490,9 @@ document.addEventListener("DOMContentLoaded", () => {
       })
       .finally(() => {
         isSyncing = false;
+        if (elements.historyInvoicesBody && elements.historyInvoicesBody.innerHTML.includes('Syncing')) {
+          loadInvoicesHistoryTable();
+        }
       });
   };
 
@@ -1699,16 +1816,48 @@ function seedDatabasesIfEmpty() {
 
 function loadAllDatabases() {
   try {
-    productsDb = JSON.parse(localStorage.getItem("products") || "[]") || [];
-    partiesDb = JSON.parse(localStorage.getItem("parties") || "[]") || [];
-    invoicesDb = JSON.parse(localStorage.getItem("invoices") || "[]") || [];
-    globalSettings = JSON.parse(localStorage.getItem("settings") || "{}") || {};
+    let localProds = null, localParties = null, localInvoices = null, localSettings = null;
+    try { localProds = JSON.parse(localStorage.getItem("products") || "[]"); } catch (e) {}
+    try { localParties = JSON.parse(localStorage.getItem("parties") || "[]"); } catch (e) {}
+    try { localInvoices = JSON.parse(localStorage.getItem("invoices") || "[]"); } catch (e) {}
+    try { localSettings = JSON.parse(localStorage.getItem("settings") || "{}"); } catch (e) {}
+
+    if (Array.isArray(localProds) && localProds.length > 0) {
+      productsDb = localProds;
+    } else if (productsDb && productsDb.length > 0) {
+      try { localStorage.setItem("products", JSON.stringify(productsDb)); } catch (e) {}
+    } else if (Array.isArray(localProds)) {
+      productsDb = localProds;
+    }
+
+    if (Array.isArray(localParties) && localParties.length > 0) {
+      partiesDb = localParties;
+    } else if (partiesDb && partiesDb.length > 0) {
+      try { localStorage.setItem("parties", JSON.stringify(partiesDb)); } catch (e) {}
+    } else if (Array.isArray(localParties)) {
+      partiesDb = localParties;
+    }
+
+    if (Array.isArray(localInvoices) && localInvoices.length > 0) {
+      invoicesDb = localInvoices;
+      invoicesDb.sort((a, b) => String(a.invoiceNo || "").localeCompare(String(b.invoiceNo || "")));
+    } else if (invoicesDb && invoicesDb.length > 0) {
+      try { localStorage.setItem("invoices", JSON.stringify(invoicesDb)); } catch (e) {}
+    } else if (Array.isArray(localInvoices)) {
+      invoicesDb = localInvoices;
+    }
+
+    if (localSettings && typeof localSettings === "object" && Object.keys(localSettings).length > 0) {
+      globalSettings = localSettings;
+    } else if (globalSettings && typeof globalSettings === "object" && Object.keys(globalSettings).length > 0) {
+      try { localStorage.setItem("settings", JSON.stringify(globalSettings)); } catch (e) {}
+    }
   } catch (err) {
     console.warn("Unable to parse persisted databases:", err);
-    productsDb = [];
-    partiesDb = [];
-    invoicesDb = [];
-    globalSettings = {};
+    if (!productsDb) productsDb = [];
+    if (!partiesDb) partiesDb = [];
+    if (!invoicesDb) invoicesDb = [];
+    if (!globalSettings) globalSettings = {};
   }
 
   // Seed default product catalog if empty so billing is never blocked
@@ -4077,9 +4226,12 @@ window.saveCurrentInvoiceRecord = async function(actionType = 'save_only', btnEl
       invoicesDb.push(invoiceRecord);
     }
 
-    // Persist to localStorage & push to Google Sheets master database
+    // Persist to localStorage, IndexedDB & push to Google Sheets master database
     try {
       localStorage.setItem("invoices", JSON.stringify(invoicesDb));
+      if (window.AaryanDB && typeof window.AaryanDB.saveInvoice === 'function') {
+        window.AaryanDB.saveInvoice(invoiceRecord);
+      }
       syncDatabaseToServer("invoices", invoiceRecord);
       if (typeof window.triggerDatabaseSync === 'function') window.triggerDatabaseSync();
     } catch (err) {
@@ -6719,18 +6871,49 @@ window.filterInvoicesByStatus = async function() {
 // --- SAVED INVOICE VIEW EDIT & DELETE HISTORY ---
 function loadInvoicesHistoryTable() {
   loadAllDatabases();
-  elements.historyCount.textContent = invoicesDb.length;
+  if (elements.historyCount) {
+    if (invoicesDb.length === 0 && isSyncing) {
+      elements.historyCount.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="font-size: 11px;"></i>`;
+    } else {
+      elements.historyCount.textContent = invoicesDb.length;
+    }
+  }
   renderHistoryTableRows(invoicesDb);
+
+  // If memory is empty on history tab visit, trigger immediate cloud sync
+  if (invoicesDb.length === 0 && !isSyncing && typeof window.triggerDatabaseSync === 'function') {
+    window.triggerDatabaseSync(true).then(() => {
+      if (elements.historyCount) elements.historyCount.textContent = invoicesDb.length;
+      renderHistoryTableRows(invoicesDb);
+    }).catch(() => {});
+  }
 }
 
 function renderHistoryTableRows(records) {
   elements.historyInvoicesBody.innerHTML = "";
-  if (records.length === 0) {
-    elements.historyInvoicesBody.innerHTML = `
-      <tr>
-        <td colspan="7" class="text-center text-muted">No invoices found.</td>
-      </tr>
-    `;
+  if (!records || records.length === 0) {
+    if (isSyncing) {
+      elements.historyInvoicesBody.innerHTML = `
+        <tr>
+          <td colspan="7" class="text-center" style="padding: 40px 16px; color: #64748b;">
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;">
+              <i class="fa-solid fa-circle-notch fa-spin fa-2x" style="color: #0284c7;"></i>
+              <div style="font-weight: 600; font-size: 14px; color: #334155;">Syncing Invoices from Cloud...</div>
+              <div style="font-size: 12px; color: #94a3b8;">Connecting to Google Sheets master database</div>
+            </div>
+          </td>
+        </tr>
+      `;
+    } else {
+      elements.historyInvoicesBody.innerHTML = `
+        <tr>
+          <td colspan="7" class="text-center text-muted" style="padding: 32px; font-weight: 500;">
+            <i class="fa-solid fa-file-invoice" style="font-size: 24px; color: #cbd5e1; display: block; margin-bottom: 8px;"></i>
+            No invoices found.
+          </td>
+        </tr>
+      `;
+    }
     return;
   }
 
@@ -6874,6 +7057,9 @@ window.deleteSavedInvoice = function(id) {
 
     invoicesDb = invoicesDb.filter(inv => inv.id !== id);
     localStorage.setItem("invoices", JSON.stringify(invoicesDb));
+    if (window.AaryanDB && typeof window.AaryanDB.deleteInvoice === 'function') {
+      window.AaryanDB.deleteInvoice(id);
+    }
     AaryanDB.enqueueOutbox("invoice", "delete_record", { type: "invoice", id });
     AaryanDB.drainOutbox();
     
@@ -7197,15 +7383,28 @@ function loadProductsDatabaseTable() {
 
 function renderProductsTable(records) {
   elements.productsListBody.innerHTML = "";
-  if (records.length === 0) {
-    elements.productsListBody.innerHTML = `
-      <tr>
-        <td colspan="9" class="text-center text-muted" style="padding: 32px; font-weight: 500;">
-          <i class="fa-solid fa-box-open" style="font-size: 24px; color: #cbd5e1; display: block; margin-bottom: 8px;"></i>
-          No products found matching your filter criteria.
-        </td>
-      </tr>
-    `;
+  if (!records || records.length === 0) {
+    if (isSyncing) {
+      elements.productsListBody.innerHTML = `
+        <tr>
+          <td colspan="9" class="text-center text-muted" style="padding: 40px 16px;">
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;">
+              <i class="fa-solid fa-circle-notch fa-spin fa-2x" style="color: #0284c7;"></i>
+              <div style="font-weight: 600; font-size: 14px; color: #334155;">Syncing Inventory Products...</div>
+            </div>
+          </td>
+        </tr>
+      `;
+    } else {
+      elements.productsListBody.innerHTML = `
+        <tr>
+          <td colspan="9" class="text-center text-muted" style="padding: 32px; font-weight: 500;">
+            <i class="fa-solid fa-box-open" style="font-size: 24px; color: #cbd5e1; display: block; margin-bottom: 8px;"></i>
+            No products found matching your filter criteria.
+          </td>
+        </tr>
+      `;
+    }
     const totalCountFooter = document.getElementById("prod-total-count-footer");
     const totalStockFooter = document.getElementById("prod-total-stock-footer");
     const totalValFooter = document.getElementById("prod-total-val-footer");
@@ -7467,7 +7666,9 @@ function renderPartiesLists(records) {
   const consignees = records.filter(p => p.type === 'consignee');
 
   if (receivers.length === 0) {
-    elements.receiversScrollBox.innerHTML = `<div class="text-center text-muted padding-20">No receivers found.</div>`;
+    elements.receiversScrollBox.innerHTML = isSyncing
+      ? `<div class="text-center text-muted padding-20"><i class="fa-solid fa-spinner fa-spin"></i> Syncing clients...</div>`
+      : `<div class="text-center text-muted padding-20">No receivers found.</div>`;
   } else {
     receivers.forEach(p => {
       const card = createPartyListCard(p);
@@ -7476,7 +7677,9 @@ function renderPartiesLists(records) {
   }
 
   if (consignees.length === 0) {
-    elements.consigneesScrollBox.innerHTML = `<div class="text-center text-muted padding-20">No consignees found.</div>`;
+    elements.consigneesScrollBox.innerHTML = isSyncing
+      ? `<div class="text-center text-muted padding-20"><i class="fa-solid fa-spinner fa-spin"></i> Syncing consignees...</div>`
+      : `<div class="text-center text-muted padding-20">No consignees found.</div>`;
   } else {
     consignees.forEach(p => {
       const card = createPartyListCard(p);
