@@ -464,7 +464,7 @@
                 <div class="party-sub-card-body">
                   <div class="form-group col-12">
                     <label>NAME</label>
-                    <input type="text" id="bill-buyer-name" placeholder="Receiver Name">
+                    <input type="text" id="bill-buyer-name" placeholder="Receiver Name" list="customer-names-datalist" autocomplete="off">
                   </div>
                   <div class="form-group col-12">
                     <label>ADDRESS</label>
@@ -507,7 +507,7 @@
                 <div class="party-sub-card-body">
                   <div class="form-group col-12">
                     <label>NAME</label>
-                    <input type="text" id="bill-consignee-name" placeholder="Consignee Name">
+                    <input type="text" id="bill-consignee-name" placeholder="Consignee Name" list="customer-names-datalist" autocomplete="off">
                   </div>
                   <div class="form-group col-12">
                     <label>ADDRESS</label>
@@ -533,6 +533,10 @@
                   </div>
                 </div>
               </div>
+
+              <datalist id="customer-names-datalist">
+                <!-- Dynamically populated from partiesDb & past invoices -->
+              </datalist>
             </div>
 
             <!-- Section 4: Product Insertion Row (Ultra-Premium SaaS Combobox & Steppers) -->
@@ -1717,6 +1721,11 @@
             <span style="color: #64748b; font-size: 14px; font-weight: 700;">TOTAL AMOUNT</span>
             <strong id="modal-success-total" style="color: #059669; font-size: 18px; font-weight: 900;">₹ 0.00</strong>
           </div>
+        </div>
+
+        <!-- 100% AUTOMATED NEXT BILL ADVANCE BANNER -->
+        <div id="modal-success-auto-next" style="display: none; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 12.5px; color: #065f46; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+          <i class="fa-solid fa-bolt text-teal"></i> Next invoice starting in <strong>3s</strong>...
         </div>
 
         <p style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 0.5px;">Quick Actions:</p>
@@ -2920,6 +2929,6 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=307_auto_bot"></script>
+  <script src="index_v5.js?v=308_fully_automated"></script>
 </body>
 </html>

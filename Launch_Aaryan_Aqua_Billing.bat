@@ -12,7 +12,7 @@ echo.
 netstat -aon | findstr :3001 | findstr LISTENING >nul 2>&1
 if %errorlevel% neq 0 (
     echo [1/2] Starting WhatsApp Bot Companion on port 3001...
-    start /min "Aaryan Aqua WhatsApp Bot" cmd /c "node whatsapp-bot.js"
+    start /min "Aaryan Aqua WhatsApp Bot" cmd /c "set NO_AUTO_OPEN=true&& set DAEMON=true&& node whatsapp-bot.js"
     timeout /t 3 /nobreak >nul
 ) else (
     echo [1/2] WhatsApp Bot Companion is already running on port 3001.

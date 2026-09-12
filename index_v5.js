@@ -3673,6 +3673,126 @@ function bindBillingFormInputs() {
     elements.billItemRate.addEventListener("input", calculateBillingItemNetVal);
   }
 
+  // Automatic Party Autocomplete & Live Fill
+  function autoFillPartyDetails(type, enteredName) {
+    if (!enteredName || enteredName.trim().length < 2) return;
+    const clean = enteredName.trim().toLowerCase();
+
+    // 1. Check partiesDb
+    let match = partiesDb.find(p => p && p.name && p.name.trim().toLowerCase() === clean);
+
+    // 2. Check past invoices if no exact party match
+    if (!match && Array.isArray(invoicesDb)) {
+      const prevInv = invoicesDb.find(inv => {
+        const b = inv.details?.buyer?.name;
+        const c = inv.details?.consignee?.name;
+        const cust = inv.customerName;
+        return (b && b.trim().toLowerCase() === clean) ||
+               (c && c.trim().toLowerCase() === clean) ||
+               (cust && cust.trim().toLowerCase() === clean);
+      });
+      if (prevInv) {
+        const d = prevInv.details || {};
+        const pObj = (d.buyer?.name?.trim().toLowerCase() === clean) ? d.buyer : (d.consignee || {});
+        match = {
+          name: pObj.name || prevInv.customerName,
+          address: pObj.address || "",
+          gstin: pObj.gstin || "",
+          phone: pObj.phone || "",
+          state: pObj.state || "Andhra Pradesh",
+          stateCode: pObj.stateCode || "37"
+        };
+      }
+    }
+
+    if (match) {
+      if (type === 'buyer') {
+        if (match.address && elements.billBuyerAddress && !elements.billBuyerAddress.value) {
+          elements.billBuyerAddress.value = match.address;
+          if (!currentInvoice.buyer) currentInvoice.buyer = {};
+          currentInvoice.buyer.address = match.address;
+        }
+        if (match.gstin && elements.billBuyerGstin && !elements.billBuyerGstin.value) {
+          elements.billBuyerGstin.value = match.gstin;
+          if (!currentInvoice.buyer) currentInvoice.buyer = {};
+          currentInvoice.buyer.gstin = match.gstin;
+        }
+        if (match.phone && elements.billBuyerPhone && !elements.billBuyerPhone.value) {
+          elements.billBuyerPhone.value = match.phone;
+          if (!currentInvoice.buyer) currentInvoice.buyer = {};
+          currentInvoice.buyer.phone = match.phone;
+        }
+        if (match.state && elements.billBuyerState) {
+          elements.billBuyerState.value = match.state;
+          if (!currentInvoice.buyer) currentInvoice.buyer = {};
+          currentInvoice.buyer.state = match.state;
+        }
+        if (match.stateCode && elements.billBuyerStateCode) {
+          elements.billBuyerStateCode.value = match.stateCode;
+          if (!currentInvoice.buyer) currentInvoice.buyer = {};
+          currentInvoice.buyer.stateCode = match.stateCode;
+        }
+        // Auto-copy to consignee if consignee name is empty
+        if (elements.billConsigneeName && !elements.billConsigneeName.value.trim()) {
+          elements.billConsigneeName.value = match.name;
+          if (!currentInvoice.consignee) currentInvoice.consignee = {};
+          currentInvoice.consignee.name = match.name;
+          if (elements.billConsigneeAddress) elements.billConsigneeAddress.value = match.address || "";
+          if (elements.billConsigneeGstin) elements.billConsigneeGstin.value = match.gstin || "";
+          if (elements.billConsigneePhone) elements.billConsigneePhone.value = match.phone || "";
+          if (elements.billConsigneeState) elements.billConsigneeState.value = match.state || "Andhra Pradesh";
+          if (elements.billConsigneeStateCode) elements.billConsigneeStateCode.value = match.stateCode || "37";
+        }
+      } else if (type === 'consignee') {
+        if (match.address && elements.billConsigneeAddress && !elements.billConsigneeAddress.value) {
+          elements.billConsigneeAddress.value = match.address;
+          if (!currentInvoice.consignee) currentInvoice.consignee = {};
+          currentInvoice.consignee.address = match.address;
+        }
+        if (match.gstin && elements.billConsigneeGstin && !elements.billConsigneeGstin.value) {
+          elements.billConsigneeGstin.value = match.gstin;
+          if (!currentInvoice.consignee) currentInvoice.consignee = {};
+          currentInvoice.consignee.gstin = match.gstin;
+        }
+        if (match.phone && elements.billConsigneePhone && !elements.billConsigneePhone.value) {
+          elements.billConsigneePhone.value = match.phone;
+          if (!currentInvoice.consignee) currentInvoice.consignee = {};
+          currentInvoice.consignee.phone = match.phone;
+        }
+        if (match.state && elements.billConsigneeState) {
+          elements.billConsigneeState.value = match.state;
+          if (!currentInvoice.consignee) currentInvoice.consignee = {};
+          currentInvoice.consignee.state = match.state;
+        }
+        if (match.stateCode && elements.billConsigneeStateCode) {
+          elements.billConsigneeStateCode.value = match.stateCode;
+          if (!currentInvoice.consignee) currentInvoice.consignee = {};
+          currentInvoice.consignee.stateCode = match.stateCode;
+        }
+      }
+      calculateSummaryAndTable();
+    }
+  }
+
+  if (elements.billBuyerName) {
+    elements.billBuyerName.addEventListener("change", (e) => autoFillPartyDetails('buyer', e.target.value));
+    elements.billBuyerName.addEventListener("input", (e) => {
+      const v = e.target.value.trim().toLowerCase();
+      if (partiesDb.some(p => p.name && p.name.toLowerCase() === v)) {
+        autoFillPartyDetails('buyer', e.target.value);
+      }
+    });
+  }
+  if (elements.billConsigneeName) {
+    elements.billConsigneeName.addEventListener("change", (e) => autoFillPartyDetails('consignee', e.target.value));
+    elements.billConsigneeName.addEventListener("input", (e) => {
+      const v = e.target.value.trim().toLowerCase();
+      if (partiesDb.some(p => p.name && p.name.toLowerCase() === v)) {
+        autoFillPartyDetails('consignee', e.target.value);
+      }
+    });
+  }
+
   // Parties select
   elements.quickSelectReceiver.addEventListener("change", (e) => {
     const party = partiesDb.find(p => p.id === e.target.value);
@@ -3721,16 +3841,32 @@ function populateBillingSelectors() {
   elements.quickSelectReceiver.innerHTML = `<option value="">-- Load Receiver --</option>`;
   elements.quickSelectConsignee.innerHTML = `<option value="">-- Load Consignee --</option>`;
   
+  const customerDatalist = document.getElementById("customer-names-datalist");
+  const custSet = new Set();
+
   partiesDb.forEach(p => {
     const opt = document.createElement("option");
     opt.value = p.id;
     opt.textContent = p.name;
+    if (p.name) custSet.add(p.name.trim());
     if (p.type === 'receiver') {
       elements.quickSelectReceiver.appendChild(opt);
     } else {
       elements.quickSelectConsignee.appendChild(opt);
     }
   });
+
+  if (Array.isArray(invoicesDb)) {
+    invoicesDb.forEach(inv => {
+      if (inv.customerName) custSet.add(inv.customerName.trim());
+      if (inv.details?.buyer?.name) custSet.add(inv.details.buyer.name.trim());
+      if (inv.details?.consignee?.name) custSet.add(inv.details.consignee.name.trim());
+    });
+  }
+
+  if (customerDatalist) {
+    customerDatalist.innerHTML = Array.from(custSet).filter(Boolean).sort().map(n => `<option value="${n}">`).join("");
+  }
 
   elements.billItemSelect.innerHTML = `<option value="">-- Choose from Catalog --</option><option value="__custom__">➕ Type Custom Item...</option>`;
   productsDb.forEach(p => {
@@ -4619,6 +4755,9 @@ window.generateAndPrintThermal = function(btnEl) {
 
 // --- INVOICE SAVED SUCCESS MODAL CONTROLLER ---
 let lastSavedInvoiceRecord = null;
+let invoiceModalAutoTimer = null;
+let invoiceModalAutoRemaining = 3;
+
 window.openInvoiceSuccessModal = function(invoiceRecord) {
   lastSavedInvoiceRecord = invoiceRecord;
   const modal = document.getElementById("invoice-saved-success-modal");
@@ -4650,6 +4789,39 @@ window.openInvoiceSuccessModal = function(invoiceRecord) {
   modal.classList.remove("hidden");
   modal.style.removeProperty("display");
   modal.style.removeProperty("visibility");
+
+  // Automated auto-advance countdown to prepare next bill without manual clicks
+  const autoNextNotice = document.getElementById("modal-success-auto-next");
+  if (autoNextNotice) {
+    autoNextNotice.style.display = "block";
+    invoiceModalAutoRemaining = 3;
+    autoNextNotice.innerHTML = `<i class="fa-solid fa-bolt text-teal"></i> Next invoice starting in <strong>${invoiceModalAutoRemaining}s</strong>... <button type="button" class="btn btn-xs btn-outline" onclick="cancelInvoiceAutoAdvance(event)" style="margin-left: 8px; font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px solid #10b981; background: #fff; cursor: pointer;">Stay on Bill</button>`;
+  }
+
+  if (invoiceModalAutoTimer) clearInterval(invoiceModalAutoTimer);
+  invoiceModalAutoTimer = setInterval(() => {
+    invoiceModalAutoRemaining--;
+    if (autoNextNotice) {
+      autoNextNotice.innerHTML = `<i class="fa-solid fa-bolt text-teal"></i> Next invoice starting in <strong>${invoiceModalAutoRemaining}s</strong>... <button type="button" class="btn btn-xs btn-outline" onclick="cancelInvoiceAutoAdvance(event)" style="margin-left: 8px; font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px solid #10b981; background: #fff; cursor: pointer;">Stay on Bill</button>`;
+    }
+    if (invoiceModalAutoRemaining <= 0) {
+      clearInterval(invoiceModalAutoTimer);
+      invoiceModalAutoTimer = null;
+      window.closeInvoiceSuccessModal(false);
+    }
+  }, 1000);
+};
+
+window.cancelInvoiceAutoAdvance = function(e) {
+  if (e && e.stopPropagation) e.stopPropagation();
+  if (invoiceModalAutoTimer) {
+    clearInterval(invoiceModalAutoTimer);
+    invoiceModalAutoTimer = null;
+  }
+  const autoNextNotice = document.getElementById("modal-success-auto-next");
+  if (autoNextNotice) {
+    autoNextNotice.innerHTML = `<i class="fa-solid fa-circle-check text-success"></i> Auto-advance paused. Bill ready for printing or download.`;
+  }
 };
 
 window.updateSuccessModalWhatsAppStatus = function(invoiceRecord) {
@@ -4668,7 +4840,7 @@ window.updateSuccessModalWhatsAppStatus = function(invoiceRecord) {
     const formatted = cleanDigits.length === 10 ? cleanDigits : cleanDigits.slice(-10);
     waBtn.innerHTML = `<i class="fa-brands fa-whatsapp"></i> Send WhatsApp (+91 ${formatted})`;
     waBtn.style.background = "#16a34a";
-    waBtn.title = isBotConnected ? "Send immediately via WhatsApp Bot" : "1-Click Direct WhatsApp Share";
+    waBtn.title = isBotConnected ? "Send immediately via WhatsApp Bot" : "Dispatched via WhatsApp Bot";
   } else {
     waBtn.innerHTML = `<i class="fa-brands fa-whatsapp"></i> WhatsApp`;
     waBtn.style.background = "#16a34a";
@@ -4676,6 +4848,10 @@ window.updateSuccessModalWhatsAppStatus = function(invoiceRecord) {
 };
 
 window.closeInvoiceSuccessModal = function(goToHistory = false) {
+  if (invoiceModalAutoTimer) {
+    clearInterval(invoiceModalAutoTimer);
+    invoiceModalAutoTimer = null;
+  }
   const modal = document.getElementById("invoice-saved-success-modal");
   if (modal) modal.classList.add("hidden");
   resetBillingForm();
@@ -4683,6 +4859,9 @@ window.closeInvoiceSuccessModal = function(goToHistory = false) {
     switchTab("history");
   } else {
     switchTab("billing");
+    setTimeout(() => {
+      if (elements.billBuyerName) elements.billBuyerName.focus();
+    }, 150);
   }
   loadInvoicesHistoryTable();
 };
@@ -5531,6 +5710,16 @@ function getInvoiceRecipients(details) {
     const p = partiesDb.find(party => party && party.name && party.name.trim().toLowerCase() === consigneeName.toLowerCase() && party.phone);
     if (p && p.phone && p.phone.toString().replace(/\D/g, '').length >= 10) consigneePhone = p.phone.toString().trim();
   }
+  if (!consigneePhone && consigneeName && Array.isArray(invoicesDb)) {
+    const prev = invoicesDb.find(inv => {
+      const c = inv.details?.consignee?.name || inv.customerName;
+      return c && c.trim().toLowerCase() === consigneeName.toLowerCase() && (inv.details?.consignee?.phone || inv.details?.buyer?.phone);
+    });
+    if (prev) {
+      const ph = prev.details?.consignee?.phone || prev.details?.buyer?.phone;
+      if (ph && ph.toString().replace(/\D/g, '').length >= 10) consigneePhone = ph.toString().trim();
+    }
+  }
 
   // 2. Resolve RECEIVER | BILLED TO phone
   if (details?.buyer?.phone && details.buyer.phone.toString().trim().replace(/\D/g, '').length >= 10) {
@@ -5543,6 +5732,16 @@ function getInvoiceRecipients(details) {
   if (!buyerPhone && buyerName && Array.isArray(partiesDb)) {
     const p = partiesDb.find(party => party && party.name && party.name.trim().toLowerCase() === buyerName.toLowerCase() && party.phone);
     if (p && p.phone && p.phone.toString().replace(/\D/g, '').length >= 10) buyerPhone = p.phone.toString().trim();
+  }
+  if (!buyerPhone && buyerName && Array.isArray(invoicesDb)) {
+    const prev = invoicesDb.find(inv => {
+      const b = inv.details?.buyer?.name || inv.customerName;
+      return b && b.trim().toLowerCase() === buyerName.toLowerCase() && (inv.details?.buyer?.phone || inv.details?.consignee?.phone);
+    });
+    if (prev) {
+      const ph = prev.details?.buyer?.phone || prev.details?.consignee?.phone;
+      if (ph && ph.toString().replace(/\D/g, '').length >= 10) buyerPhone = ph.toString().trim();
+    }
   }
 
   // 3. Primary phone strictly prioritizes CONSIGNEE | SHIPPED TO
@@ -6614,16 +6813,30 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
   if (rawPhone && rawPhone.toString().replace(/\D/g, '').length >= 10) {
     cleanPhone = formatWhatsAppPhone(rawPhone);
   } else {
-    // If not entered in billing form, prompt user specifically for Consignee / Customer phone number
-    const entered = prompt(`📱 Enter 10-digit WhatsApp number for Consignee | Shipped To (${primaryName}):`, "");
-    if (entered && entered.trim().replace(/\D/g, '').length >= 10) {
-      cleanPhone = formatWhatsAppPhone(entered.trim());
-      if (!details.consignee) details.consignee = {};
-      details.consignee.phone = entered.trim();
-      if (typeof elements !== 'undefined' && elements.billConsigneePhone) {
-        elements.billConsigneePhone.value = entered.trim();
+    // Automated lookup from partiesDb or past invoicesDb without blocking prompt
+    let autoFound = "";
+    if (primaryName && primaryName !== 'Consignee / Customer') {
+      const match = (partiesDb || []).find(p => p && p.name && p.name.trim().toLowerCase() === primaryName.trim().toLowerCase() && p.phone);
+      if (match && match.phone) autoFound = match.phone;
+      if (!autoFound) {
+        const invMatch = (invoicesDb || []).slice().reverse().find(i => {
+          const cName = i.consignee?.name || i.buyer?.name || i.customerName || "";
+          return cName.trim().toLowerCase() === primaryName.trim().toLowerCase() && (i.consignee?.phone || i.buyer?.phone || i.phone);
+        });
+        if (invMatch) autoFound = invMatch.consignee?.phone || invMatch.buyer?.phone || invMatch.phone || "";
       }
-      savePhoneToPartyDb(primaryName, entered.trim(), 'consignee');
+    }
+    if (autoFound && autoFound.toString().replace(/\D/g, '').length >= 10) {
+      cleanPhone = formatWhatsAppPhone(autoFound);
+      if (!details.consignee) details.consignee = {};
+      details.consignee.phone = autoFound;
+      if (typeof elements !== 'undefined' && elements.billConsigneePhone) {
+        elements.billConsigneePhone.value = autoFound;
+      }
+    } else {
+      console.log(`ℹ️ Consignee (${primaryName}) has no phone registered. Skipping manual WhatsApp prompt.`);
+      showFloatingToast(`ℹ️ Consignee "${primaryName}" has no phone number. Add phone in customer master to auto-send.`, "info", 3500);
+      return false;
     }
   }
 
@@ -6912,12 +7125,25 @@ window.sendWhatsAppPaymentReminder = async function(id, btnEl = null) {
   if (rawPhone && rawPhone.toString().replace(/\D/g, '').length >= 10) {
     cleanPhone = formatWhatsAppPhone(rawPhone);
   } else {
-    const custName = details.buyer?.name || inv.customerName || 'Customer';
-    const entered = prompt(`📱 Enter 10-digit WhatsApp mobile number for ${custName}\n(Or press OK / Cancel to select contact in WhatsApp):`, rawPhone || "");
-    if (entered && entered.trim().replace(/\D/g, '').length >= 10) {
-      cleanPhone = formatWhatsAppPhone(entered.trim());
-      if (details.buyer) details.buyer.phone = entered.trim();
-      savePhoneToPartyDb(custName, entered.trim());
+    const custName = details.buyer?.name || inv.customerName || details.consignee?.name || 'Customer';
+    let autoPhone = "";
+    if (custName && custName !== 'Customer') {
+      const match = (partiesDb || []).find(p => p && p.name && p.name.trim().toLowerCase() === custName.trim().toLowerCase() && p.phone);
+      if (match && match.phone) autoPhone = match.phone;
+      if (!autoPhone) {
+        const invMatch = (invoicesDb || []).slice().reverse().find(i => {
+          const cName = i.buyer?.name || i.customerName || i.consignee?.name || "";
+          return cName.trim().toLowerCase() === custName.trim().toLowerCase() && (i.buyer?.phone || i.consignee?.phone || i.phone);
+        });
+        if (invMatch) autoPhone = invMatch.buyer?.phone || invMatch.consignee?.phone || invMatch.phone || "";
+      }
+    }
+    if (autoPhone && autoPhone.toString().replace(/\D/g, '').length >= 10) {
+      cleanPhone = formatWhatsAppPhone(autoPhone);
+      if (details.buyer) details.buyer.phone = autoPhone;
+    } else {
+      showFloatingToast(`⚠️ Cannot send reminder: No phone number found for "${custName}".`, "warning", 3500);
+      return;
     }
   }
 
@@ -9298,7 +9524,7 @@ window.testDirectWhatsAppClick = function(overridePhone) {
     }
   }
   if (!phone) {
-    phone = prompt("📱 Enter 10-digit mobile number to test WhatsApp 1-Click share:", "91");
+    phone = (whatsappBotStatus && whatsappBotStatus.clientInfo && whatsappBotStatus.clientInfo.phone) || "918367047947";
   }
   if (phone && phone.toString().replace(/\D/g, '').length >= 10) {
     const cleanPhone = formatWhatsAppPhone(phone.toString().trim());
