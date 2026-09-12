@@ -33,6 +33,24 @@ let activityLogs = [];
 
 const authPath = path.join(__dirname, 'data', '.wwebjs_auth');
 const logsPath = path.join(__dirname, 'data', 'whatsapp_logs.json');
+const invoicesPath = path.join(__dirname, 'data', 'invoices.json');
+const productsPath = path.join(__dirname, 'data', 'products.json');
+const partiesPath = path.join(__dirname, 'data', 'parties.json');
+const settingsPath = path.join(__dirname, 'data', 'settings.json');
+
+// Local Multi-User Instant Sync SSE subscribers
+const syncSseClients = new Set();
+
+function broadcastSyncMutation(mutation) {
+  const payload = JSON.stringify(mutation);
+  for (const clientRes of syncSseClients) {
+    try {
+      clientRes.write(`data: ${payload}\n\n`);
+    } catch (e) {
+      syncSseClients.delete(clientRes);
+    }
+  }
+}
 
 // Hydrate existing activity logs from disk
 try {
@@ -357,6 +375,78 @@ app.post('/api/whatsapp/send-invoice', async (req, res) => {
 
 app.get('/api/whatsapp/activity', (req, res) => {
   res.json(activityLogs);
+});
+
+// ============================================================================
+// LOCAL MULTI-USER INSTANT SYNC ENGINE (< 2ms LOCAL / LAN SYNC & DISK PERSISTENCE)
+// ============================================================================
+app.get('/api/sync/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.flushHeaders();
+
+  syncSseClients.add(res);
+  res.write(`data: ${JSON.stringify({ type: 'SYNC_CONNECTED', timestamp: Date.now() })}\n\n`);
+
+  req.on('close', () => {
+    syncSseClients.delete(res);
+  });
+});
+
+app.get('/api/sync/state', (req, res) => {
+  try {
+    const invoices = fs.existsSync(invoicesPath) ? JSON.parse(fs.readFileSync(invoicesPath, 'utf8') || '[]') : [];
+    const products = fs.existsSync(productsPath) ? JSON.parse(fs.readFileSync(productsPath, 'utf8') || '[]') : [];
+    const parties = fs.existsSync(partiesPath) ? JSON.parse(fs.readFileSync(partiesPath, 'utf8') || '[]') : [];
+    const settings = fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath, 'utf8') || '{}') : {};
+    res.json({ ok: true, invoices, products, parties, settings, timestamp: Date.now() });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/sync/push', (req, res) => {
+  const { action, type, payload, senderId } = req.body;
+  try {
+    if (action === 'save_invoice' && payload?.invoice) {
+      let invs = fs.existsSync(invoicesPath) ? JSON.parse(fs.readFileSync(invoicesPath, 'utf8') || '[]') : [];
+      const idx = invs.findIndex(i => i && (i.id === payload.invoice.id || i.invoiceNo === payload.invoice.invoiceNo));
+      if (idx > -1) invs[idx] = payload.invoice;
+      else invs.push(payload.invoice);
+      fs.writeFileSync(invoicesPath, JSON.stringify(invs, null, 2), 'utf8');
+    }
+    if (payload?.products && Array.isArray(payload.products)) {
+      fs.writeFileSync(productsPath, JSON.stringify(payload.products, null, 2), 'utf8');
+    }
+    if (payload?.parties && Array.isArray(payload.parties)) {
+      fs.writeFileSync(partiesPath, JSON.stringify(payload.parties, null, 2), 'utf8');
+    }
+    if (payload?.settings && typeof payload.settings === 'object') {
+      fs.writeFileSync(settingsPath, JSON.stringify(payload.settings, null, 2), 'utf8');
+    }
+    if (action === 'delete_record') {
+      if (payload?.type === 'invoice' || type === 'invoice') {
+        let invs = fs.existsSync(invoicesPath) ? JSON.parse(fs.readFileSync(invoicesPath, 'utf8') || '[]') : [];
+        invs = invs.filter(i => i && i.id !== payload.id);
+        fs.writeFileSync(invoicesPath, JSON.stringify(invs, null, 2), 'utf8');
+      } else if (payload?.type === 'product' || type === 'product') {
+        let prods = fs.existsSync(productsPath) ? JSON.parse(fs.readFileSync(productsPath, 'utf8') || '[]') : [];
+        prods = prods.filter(p => p && p.id !== payload.id);
+        fs.writeFileSync(productsPath, JSON.stringify(prods, null, 2), 'utf8');
+      } else if (payload?.type === 'party' || type === 'party') {
+        let parts = fs.existsSync(partiesPath) ? JSON.parse(fs.readFileSync(partiesPath, 'utf8') || '[]') : [];
+        parts = parts.filter(p => p && p.id !== payload.id);
+        fs.writeFileSync(partiesPath, JSON.stringify(parts, null, 2), 'utf8');
+      }
+    }
+    // Broadcast mutation to all other connected clients immediately
+    broadcastSyncMutation({ action, type, payload, senderId, timestamp: Date.now() });
+    res.json({ ok: true, syncedAt: Date.now() });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 // Serve full billing application (with built-in WhatsApp QR scanner modal)

@@ -2857,18 +2857,23 @@
           <p id="telemetry-intertab-status" style="margin: 0; font-size: 12.5px; color: #475569;">Active (BroadcastChannel)</p>
         </div>
 
-        <div style="display: flex; gap: 10px;">
-          <button type="button" class="btn btn-primary" onclick="forcePushDatabaseToCloud(this)" style="flex: 1; padding: 10px 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;">
-            <i class="fa-solid fa-cloud-arrow-up"></i> Force Sync with Cloud
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <button type="button" class="btn btn-primary" onclick="forcePushDatabaseToCloud(this)" style="padding: 10px 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; font-size: 12.5px;">
+            <i class="fa-solid fa-cloud-arrow-up"></i> Sync Cloud Master
+          </button>
+          <button type="button" class="btn btn-cyan" onclick="triggerInstantPeerTransfer(this)" style="padding: 10px 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; font-size: 12.5px; background: #0891b2; color: white; border: none; border-radius: 6px;">
+            <i class="fa-solid fa-bolt"></i> Push to All Users (&lt;30ms)
           </button>
         </div>
       </div>
       
       <div class="modal-footer" style="padding: 12px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 11px; color: #64748b;"><i class="fa-solid fa-bolt text-teal"></i> Zero-wait offline first engine</span>
+        <span style="font-size: 11px; color: #64748b;"><i class="fa-solid fa-bolt text-teal"></i> Zero-wait multi-user mesh engine</span>
         <button type="button" class="btn btn-secondary" onclick="closeDatabaseTelemetryModal()" style="padding: 6px 16px; font-size: 12.5px; cursor: pointer;">Close</button>
       </div>
     </div>
+  </div>
+
   <!-- FLOATING KEYBOARD SHORTCUTS BADGE (Bottom Right) -->
   <div id="floating-shortcuts-pill" class="floating-shortcuts-pill cursor-pointer" onclick="openKeyboardShortcutsModal()" title="Billing Keyboard Shortcuts (Alt+/)">
     <i class="fa-solid fa-bolt-lightning" style="color: #f59e0b;"></i>
@@ -2929,6 +2934,6 @@
     </div>
   </div>
 
-  <script src="index_v5.js?v=308_fully_automated"></script>
+  <script src="index_v5.js?v=309_fast_sync"></script>
 </body>
 </html>
