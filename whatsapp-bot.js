@@ -32,6 +32,32 @@ let isInitializing = false;
 let activityLogs = [];
 
 const authPath = path.join(__dirname, 'data', '.wwebjs_auth');
+const logsPath = path.join(__dirname, 'data', 'whatsapp_logs.json');
+
+// Hydrate existing activity logs from disk
+try {
+  if (fs.existsSync(logsPath)) {
+    const raw = fs.readFileSync(logsPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) activityLogs = parsed;
+  }
+} catch (e) {
+  console.warn('Could not read existing whatsapp_logs.json:', e.message);
+}
+
+// Server-Sent Events subscribers
+const sseClients = new Set();
+
+function broadcastStatus() {
+  const payload = JSON.stringify(getStatus());
+  for (const clientRes of sseClients) {
+    try {
+      clientRes.write(`data: ${payload}\n\n`);
+    } catch (e) {
+      sseClients.delete(clientRes);
+    }
+  }
+}
 
 function logActivity(entry) {
   const item = {
@@ -40,7 +66,11 @@ function logActivity(entry) {
     ...entry
   };
   activityLogs.unshift(item);
-  if (activityLogs.length > 50) activityLogs.pop();
+  if (activityLogs.length > 100) activityLogs.pop();
+  try {
+    fs.writeFileSync(logsPath, JSON.stringify(activityLogs, null, 2), 'utf8');
+  } catch (e) {}
+  broadcastStatus();
 }
 
 function getStatus() {
@@ -62,6 +92,20 @@ function formatPhone(phone) {
   return digits.length >= 10 ? `${digits}@c.us` : null;
 }
 
+function findChromeExecutable() {
+  const candidates = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    path.join(process.env.USERPROFILE || 'C:\\Users\\ADMIN', '.cache', 'puppeteer', 'chrome', 'win64-146.0.7680.31', 'chrome-win64', 'chrome.exe'),
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
+  ];
+  for (const c of candidates) {
+    if (c && fs.existsSync(c)) return c;
+  }
+  return undefined;
+}
+
 async function initClient(options = {}) {
   const { forceClean = false, pairPhone = null, retryCount = 0 } = options;
   if (status === 'CONNECTED' && !forceClean) return getStatus();
@@ -73,6 +117,7 @@ async function initClient(options = {}) {
   rawQr = null;
   pairingCode = null;
   errorMessage = null;
+  broadcastStatus();
 
   try {
     if (forceClean) {
@@ -103,23 +148,31 @@ async function initClient(options = {}) {
       client = null;
     }
 
+    const chromePath = findChromeExecutable();
+    const puppeteerArgs = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-first-run',
+      '--no-zygote'
+    ];
+
+    const puppeteerConfig = {
+      headless: true,
+      args: puppeteerArgs
+    };
+    if (chromePath) {
+      puppeteerConfig.executablePath = chromePath;
+    }
+
     const clientConfig = {
       authStrategy: new LocalAuth({ dataPath: authPath }),
       webVersionCache: {
         type: 'remote',
         remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
       },
-      puppeteer: {
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--no-first-run',
-          '--no-zygote'
-        ]
-      }
+      puppeteer: puppeteerConfig
     };
 
     if (pairPhone) {
@@ -145,6 +198,7 @@ async function initClient(options = {}) {
       } catch (err) {
         console.error('QR generate error:', err);
       }
+      broadcastStatus();
     });
 
     client.on('code', (code) => {
@@ -153,6 +207,7 @@ async function initClient(options = {}) {
       status = 'CODE_READY';
       qrCodeDataUrl = null;
       isInitializing = false;
+      broadcastStatus();
     });
 
     client.on('authenticated', () => {
@@ -161,6 +216,7 @@ async function initClient(options = {}) {
       qrCodeDataUrl = null;
       pairingCode = null;
       isInitializing = false;
+      broadcastStatus();
     });
 
     client.on('ready', () => {
@@ -175,6 +231,7 @@ async function initClient(options = {}) {
         phone: me.wid?.user || 'Connected'
       };
       logActivity({ type: 'STATUS', status: 'CONNECTED', desc: 'Bot linked successfully' });
+      broadcastStatus();
     });
 
     client.on('auth_failure', (msg) => {
@@ -182,6 +239,7 @@ async function initClient(options = {}) {
       status = 'AUTH_FAILURE';
       errorMessage = msg || 'Authentication failed';
       isInitializing = false;
+      broadcastStatus();
     });
 
     client.on('disconnected', (reason) => {
@@ -190,6 +248,7 @@ async function initClient(options = {}) {
       clientInfo = null;
       isInitializing = false;
       logActivity({ type: 'STATUS', status: 'DISCONNECTED', desc: reason });
+      broadcastStatus();
       console.log('🔄 Attempting automatic reconnection in 5 seconds...');
       setTimeout(() => initClient(), 5000);
     });
@@ -200,6 +259,7 @@ async function initClient(options = {}) {
     status = 'DISCONNECTED';
     isInitializing = false;
     errorMessage = err.message;
+    broadcastStatus();
     if (retryCount < 3) {
       console.log(`🔄 Retrying WhatsApp engine initialization in 3 seconds (attempt ${retryCount + 1}/3)...`);
       setTimeout(() => initClient({ ...options, retryCount: retryCount + 1 }), 3000);
@@ -212,6 +272,21 @@ async function initClient(options = {}) {
 // API Routes
 app.get('/api/whatsapp/status', (req, res) => {
   res.json(getStatus());
+});
+
+app.get('/api/whatsapp/events', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Private-Network': 'true'
+  });
+  res.write(`data: ${JSON.stringify(getStatus())}\n\n`);
+  sseClients.add(res);
+  req.on('close', () => {
+    sseClients.delete(res);
+  });
 });
 
 app.post('/api/whatsapp/connect', async (req, res) => {
@@ -429,7 +504,9 @@ app.listen(PORT, () => {
   // Launch initial client
   initClient();
 
-  // Automatically open browser to dashboard
-  const startCmd = process.platform === 'win32' ? 'start' : process.platform === 'darwin' ? 'open' : 'xdg-open';
-  exec(`${startCmd} http://localhost:${PORT}`);
+  // Only open browser if explicitly instructed via AUTO_OPEN='true' and not in daemon mode
+  if (process.env.NO_AUTO_OPEN !== 'true' && process.env.DAEMON !== 'true' && process.env.AUTO_OPEN === 'true') {
+    const startCmd = process.platform === 'win32' ? 'start' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+    exec(`${startCmd} http://localhost:${PORT}`);
+  }
 });

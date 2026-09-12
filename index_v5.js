@@ -4720,7 +4720,7 @@ window.triggerSuccessModalWhatsApp = function() {
   if (!lastSavedInvoiceRecord) return;
   const rec = lastSavedInvoiceRecord;
   const waBtn = document.getElementById("modal-success-btn-whatsapp");
-  shareInvoicePdfNative(rec.details, waBtn, true);
+  shareInvoicePdfNative(rec.details, waBtn, false);
 };
 
 // --- POPULATE PRINT VIEW CANVAS (A4) ---
@@ -5613,7 +5613,7 @@ function initWhatsAppEventSource() {
       whatsappEventSource = null;
     }
 
-    whatsappEventSource = new EventSource('/api/whatsapp/events');
+    whatsappEventSource = new EventSource(getWhatsAppApiEndpoint('/api/whatsapp/events'));
 
     whatsappEventSource.onmessage = function(event) {
       if (!event.data) return;
@@ -5750,16 +5750,17 @@ function updateWhatsAppBotPillUI(data) {
     return;
   }
 
-  // 5. DISCONNECTED / OFFLINE (1-Click Direct Mode Active)
-  pill.classList.add("connected");
-  if (radarDot) radarDot.style.display = "inline-block";
+  // 5. DISCONNECTED / OFFLINE
+  pill.classList.remove("connected", "dispatching", "initializing", "authenticating", "waiting-qr");
+  pill.classList.add("disconnected");
+  if (radarDot) radarDot.style.display = "none";
   if (statusIcon) {
     statusIcon.className = "fa-brands fa-whatsapp";
     statusIcon.style.display = "inline-block";
-    statusIcon.style.color = "#16a34a";
+    statusIcon.style.color = "#94a3b8";
   }
-  statusText.textContent = "WhatsApp (1-Click)";
-  pill.title = "WhatsApp 1-Click Direct Share Ready - Click to view status & test";
+  statusText.textContent = "Bot Offline";
+  pill.title = "WhatsApp Bot Offline - Click to start & connect background bot";
 }
 
 function updateWhatsAppBotModalUI(data) {
@@ -5778,6 +5779,7 @@ function updateWhatsAppBotModalUI(data) {
   const deviceName = document.getElementById("wa-device-name");
   const devicePhone = document.getElementById("wa-device-phone");
 
+  const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   const isConnected = data && data.status === "CONNECTED";
   const isQrReady = data && data.status === "QR_READY" && Boolean(data.qrCodeDataUrl);
 
@@ -5866,18 +5868,18 @@ function updateWhatsAppBotModalUI(data) {
     if (qrLoading) qrLoading.style.display = "block";
     if (qrImage) qrImage.style.display = "none";
   } else {
-    // Default 1-Click Direct Share Ready
+    // Default: WhatsApp Bot Offline
     if (statusCard) {
-      statusCard.style.background = "#f0fdf4";
-      statusCard.style.borderColor = "#bbf7d0";
+      statusCard.style.background = "#f8fafc";
+      statusCard.style.borderColor = "#cbd5e1";
     }
     if (statusTitle) {
-      statusTitle.textContent = "WhatsApp 1-Click Direct Share Ready";
-      statusTitle.style.color = "#166534";
+      statusTitle.textContent = "WhatsApp Companion Bot Offline";
+      statusTitle.style.color = "#334155";
     }
     if (statusDesc) {
-      statusDesc.textContent = "Bills & Google Drive PDF links open directly in customer WhatsApp with 1 click. Zero setup needed.";
-      statusDesc.style.color = "#475569";
+      statusDesc.textContent = "Make sure Start_WhatsApp_Bot.bat is running on port 3001. Click 'Connect / Start Bot' below to generate pairing QR code.";
+      statusDesc.style.color = "#64748b";
     }
     if (connectedSection) connectedSection.style.display = "none";
     if (localContainer) localContainer.style.display = "block";
@@ -6266,18 +6268,11 @@ function _openWhatsAppBotModalActual() {
   const fallbackToggle = document.getElementById("wa-fallback-1click-toggle");
   if (fallbackToggle) fallbackToggle.checked = settings.whatsappFallback1Click !== false;
 
-  const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  if (isLocalHost) {
-    fetchWhatsAppBotStatus();
-    if (whatsappPollInterval) clearInterval(whatsappPollInterval);
-    whatsappPollInterval = setInterval(fetchWhatsAppBotStatus, 2000);
-    initiateWhatsAppConnect();
-  } else {
-    whatsappBotStatus = { status: 'DISCONNECTED', isReady: false, webDirect: true };
-    updateWhatsAppBotPillUI(whatsappBotStatus);
-    updateWhatsAppBotModalUI(whatsappBotStatus);
-    switchWhatsAppPairTab('direct');
-  }
+  fetchWhatsAppBotStatus();
+  if (whatsappPollInterval) clearInterval(whatsappPollInterval);
+  whatsappPollInterval = setInterval(fetchWhatsAppBotStatus, 2000);
+  initiateWhatsAppConnect();
+  switchWhatsAppPairTab('bot');
 }
 
 window.closeWhatsAppBotModal = function(e) {
@@ -6717,24 +6712,25 @@ window.shareInvoicePdfNative = async function(details, btnEl = null, force1Click
         throw new Error('Failed to dispatch to recipient(s)');
       }
     } catch (fastErr) {
-      console.warn("Background bot dispatch failed, continuing to 1-click WhatsApp:", fastErr);
-      showFloatingToast(`📲 Opening 1-Click WhatsApp for Consignee (+${cleanPhone})...`, 3000);
+      console.warn("Background bot dispatch error:", fastErr);
+      if (btnEl && btnEl.tagName) {
+        btnEl.innerHTML = origHtml;
+        btnEl.disabled = false;
+      }
+      showFloatingToast(`❌ Bot delivery failed. Please verify WhatsApp connection in Bot Hub.`, "warning", 4500);
+      openWhatsAppBotModal();
+      return false;
     }
   }
 
-  // 1-Click Direct WhatsApp Share directly to Consignee (+${cleanPhone})
-  const waUrl = launchWhatsAppWebOrApp(cleanPhone, fullShareText);
-  openWhatsAppDirect(waUrl);
-
+  // WhatsApp Bot is offline / not ready: NEVER open browser tab manually
   if (btnEl && btnEl.tagName) {
-    btnEl.innerHTML = `<i class="fa-solid fa-check text-success"></i> Opened!`;
-    setTimeout(() => {
-      btnEl.innerHTML = origHtml;
-      btnEl.disabled = false;
-    }, 2000);
+    btnEl.innerHTML = origHtml;
+    btnEl.disabled = false;
   }
-
-  showFloatingToast(cleanPhone ? `📲 Opening WhatsApp chat for Consignee (+${cleanPhone})...` : `📲 Opening WhatsApp to choose contact...`, 4000);
+  showFloatingToast(`⚠️ WhatsApp Bot is offline. Opening WhatsApp Bot Hub to connect...`, "warning", 4500);
+  openWhatsAppBotModal();
+  return false;
 
   // Optional background non-blocking PDF download / upload to Google Drive
   setTimeout(async () => {
@@ -6996,28 +6992,14 @@ window.sendWhatsAppPaymentReminder = async function(id, btnEl = null) {
     }
   }
 
-  // Fallback to 1-Click WhatsApp with user confirmation
   if (btnEl && btnEl.tagName) {
     btnEl.innerHTML = origHtml;
     btnEl.disabled = false;
   }
 
-  const userChoice = confirm(`⚠️ WhatsApp Bot is offline.\n\nTo send reminders automatically in background without opening WhatsApp, make sure Start_WhatsApp_Bot.bat is running on port 3001.\n\nDo you want to open WhatsApp Web manually instead?`);
-  if (!userChoice) return false;
-
-  const sec = globalSettings?.security || {};
-  if (sec.whatsappProtectChats !== false && !isWhatsAppUnlocked()) {
-    promptWhatsAppSecurity(() => {
-      const waUrl = launchWhatsAppWebOrApp(cleanPhone, reminderText);
-      openWhatsAppDirect(waUrl);
-      showFloatingToast(cleanPhone ? `🔔 Opening WhatsApp reminder for +${cleanPhone}...` : `🔔 Opening WhatsApp to send payment reminder...`);
-    });
-    return;
-  }
-
-  const waUrl = launchWhatsAppWebOrApp(cleanPhone, reminderText);
-  openWhatsAppDirect(waUrl);
-  showFloatingToast(cleanPhone ? `🔔 Opening WhatsApp reminder for +${cleanPhone}...` : `🔔 Opening WhatsApp to send payment reminder...`);
+  showFloatingToast(`⚠️ WhatsApp Bot is offline. Opening WhatsApp Bot Hub to connect...`, "warning", 4500);
+  openWhatsAppBotModal();
+  return false;
 };
 
 window.shareInvoiceToWhatsApp = function(id, btnEl = null) {
@@ -8145,21 +8127,9 @@ window.sendPartyPaymentReminderWhatsApp = async function(partyName, phone) {
     }
   }
 
-  // Fallback with confirmation
-  const userChoice = confirm(`⚠️ WhatsApp Bot is offline.\n\nTo send reminders automatically in background without opening WhatsApp, make sure Start_WhatsApp_Bot.bat is running on port 3001.\n\nDo you want to open WhatsApp Web manually instead?`);
-  if (!userChoice) return false;
-
-  const sec = globalSettings?.security || {};
-  if (sec.whatsappProtectChats !== false && !isWhatsAppUnlocked()) {
-    promptWhatsAppSecurity(() => {
-      const waUrl = launchWhatsAppWebOrApp(cleanPhone, text);
-      openWhatsAppDirect(waUrl);
-    });
-    return;
-  }
-
-  const waUrl = launchWhatsAppWebOrApp(cleanPhone, text);
-  openWhatsAppDirect(waUrl);
+  showFloatingToast(`⚠️ WhatsApp Bot is offline. Opening WhatsApp Bot Hub to connect...`, "warning", 4500);
+  openWhatsAppBotModal();
+  return false;
 };
 
 function createPartyListCard(p) {
